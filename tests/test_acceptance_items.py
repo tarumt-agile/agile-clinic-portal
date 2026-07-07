@@ -10,7 +10,6 @@ from pytest_bdd import given as bdd_given, parsers, scenarios, then as bdd_then,
 
 from agile_ci_demo.app import app, reset_db
 
-
 # --- Test client fixture -----------------------------------------------------
 
 
