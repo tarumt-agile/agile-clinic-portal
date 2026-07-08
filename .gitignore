@@ -5,3 +5,5 @@ __pycache__/
 coverage.xml
 dist/
 .cache/
+.hypothesis/
+*.egg-info/
