@@ -2,8 +2,15 @@ from typing import Dict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from agile_ci_demo.auth.router import router as auth_router
 
 app = FastAPI(title="Agile CI Demo", version="0.1.0")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+app.include_router(auth_router)
 
 
 class Item(BaseModel):
