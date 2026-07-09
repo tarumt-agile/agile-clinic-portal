@@ -1,9 +1,30 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Dict
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-app = FastAPI(title="Agile CI Demo", version="0.1.0")
+from agile_ci_demo.core.config import settings
+from agile_ci_demo.core.database import init_db
+from agile_ci_demo.patients.router import api_router as patients_api_router
+from agile_ci_demo.patients.router import pages_router as patients_pages_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    init_db()
+    yield
+
+
+app = FastAPI(title="Agile Clinic Portal", version="0.1.0", lifespan=lifespan)
+
+if settings.static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
+
+app.include_router(patients_api_router)
+app.include_router(patients_pages_router)
 
 
 class Item(BaseModel):

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Register Patient - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h1 class="h3 mb-4">Register New Patient</h1>
+
+    <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
+
+    <form id="patient-form" novalidate>
+      <div class="row g-3">
+        <div class="col-md-8">
+          <label for="full_name" class="form-label">Full name *</label>
+          <input type="text" class="form-control" id="full_name" name="full_name" required minlength="2" maxlength="120">
+          <div class="invalid-feedback">Full name is required.</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="date_of_birth" class="form-label">Date of birth *</label>
+          <input type="date" class="form-control" id="date_of_birth" name="date_of_birth" required>
+          <div class="invalid-feedback">A valid date of birth (not in the future) is required.</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="gender" class="form-label">Gender *</label>
+          <select class="form-select" id="gender" name="gender" required>
+            <option value="" selected disabled>Choose...</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
+          <div class="invalid-feedback">Please select a gender.</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="phone_number" class="form-label">Phone number *</label>
+          <input type="tel" class="form-control" id="phone_number" name="phone_number" required
+                 placeholder="e.g. 012-3456789" pattern="^\+?\d[\d\s\-]{6,19}$">
+          <div class="invalid-feedback">Enter a valid phone number (7-20 digits).</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" name="email" placeholder="optional">
+          <div class="invalid-feedback">Enter a valid email address.</div>
+        </div>
+
+        <div class="col-md-6">
+          <label for="ic_or_passport" class="form-label">IC / Passport number *</label>
+          <input type="text" class="form-control" id="ic_or_passport" name="ic_or_passport" required minlength="5" maxlength="30">
+          <div class="invalid-feedback">IC / passport number is required.</div>
+        </div>
+
+        <div class="col-md-6">
+          <label for="address" class="form-label">Address</label>
+          <input type="text" class="form-control" id="address" name="address" placeholder="optional" maxlength="255">
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary" id="submit-btn">Register Patient</button>
+        <button type="reset" class="btn btn-outline-secondary">Clear</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirmation dialog, shown after a successful registration -->
+<div class="modal fade" id="confirmation-modal" tabindex="-1" aria-labelledby="confirmation-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="confirmation-modal-label">Patient Registered</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>The patient has been registered successfully.</p>
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Patient ID</dt>
+          <dd class="col-sm-8"><span id="confirm-patient-id" class="fw-bold"></span></dd>
+          <dt class="col-sm-4">Full name</dt>
+          <dd class="col-sm-8" id="confirm-full-name"></dd>
+          <dt class="col-sm-4">Phone</dt>
+          <dd class="col-sm-8" id="confirm-phone"></dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="register-another-btn">Register Another</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/patient-form.js"></script>
+<script src="/static/js/patients.js"></script>
+{% endblock %}
