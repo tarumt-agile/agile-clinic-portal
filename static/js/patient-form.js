@@ -61,6 +61,17 @@ window.PatientForm = (function () {
     return payload;
   }
 
+  // Fills form fields from a PatientOut JSON object (used to enter edit mode).
+  function fillForm(form, patient) {
+    form.elements.namedItem("full_name").value = patient.full_name || "";
+    form.elements.namedItem("date_of_birth").value = patient.date_of_birth || "";
+    form.elements.namedItem("gender").value = patient.gender || "";
+    form.elements.namedItem("phone_number").value = patient.phone_number || "";
+    form.elements.namedItem("email").value = patient.email || "";
+    form.elements.namedItem("ic_or_passport").value = patient.ic_or_passport || "";
+    form.elements.namedItem("address").value = patient.address || "";
+  }
+
   return {
     showAlert,
     hideAlert,
@@ -68,5 +79,6 @@ window.PatientForm = (function () {
     setFieldError,
     applyValidationErrors,
     collectPayload,
+    fillForm,
   };
 })();

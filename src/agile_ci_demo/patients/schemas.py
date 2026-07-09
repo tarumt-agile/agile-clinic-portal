@@ -66,6 +66,11 @@ class PatientCreate(BaseModel):
         return v or None
 
 
+class PatientUpdate(PatientCreate):
+    """Payload for editing an existing patient. Same shape and validation as PatientCreate -
+    every field is re-validated on save, per the "validate every patient field" requirement."""
+
+
 class PatientOut(BaseModel):
     """Patient details returned by the API, including the generated patient ID."""
 

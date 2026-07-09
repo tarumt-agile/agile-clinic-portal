@@ -306,7 +306,97 @@ def test_list_page_renders(client: TestClient) -> None:
     assert "Patients" in r.text
 
 
-# --- 4. BDD-style tests with pytest-bdd --------------------------------------
+# --- 4. Update patient tests ---------------------------------------------------
+
+
+def test_update_patient_success(client: TestClient) -> None:
+    """
+    Scenario: Update a patient's contact details
+      Given a patient is registered
+      When I PUT /api/patients/{patient_id} with new contact details
+      Then the patient record reflects the changes
+    """
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    updated_payload = valid_patient_payload(
+        phone_number="019-1112222",
+        email="jane.new@example.com",
+        address="2 New Address, Penang",
+    )
+    r = client.put(f"/api/patients/{created['patient_id']}", json=updated_payload)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["patient_id"] == created["patient_id"]
+    assert body["phone_number"] == "019-1112222"
+    assert body["email"] == "jane.new@example.com"
+    assert body["address"] == "2 New Address, Penang"
+
+
+def test_update_unknown_patient_returns_404(client: TestClient) -> None:
+    r = client.put("/api/patients/P99999", json=valid_patient_payload())
+    assert r.status_code == 404
+
+
+def test_update_patient_missing_field_returns_422(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    payload = valid_patient_payload()
+    del payload["phone_number"]
+    r = client.put(f"/api/patients/{created['patient_id']}", json=payload)
+    assert r.status_code == 422
+
+
+def test_update_patient_invalid_phone_returns_422(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    r = client.put(
+        f"/api/patients/{created['patient_id']}",
+        json=valid_patient_payload(phone_number="not-a-phone"),
+    )
+    assert r.status_code == 422
+
+
+def test_update_patient_duplicate_ic_returns_409(client: TestClient) -> None:
+    """
+    Scenario: Reject changing a patient's IC to one already used by another patient
+    """
+    client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="Jane Tan", ic_or_passport="900520-10-1234"),
+    )
+    other = client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="John Lee", ic_or_passport="880311-14-5678"),
+    ).json()
+
+    r = client.put(
+        f"/api/patients/{other['patient_id']}",
+        json=valid_patient_payload(full_name="John Lee", ic_or_passport="900520-10-1234"),
+    )
+    assert r.status_code == 409
+
+
+def test_update_patient_same_ic_succeeds(client: TestClient) -> None:
+    """Updating a patient without changing their own IC/passport must not be rejected as a
+    self-conflict."""
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    r = client.put(
+        f"/api/patients/{created['patient_id']}",
+        json=valid_patient_payload(phone_number="019-9998888"),
+    )
+    assert r.status_code == 200
+    assert r.json()["phone_number"] == "019-9998888"
+
+
+def test_detail_page_renders(client: TestClient) -> None:
+    """The HTML patient detail page loads successfully for any patient_id (client fetches data)."""
+    r = client.get("/patients/P00001")
+    assert r.status_code == 200
+    assert "Edit" in r.text
+
+
+# --- 5. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/patients.feature
 
 scenarios("features/patients.feature")
@@ -358,6 +448,24 @@ def search_results_include_jane_step(context: Context) -> None:
     assert context.last_response is not None
     names = {item["full_name"] for item in context.last_response.json()["items"]}
     assert "Jane Tan" in names
+
+
+@bdd_when('I update that patient\'s phone number to "019-1112222"')
+def update_phone_number_step(
+    api_is_running: dict, context: Context, registered_patient: dict
+) -> None:
+    client: TestClient = api_is_running["client"]
+    payload = valid_patient_payload(phone_number="019-1112222")
+    context.last_response = client.put(
+        f"/api/patients/{registered_patient['patient_id']}", json=payload
+    )
+
+
+@bdd_then('the patient\'s phone number is updated to "019-1112222"')
+def patient_phone_number_is_updated_step(context: Context) -> None:
+    assert context.last_response is not None
+    assert context.last_response.status_code == 200
+    assert context.last_response.json()["phone_number"] == "019-1112222"
 
 
 @bdd_then("the patient is registered with a generated patient ID")

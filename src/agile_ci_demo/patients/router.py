@@ -7,12 +7,19 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
-from agile_ci_demo.patients.schemas import PaginatedPatients, PatientCreate, PatientOut
+from agile_ci_demo.patients.schemas import (
+    PaginatedPatients,
+    PatientCreate,
+    PatientOut,
+    PatientUpdate,
+)
 from agile_ci_demo.patients.service import (
     DuplicatePatientError,
+    PatientNotFoundError,
     create_patient,
     get_patient_by_patient_id,
     search_patients,
+    update_patient,
 )
 
 templates = Jinja2Templates(directory=str(settings.templates_dir))
@@ -60,6 +67,20 @@ def get_patient(patient_id: str, db: Session = Depends(get_db)) -> PatientOut:
     return PatientOut.model_validate(patient)
 
 
+@api_router.put("/{patient_id}", response_model=PatientOut)
+def edit_patient(
+    patient_id: str, payload: PatientUpdate, db: Session = Depends(get_db)
+) -> PatientOut:
+    """Update every field of an existing patient's record."""
+    try:
+        patient = update_patient(db, patient_id, payload)
+    except PatientNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except DuplicatePatientError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return PatientOut.model_validate(patient)
+
+
 @pages_router.get("/register", response_class=HTMLResponse)
 def register_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/register.html", {})
@@ -68,3 +89,8 @@ def register_page(request: Request) -> HTMLResponse:
 @pages_router.get("", response_class=HTMLResponse)
 def list_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/list.html", {})
+
+
+@pages_router.get("/{patient_id}", response_class=HTMLResponse)
+def detail_page(request: Request, patient_id: str) -> HTMLResponse:
+    return templates.TemplateResponse(request, "patients/detail.html", {"patient_id": patient_id})

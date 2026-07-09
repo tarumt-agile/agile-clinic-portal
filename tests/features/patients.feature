@@ -19,3 +19,9 @@ Feature: Patient registration
     And a patient named "Jane Tan" is already registered
     When I search for patients by the name "Jane"
     Then the search results include "Jane Tan"
+
+  Scenario: Update a patient's contact details
+    Given the clinic portal API is running
+    And a patient named "Jane Tan" is already registered
+    When I update that patient's phone number to "019-1112222"
+    Then the patient's phone number is updated to "019-1112222"

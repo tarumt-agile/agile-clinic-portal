@@ -5,11 +5,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.patients.models import Patient
-from agile_ci_demo.patients.schemas import PatientCreate
+from agile_ci_demo.patients.schemas import PatientCreate, PatientUpdate
 
 
 class DuplicatePatientError(Exception):
     """Raised when a patient with the same IC/passport number already exists."""
+
+
+class PatientNotFoundError(Exception):
+    """Raised when a patient_id does not match any stored patient."""
 
 
 def create_patient(db: Session, data: PatientCreate) -> Patient:
@@ -71,3 +75,38 @@ def search_patients(
     items_stmt = items_stmt.offset((page - 1) * page_size).limit(page_size)
     items = list(db.execute(items_stmt).scalars().all())
     return items, total
+
+
+def update_patient(db: Session, patient_id: str, data: PatientUpdate) -> Patient:
+    """Update every field of an existing patient. Re-validates uniqueness of IC/passport."""
+    patient = get_patient_by_patient_id(db, patient_id)
+    if patient is None:
+        raise PatientNotFoundError(f"No patient found with patient_id '{patient_id}'")
+
+    conflict = db.execute(
+        select(Patient).where(
+            Patient.ic_or_passport == data.ic_or_passport,
+            Patient.id != patient.id,
+        )
+    ).scalar_one_or_none()
+    if conflict is not None:
+        raise DuplicatePatientError(
+            f"A patient with IC/passport '{data.ic_or_passport}' is already registered"
+        )
+
+    patient.full_name = data.full_name
+    patient.date_of_birth = data.date_of_birth
+    patient.gender = data.gender.value
+    patient.phone_number = data.phone_number
+    patient.email = data.email
+    patient.ic_or_passport = data.ic_or_passport
+    patient.address = data.address
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise DuplicatePatientError("Patient could not be updated due to a conflict") from exc
+
+    db.refresh(patient)
+    return patient
