@@ -1,0 +1,8 @@
+.invalid-feedback {
+  display: none;
+}
+
+.is-invalid ~ .invalid-feedback,
+.was-validated :invalid ~ .invalid-feedback {
+  display: block;
+}

@@ -7,3 +7,5 @@ dist/
 .cache/
 .hypothesis/
 *.egg-info/
+*.db
+*.db-journal
