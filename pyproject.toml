@@ -34,6 +34,9 @@ dev = [
   "fastapi[testclient]",
   "uvicorn>=0.30",
   "jinja2>=3.1",
+  "sqlalchemy",
+  "dnspython",
+  "email-validator",
   "httpx",
 ]
 
