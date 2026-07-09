@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Patients - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Patients</h1>
+  <a href="/patients/register" class="btn btn-primary">Register New Patient</a>
+</div>
+
+<div class="row mb-3">
+  <div class="col-md-6">
+    <label for="search-input" class="visually-hidden">Search by name or patient ID</label>
+    <input
+      type="search"
+      id="search-input"
+      class="form-control"
+      placeholder="Search by name or patient ID (e.g. Jane or P00001)"
+      autocomplete="off"
+    >
+  </div>
+</div>
+
+<div id="list-alert" class="alert alert-danger d-none" role="alert"></div>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle bg-white">
+    <thead>
+      <tr>
+        <th scope="col">Patient ID</th>
+        <th scope="col">Full name</th>
+        <th scope="col">Gender</th>
+        <th scope="col">Phone</th>
+        <th scope="col">Date of birth</th>
+      </tr>
+    </thead>
+    <tbody id="patients-table-body">
+      <tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<nav aria-label="Patient list pagination">
+  <ul class="pagination justify-content-center" id="pagination-controls"></ul>
+</nav>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/patients_list.js"></script>
+{% endblock %}

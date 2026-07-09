@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -47,3 +47,27 @@ def create_patient(db: Session, data: PatientCreate) -> Patient:
 
 def get_patient_by_patient_id(db: Session, patient_id: str) -> Patient | None:
     return db.execute(select(Patient).where(Patient.patient_id == patient_id)).scalar_one_or_none()
+
+
+def search_patients(
+    db: Session, query: str | None, page: int, page_size: int
+) -> tuple[list[Patient], int]:
+    """Search patients by name or patient_id (case-insensitive, partial match).
+
+    Returns (page of results ordered by registration order, total matching count).
+    """
+    conditions = []
+    if query and query.strip():
+        pattern = f"%{query.strip()}%"
+        conditions.append(or_(Patient.full_name.ilike(pattern), Patient.patient_id.ilike(pattern)))
+
+    count_stmt = select(func.count()).select_from(Patient)
+    items_stmt = select(Patient).order_by(Patient.id)
+    for condition in conditions:
+        count_stmt = count_stmt.where(condition)
+        items_stmt = items_stmt.where(condition)
+
+    total = db.execute(count_stmt).scalar_one()
+    items_stmt = items_stmt.offset((page - 1) * page_size).limit(page_size)
+    items = list(db.execute(items_stmt).scalars().all())
+    return items, total

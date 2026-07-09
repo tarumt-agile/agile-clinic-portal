@@ -204,7 +204,109 @@ def test_register_page_renders(client: TestClient) -> None:
     assert "Register New Patient" in r.text
 
 
-# --- 3. BDD-style tests with pytest-bdd --------------------------------------
+# --- 3. Search / list tests ---------------------------------------------------
+
+
+def _register_sample_patients(client: TestClient) -> list[str]:
+    people = [
+        ("Jane Tan", "900520-10-1234"),
+        ("John Lee", "880311-14-5678"),
+        ("Ah Kow", "950101-08-9012"),
+        ("Janet Wong", "921212-05-4321"),
+    ]
+    ids = []
+    for name, ic in people:
+        r = client.post(
+            "/api/patients", json=valid_patient_payload(full_name=name, ic_or_passport=ic)
+        )
+        assert r.status_code == 201
+        ids.append(r.json()["patient_id"])
+    return ids
+
+
+def test_list_patients_returns_all_when_no_query(client: TestClient) -> None:
+    """
+    Scenario: Browse the patient list
+      Given several patients are registered
+      When I GET /api/patients with no search query
+      Then I receive all of them, paginated
+    """
+    _register_sample_patients(client)
+
+    r = client.get("/api/patients")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 4
+    assert len(body["items"]) == 4
+    assert body["page"] == 1
+
+
+def test_search_patients_by_partial_name(client: TestClient) -> None:
+    """
+    Scenario: Search for a patient by name
+      Given several patients are registered, including two named "Jan..."
+      When I search for "jan" (case-insensitive)
+      Then only the matching patients are returned
+    """
+    _register_sample_patients(client)
+
+    r = client.get("/api/patients", params={"q": "jan"})
+    assert r.status_code == 200
+    names = {item["full_name"] for item in r.json()["items"]}
+    assert names == {"Jane Tan", "Janet Wong"}
+
+
+def test_search_patients_by_patient_id(client: TestClient) -> None:
+    """
+    Scenario: Search for a patient by ID
+      When I search using an exact patient_id
+      Then only that patient is returned
+    """
+    ids = _register_sample_patients(client)
+
+    r = client.get("/api/patients", params={"q": ids[0]})
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["patient_id"] == ids[0]
+
+
+def test_search_patients_no_match_returns_empty(client: TestClient) -> None:
+    _register_sample_patients(client)
+
+    r = client.get("/api/patients", params={"q": "nonexistent-name"})
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+    assert r.json()["total"] == 0
+
+
+def test_list_patients_pagination(client: TestClient) -> None:
+    """
+    Scenario: Paginate the patient list
+      Given 4 patients are registered
+      When I request page 1 with page_size=2
+      Then I receive 2 items and total_pages == 2
+    """
+    _register_sample_patients(client)
+
+    r = client.get("/api/patients", params={"page": 1, "page_size": 2})
+    body = r.json()
+    assert len(body["items"]) == 2
+    assert body["total"] == 4
+    assert body["total_pages"] == 2
+
+    r2 = client.get("/api/patients", params={"page": 2, "page_size": 2})
+    assert len(r2.json()["items"]) == 2
+
+
+def test_list_page_renders(client: TestClient) -> None:
+    """The HTML patient list page loads successfully."""
+    r = client.get("/patients")
+    assert r.status_code == 200
+    assert "Patients" in r.text
+
+
+# --- 4. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/patients.feature
 
 scenarios("features/patients.feature")
@@ -237,6 +339,25 @@ def register_patient_missing_name_step(api_is_running: dict, context: Context) -
     payload = valid_patient_payload()
     del payload["full_name"]
     context.last_response = client.post("/api/patients", json=payload)
+
+
+@bdd_given('a patient named "Jane Tan" is already registered', target_fixture="registered_patient")
+def a_patient_is_registered_step(api_is_running: dict) -> dict:
+    client: TestClient = api_is_running["client"]
+    return client.post("/api/patients", json=valid_patient_payload()).json()
+
+
+@bdd_when('I search for patients by the name "Jane"')
+def search_by_name_step(api_is_running: dict, context: Context, registered_patient: dict) -> None:
+    client: TestClient = api_is_running["client"]
+    context.last_response = client.get("/api/patients", params={"q": "Jane"})
+
+
+@bdd_then('the search results include "Jane Tan"')
+def search_results_include_jane_step(context: Context) -> None:
+    assert context.last_response is not None
+    names = {item["full_name"] for item in context.last_response.json()["items"]}
+    assert "Jane Tan" in names
 
 
 @bdd_then("the patient is registered with a generated patient ID")

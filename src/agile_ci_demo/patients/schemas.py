@@ -80,3 +80,13 @@ class PatientOut(BaseModel):
     ic_or_passport: str
     address: str | None
     created_at: dt.datetime
+
+
+class PaginatedPatients(BaseModel):
+    """Paginated search results for the patient list page."""
+
+    items: list[PatientOut]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

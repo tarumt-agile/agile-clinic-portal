@@ -13,3 +13,9 @@ Feature: Patient registration
     Given the clinic portal API is running
     When I register a patient without a full name
     Then I receive a 422 response
+
+  Scenario: Search for a patient by name
+    Given the clinic portal API is running
+    And a patient named "Jane Tan" is already registered
+    When I search for patients by the name "Jane"
+    Then the search results include "Jane Tan"
