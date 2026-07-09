@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Staff - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Staff</h1>
+  <a href="/staff/create" class="btn btn-primary">Create Staff Account</a>
+</div>
+
+<div id="list-alert" class="alert alert-danger d-none" role="alert"></div>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle bg-white">
+    <thead>
+      <tr>
+        <th scope="col">Staff ID</th>
+        <th scope="col">Full name</th>
+        <th scope="col">Email</th>
+        <th scope="col">Role</th>
+        <th scope="col">Status</th>
+        <th scope="col">Action</th>
+      </tr>
+    </thead>
+    <tbody id="staff-table-body">
+      <tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Confirmation dialog, shown before deactivating a staff account -->
+<div class="modal fade" id="deactivate-modal" tabindex="-1" aria-labelledby="deactivate-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deactivate-modal-label">Deactivate Staff Account</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">
+          Deactivate <strong id="deactivate-target-name"></strong>?
+          They will no longer be able to log in until reactivated.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-deactivate-btn">Deactivate</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/staff_list.js"></script>
+{% endblock %}

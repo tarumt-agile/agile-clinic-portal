@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Create Staff Account - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h1 class="h3 mb-4">Create Staff Account</h1>
+
+    <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
+
+    <form id="staff-form" novalidate>
+      <div class="row g-3">
+        <div class="col-md-8">
+          <label for="full_name" class="form-label">Full name *</label>
+          <input type="text" class="form-control" id="full_name" name="full_name" required minlength="2" maxlength="120">
+          <div class="invalid-feedback">Full name is required.</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="role" class="form-label">Role *</label>
+          <select class="form-select" id="role" name="role" required>
+            <option value="" selected disabled>Choose...</option>
+            <option value="admin">Admin</option>
+            <option value="doctor">Doctor</option>
+            <option value="nurse">Nurse</option>
+            <option value="receptionist">Receptionist</option>
+            <option value="pharmacist">Pharmacist</option>
+          </select>
+          <div class="invalid-feedback">Please select a role.</div>
+        </div>
+
+        <div class="col-md-8">
+          <label for="email" class="form-label">Email *</label>
+          <input type="email" class="form-control" id="email" name="email" required>
+          <div class="invalid-feedback">Enter a valid email address.</div>
+        </div>
+      </div>
+
+      <p class="text-muted mt-3 mb-0">
+        A temporary password will be generated automatically and emailed to this address.
+        The staff member will be asked to change it on first login.
+      </p>
+
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary" id="submit-btn">Create Account</button>
+        <button type="reset" class="btn btn-outline-secondary">Clear</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirmation dialog, shown after a successful account creation -->
+<div class="modal fade" id="confirmation-modal" tabindex="-1" aria-labelledby="confirmation-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="confirmation-modal-label">Staff Account Created</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>The staff account has been created and a welcome email with a temporary password has been sent.</p>
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Staff ID</dt>
+          <dd class="col-sm-8"><span id="confirm-staff-id" class="fw-bold"></span></dd>
+          <dt class="col-sm-4">Full name</dt>
+          <dd class="col-sm-8" id="confirm-full-name"></dd>
+          <dt class="col-sm-4">Role</dt>
+          <dd class="col-sm-8 text-capitalize" id="confirm-role"></dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="create-another-btn">Create Another</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/staff-form.js"></script>
+{% endblock %}

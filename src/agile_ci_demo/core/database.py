@@ -22,6 +22,7 @@ def init_db() -> None:
     themselves on ``Base.metadata`` before ``create_all`` runs.
     """
     from agile_ci_demo.patients import models as _patients_models  # noqa: F401
+    from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
 

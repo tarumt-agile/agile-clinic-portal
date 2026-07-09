@@ -5,14 +5,15 @@ from typing import Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from agile_ci_demo.auth.router import router as auth_router
 
+from agile_ci_demo.auth.router import api_router as auth_api_router
+from agile_ci_demo.auth.router import pages_router as auth_pages_router
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import init_db
 from agile_ci_demo.patients.router import api_router as patients_api_router
 from agile_ci_demo.patients.router import pages_router as patients_pages_router
+from agile_ci_demo.staff.router import api_router as staff_api_router
+from agile_ci_demo.staff.router import pages_router as staff_pages_router
 
 
 @asynccontextmanager
@@ -28,10 +29,10 @@ if settings.static_dir.exists():
 
 app.include_router(patients_api_router)
 app.include_router(patients_pages_router)
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-app.include_router(auth_router)
+app.include_router(staff_api_router)
+app.include_router(staff_pages_router)
+app.include_router(auth_api_router)
+app.include_router(auth_pages_router)
 
 
 class Item(BaseModel):
