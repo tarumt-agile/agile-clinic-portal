@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agile_ci_demo.appointments.router import api_router as appointments_api_router
+from agile_ci_demo.appointments.router import pages_router as appointments_pages_router
 from agile_ci_demo.auth.router import api_router as auth_api_router
 from agile_ci_demo.auth.router import pages_router as auth_pages_router
 from agile_ci_demo.core.config import settings
@@ -33,6 +35,8 @@ app.include_router(staff_api_router)
 app.include_router(staff_pages_router)
 app.include_router(auth_api_router)
 app.include_router(auth_pages_router)
+app.include_router(appointments_api_router)
+app.include_router(appointments_pages_router)
 
 
 class Item(BaseModel):

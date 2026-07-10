@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Book Appointment - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h1 class="h3 mb-4">Book Appointment</h1>
+
+    <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
+
+    <form id="appointment-form" novalidate>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="patient_id" class="form-label">Patient ID *</label>
+          <input type="text" class="form-control" id="patient_id" name="patient_id" required
+                 placeholder="e.g. P00001">
+          <div class="invalid-feedback">A valid, registered patient ID is required.</div>
+          <div id="patient-lookup-feedback" class="form-text"></div>
+        </div>
+
+        <div class="col-md-6">
+          <label for="doctor_id" class="form-label">Doctor *</label>
+          <select class="form-select" id="doctor_id" name="doctor_id" required>
+            <option value="" selected disabled>Loading doctors...</option>
+          </select>
+          <div class="invalid-feedback">Please select a doctor.</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="appointment_date" class="form-label">Date *</label>
+          <input type="date" class="form-control" id="appointment_date" name="appointment_date" required>
+          <div class="invalid-feedback">Please choose a date that is not in the past.</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="start_time" class="form-label">Time *</label>
+          <input type="time" class="form-control" id="start_time" name="start_time" required step="1800">
+          <div class="invalid-feedback">Please choose a time between 09:00 and 17:00 (30-minute slots).</div>
+        </div>
+
+        <div class="col-md-8">
+          <label for="reason" class="form-label">Reason for visit *</label>
+          <input type="text" class="form-control" id="reason" name="reason" required minlength="2" maxlength="255"
+                 placeholder="e.g. Fever and cough">
+          <div class="invalid-feedback">Reason for visit is required.</div>
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary" id="submit-btn">Book Appointment</button>
+        <button type="reset" class="btn btn-outline-secondary">Clear</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirmation dialog, shown after a successful booking -->
+<div class="modal fade" id="confirmation-modal" tabindex="-1" aria-labelledby="confirmation-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="confirmation-modal-label">Appointment Booked</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>The appointment has been booked successfully.</p>
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Reference No.</dt>
+          <dd class="col-sm-8"><span id="confirm-reference" class="fw-bold"></span></dd>
+          <dt class="col-sm-4">Patient</dt>
+          <dd class="col-sm-8" id="confirm-patient"></dd>
+          <dt class="col-sm-4">Doctor</dt>
+          <dd class="col-sm-8" id="confirm-doctor"></dd>
+          <dt class="col-sm-4">Date &amp; time</dt>
+          <dd class="col-sm-8" id="confirm-datetime"></dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="book-another-btn">Book Another</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/appointment-form.js"></script>
+{% endblock %}
