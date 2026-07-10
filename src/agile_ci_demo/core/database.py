@@ -23,6 +23,7 @@ def init_db() -> None:
     """
     from agile_ci_demo.appointments import models as _appointments_models  # noqa: F401
     from agile_ci_demo.patients import models as _patients_models  # noqa: F401
+    from agile_ci_demo.records import models as _records_models  # noqa: F401
     from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

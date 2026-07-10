@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Consultation Note - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div id="record-detail-root" data-record-id="{{ record_id }}">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">Consultation Note <span id="heading-record-id"></span></h1>
+        <a href="#" id="back-to-patient-link" class="btn btn-outline-secondary">Back to patient</a>
+      </div>
+
+      <div id="detail-alert" class="alert alert-danger d-none" role="alert"></div>
+      <div id="not-found-alert" class="alert alert-warning d-none" role="alert">
+        No consultation note found with this ID.
+      </div>
+
+      <div id="record-content" class="d-none">
+        <dl class="row mb-4">
+          <dt class="col-sm-3">Patient</dt>
+          <dd class="col-sm-9" id="view-patient"></dd>
+
+          <dt class="col-sm-3">Doctor</dt>
+          <dd class="col-sm-9" id="view-doctor"></dd>
+
+          <dt class="col-sm-3">Visit date</dt>
+          <dd class="col-sm-9" id="view-visit-date"></dd>
+        </dl>
+
+        <h2 class="h5">Diagnoses</h2>
+        <div id="diagnosis-list" class="mb-4"></div>
+
+        <h2 class="h5">Notes</h2>
+        <p id="view-notes" class="border rounded p-3 bg-white" style="white-space: pre-wrap;"></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/record_detail.js"></script>
+{% endblock %}

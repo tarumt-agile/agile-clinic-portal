@@ -14,93 +14,124 @@
         </div>
       </div>
 
-      <div id="detail-alert" class="alert alert-danger d-none" role="alert"></div>
-      <div id="not-found-alert" class="alert alert-warning d-none" role="alert">
-        No patient found with this ID.
-      </div>
+      <ul class="nav nav-tabs mb-3" id="patient-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="details-tab-btn" data-bs-toggle="tab"
+                  data-bs-target="#details-tab" type="button" role="tab">Details</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="history-tab-btn" data-bs-toggle="tab"
+                  data-bs-target="#history-tab" type="button" role="tab">Medical History</button>
+        </li>
+      </ul>
 
-      <!-- View mode -->
-      <div id="view-mode">
-        <dl class="row">
-          <dt class="col-sm-4">Full name</dt>
-          <dd class="col-sm-8" id="view-full-name"></dd>
-
-          <dt class="col-sm-4">Date of birth</dt>
-          <dd class="col-sm-8" id="view-dob"></dd>
-
-          <dt class="col-sm-4">Gender</dt>
-          <dd class="col-sm-8 text-capitalize" id="view-gender"></dd>
-
-          <dt class="col-sm-4">Phone number</dt>
-          <dd class="col-sm-8" id="view-phone"></dd>
-
-          <dt class="col-sm-4">Email</dt>
-          <dd class="col-sm-8" id="view-email"></dd>
-
-          <dt class="col-sm-4">IC / Passport</dt>
-          <dd class="col-sm-8" id="view-ic"></dd>
-
-          <dt class="col-sm-4">Address</dt>
-          <dd class="col-sm-8" id="view-address"></dd>
-        </dl>
-      </div>
-
-      <!-- Edit mode -->
-      <form id="edit-form" class="d-none" novalidate>
-        <div class="row g-3">
-          <div class="col-md-8">
-            <label for="edit-full_name" class="form-label">Full name *</label>
-            <input type="text" class="form-control" id="edit-full_name" name="full_name" required minlength="2" maxlength="120">
-            <div class="invalid-feedback">Full name is required.</div>
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="details-tab" role="tabpanel">
+          <div id="detail-alert" class="alert alert-danger d-none" role="alert"></div>
+          <div id="not-found-alert" class="alert alert-warning d-none" role="alert">
+            No patient found with this ID.
           </div>
 
-          <div class="col-md-4">
-            <label for="edit-date_of_birth" class="form-label">Date of birth *</label>
-            <input type="date" class="form-control" id="edit-date_of_birth" name="date_of_birth" required>
-            <div class="invalid-feedback">A valid date of birth (not in the future) is required.</div>
+          <!-- View mode -->
+          <div id="view-mode">
+            <dl class="row">
+              <dt class="col-sm-4">Full name</dt>
+              <dd class="col-sm-8" id="view-full-name"></dd>
+
+              <dt class="col-sm-4">Date of birth</dt>
+              <dd class="col-sm-8" id="view-dob"></dd>
+
+              <dt class="col-sm-4">Gender</dt>
+              <dd class="col-sm-8 text-capitalize" id="view-gender"></dd>
+
+              <dt class="col-sm-4">Phone number</dt>
+              <dd class="col-sm-8" id="view-phone"></dd>
+
+              <dt class="col-sm-4">Email</dt>
+              <dd class="col-sm-8" id="view-email"></dd>
+
+              <dt class="col-sm-4">IC / Passport</dt>
+              <dd class="col-sm-8" id="view-ic"></dd>
+
+              <dt class="col-sm-4">Address</dt>
+              <dd class="col-sm-8" id="view-address"></dd>
+            </dl>
           </div>
 
-          <div class="col-md-4">
-            <label for="edit-gender" class="form-label">Gender *</label>
-            <select class="form-select" id="edit-gender" name="gender" required>
-              <option value="" disabled>Choose...</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
-            <div class="invalid-feedback">Please select a gender.</div>
-          </div>
+          <!-- Edit mode -->
+          <form id="edit-form" class="d-none" novalidate>
+            <div class="row g-3">
+              <div class="col-md-8">
+                <label for="edit-full_name" class="form-label">Full name *</label>
+                <input type="text" class="form-control" id="edit-full_name" name="full_name" required minlength="2" maxlength="120">
+                <div class="invalid-feedback">Full name is required.</div>
+              </div>
 
-          <div class="col-md-4">
-            <label for="edit-phone_number" class="form-label">Phone number *</label>
-            <input type="tel" class="form-control" id="edit-phone_number" name="phone_number" required
-                   placeholder="e.g. 012-3456789" pattern="^\+?\d[\d\s\-]{6,19}$">
-            <div class="invalid-feedback">Enter a valid phone number (7-20 digits).</div>
-          </div>
+              <div class="col-md-4">
+                <label for="edit-date_of_birth" class="form-label">Date of birth *</label>
+                <input type="date" class="form-control" id="edit-date_of_birth" name="date_of_birth" required>
+                <div class="invalid-feedback">A valid date of birth (not in the future) is required.</div>
+              </div>
 
-          <div class="col-md-4">
-            <label for="edit-email" class="form-label">Email</label>
-            <input type="email" class="form-control" id="edit-email" name="email" placeholder="optional">
-            <div class="invalid-feedback">Enter a valid email address.</div>
-          </div>
+              <div class="col-md-4">
+                <label for="edit-gender" class="form-label">Gender *</label>
+                <select class="form-select" id="edit-gender" name="gender" required>
+                  <option value="" disabled>Choose...</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+                <div class="invalid-feedback">Please select a gender.</div>
+              </div>
 
-          <div class="col-md-6">
-            <label for="edit-ic_or_passport" class="form-label">IC / Passport number *</label>
-            <input type="text" class="form-control" id="edit-ic_or_passport" name="ic_or_passport" required minlength="5" maxlength="30">
-            <div class="invalid-feedback">IC / passport number is required.</div>
-          </div>
+              <div class="col-md-4">
+                <label for="edit-phone_number" class="form-label">Phone number *</label>
+                <input type="tel" class="form-control" id="edit-phone_number" name="phone_number" required
+                       placeholder="e.g. 012-3456789" pattern="^\+?\d[\d\s\-]{6,19}$">
+                <div class="invalid-feedback">Enter a valid phone number (7-20 digits).</div>
+              </div>
 
-          <div class="col-md-6">
-            <label for="edit-address" class="form-label">Address</label>
-            <input type="text" class="form-control" id="edit-address" name="address" placeholder="optional" maxlength="255">
-          </div>
+              <div class="col-md-4">
+                <label for="edit-email" class="form-label">Email</label>
+                <input type="email" class="form-control" id="edit-email" name="email" placeholder="optional">
+                <div class="invalid-feedback">Enter a valid email address.</div>
+              </div>
+
+              <div class="col-md-6">
+                <label for="edit-ic_or_passport" class="form-label">IC / Passport number *</label>
+                <input type="text" class="form-control" id="edit-ic_or_passport" name="ic_or_passport" required minlength="5" maxlength="30">
+                <div class="invalid-feedback">IC / passport number is required.</div>
+              </div>
+
+              <div class="col-md-6">
+                <label for="edit-address" class="form-label">Address</label>
+                <input type="text" class="form-control" id="edit-address" name="address" placeholder="optional" maxlength="255">
+              </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+              <button type="submit" class="btn btn-primary" id="save-btn">Save Changes</button>
+              <button type="button" class="btn btn-outline-secondary" id="cancel-btn">Cancel</button>
+            </div>
+          </form>
         </div>
 
-        <div class="mt-4 d-flex gap-2">
-          <button type="submit" class="btn btn-primary" id="save-btn">Save Changes</button>
-          <button type="button" class="btn btn-outline-secondary" id="cancel-btn">Cancel</button>
+        <div class="tab-pane fade" id="history-tab" role="tabpanel">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <label for="history-search" class="visually-hidden">Search medical history</label>
+            <input type="search" id="history-search" class="form-control me-3"
+                   placeholder="Search by diagnosis or note keyword" autocomplete="off">
+            <a href="#" id="new-record-link" class="btn btn-primary text-nowrap">+ New Consultation Note</a>
+          </div>
+
+          <div id="history-alert" class="alert alert-danger d-none" role="alert"></div>
+          <div id="history-empty" class="text-muted text-center py-4 d-none">
+            No consultation notes found.
+          </div>
+
+          <div id="history-list"></div>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 </div>
@@ -127,4 +158,5 @@
 {% block extra_js %}
 <script src="/static/js/patient-form.js"></script>
 <script src="/static/js/patient_detail.js"></script>
+<script src="/static/js/medical_history.js"></script>
 {% endblock %}

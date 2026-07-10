@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}New Consultation Note - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div id="record-form-root" data-patient-id="{{ patient_id }}">
+  <div class="row justify-content-center">
+    <div class="col-lg-9">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">New Consultation Note</h1>
+        <a href="/patients/{{ patient_id }}" class="btn btn-outline-secondary">Back to patient</a>
+      </div>
+
+      <p class="text-muted mb-4">
+        Patient: <strong id="patient-name-label">Loading...</strong>
+        (<span id="patient-id-label">{{ patient_id }}</span>)
+      </p>
+
+      <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
+
+      <form id="record-form" novalidate>
+        <input type="hidden" id="patient_id" name="patient_id" value="{{ patient_id }}">
+
+        <div class="mb-3">
+          <label for="doctor_id" class="form-label">Doctor *</label>
+          <select class="form-select" id="doctor_id" name="doctor_id" required>
+            <option value="" selected disabled>Loading doctors...</option>
+          </select>
+          <div class="invalid-feedback">Please select a doctor.</div>
+        </div>
+
+        <div class="mb-3">
+          <label for="notes" class="form-label">Consultation notes *</label>
+          <textarea class="form-control" id="notes" name="notes" rows="5" required minlength="2"
+                    placeholder="Document the visit: history, examination findings, plan..."></textarea>
+          <div class="invalid-feedback">Consultation notes are required.</div>
+        </div>
+
+        <div class="mb-2 d-flex justify-content-between align-items-center">
+          <label class="form-label mb-0">Diagnoses *</label>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="add-diagnosis-btn">
+            + Add diagnosis
+          </button>
+        </div>
+        <div id="diagnoses-alert" class="alert alert-danger d-none py-2" role="alert"></div>
+        <div id="diagnosis-rows"></div>
+        <template id="diagnosis-row-template">
+          <div class="diagnosis-row border rounded p-3 mb-2">
+            <div class="row g-2">
+              <div class="col-md-5 position-relative">
+                <label class="form-label">Search ICD-10 *</label>
+                <input type="text" class="form-control diagnosis-search" autocomplete="off"
+                       placeholder="e.g. hypertension or I10">
+                <div class="list-group diagnosis-suggestions position-absolute w-100 shadow-sm d-none"
+                     style="z-index: 1000; max-height: 220px; overflow-y: auto;"></div>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">ICD-10 code *</label>
+                <input type="text" class="form-control diagnosis-code" required maxlength="10">
+                <div class="invalid-feedback">ICD-10 code is required.</div>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Description *</label>
+                <input type="text" class="form-control diagnosis-description" required maxlength="255">
+                <div class="invalid-feedback">Description is required.</div>
+              </div>
+              <div class="col-md-1 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-danger btn-sm remove-diagnosis-btn" title="Remove">
+                  &times;
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div class="mt-4 d-flex gap-2">
+          <button type="submit" class="btn btn-primary" id="submit-btn">Save Consultation Note</button>
+          <button type="button" class="btn btn-outline-secondary" id="cancel-btn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation dialog, shown after a successful save -->
+<div class="modal fade" id="confirmation-modal" tabindex="-1" aria-labelledby="confirmation-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="confirmation-modal-label">Consultation Note Saved</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">The consultation note has been added to the patient's medical history.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="view-record-btn">View Record</button>
+        <button type="button" class="btn btn-outline-secondary" id="back-to-patient-btn">Back to Patient</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/consultation-note-form.js"></script>
+{% endblock %}
