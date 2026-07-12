@@ -53,6 +53,13 @@ def get_patient_by_patient_id(db: Session, patient_id: str) -> Patient | None:
     return db.execute(select(Patient).where(Patient.patient_id == patient_id)).scalar_one_or_none()
 
 
+def get_current_patient(db: Session) -> Patient | None:
+    """Stand-in for real authentication: returns the first patient on record as "the
+    logged-in patient" for self-service booking. There is no session/token yet -
+    swap this for a real Depends(get_current_user) once patient login exists."""
+    return db.execute(select(Patient).order_by(Patient.id)).scalars().first()
+
+
 def search_patients(
     db: Session, query: str | None, page: int, page_size: int
 ) -> tuple[list[Patient], int]:
