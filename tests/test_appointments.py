@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from agile_ci_demo.app import app
 from agile_ci_demo.appointments import models as _appointments_models  # noqa: F401
+from agile_ci_demo.appointments.service import get_appointment_by_reference
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
@@ -372,7 +373,85 @@ def test_schedule_page_renders(client: TestClient) -> None:
     assert "My Schedule" in r.text
 
 
-# --- 6. BDD-style tests with pytest-bdd --------------------------------------
+# --- 6. Available slots tests ---------------------------------------------------
+
+
+def test_get_slots_full_grid_when_nothing_booked(client: TestClient) -> None:
+    """
+    Scenario: See available time slots when booking
+      Given a doctor with no appointments on a given date
+      When I GET /api/appointments/slots for that doctor and date
+      Then every 30-minute slot between 09:00 and 17:00 is available
+    """
+    doctor_id = _register_doctor(client)
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": TOMORROW})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doctor_id"] == doctor_id
+    assert len(body["slots"]) == 16  # (17:00 - 09:00) / 30 minutes
+    assert all(slot["available"] for slot in body["slots"])
+    assert body["slots"][0]["start_time"] == "09:00:00"
+    assert body["slots"][-1]["start_time"] == "16:30:00"
+
+
+def test_get_slots_marks_booked_slot_unavailable(client: TestClient) -> None:
+    doctor_id = _register_doctor(client)
+    patient_id = _register_patient(client)
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, start_time="10:00"),
+    )
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": TOMORROW})
+    slots_by_time = {s["start_time"]: s["available"] for s in r.json()["slots"]}
+    assert slots_by_time["10:00:00"] is False
+    assert slots_by_time["09:00:00"] is True
+    assert slots_by_time["10:30:00"] is True
+
+
+def test_get_slots_cancelled_appointment_frees_the_slot(client: TestClient) -> None:
+    """A cancelled appointment's slot must show as available again - the double-
+    booking check in create_appointment() already only looks at status="scheduled",
+    so the slot grid should be consistent with that."""
+    doctor_id = _register_doctor(client)
+    patient_id = _register_patient(client)
+    created = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, start_time="10:00"),
+    ).json()
+
+    # No cancel endpoint yet - reach into the test's own in-memory DB session (the
+    # same one the `client` fixture registered as the get_db override) to simulate
+    # a cancellation directly.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        appointment = get_appointment_by_reference(db, created["reference_number"])
+        assert appointment is not None
+        appointment.status = "cancelled"
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": TOMORROW})
+    slots_by_time = {s["start_time"]: s["available"] for s in r.json()["slots"]}
+    assert slots_by_time["10:00:00"] is True
+
+
+def test_get_slots_unknown_doctor_returns_404(client: TestClient) -> None:
+    r = client.get("/api/appointments/slots", params={"doctor_id": "S99999", "date": TOMORROW})
+    assert r.status_code == 404
+
+
+def test_get_slots_past_date_returns_422(client: TestClient) -> None:
+    doctor_id = _register_doctor(client)
+    yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": yesterday})
+    assert r.status_code == 422
+
+
+# --- 7. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/appointments.feature
 
 scenarios("features/appointments.feature")
@@ -451,6 +530,30 @@ def schedule_includes_appointment_step(context: Context) -> None:
     assert context.last_response.status_code == 200
     names = [a["patient_name"] for a in context.last_response.json()["appointments"]]
     assert "Jane Tan" in names
+
+
+@bdd_when("I check that doctor's available slots for tomorrow")
+def check_available_slots_step(api_is_running: dict, context: Context) -> None:
+    client: TestClient = api_is_running["client"]
+    context.last_response = client.get(
+        "/api/appointments/slots",
+        params={"doctor_id": context.doctor_id, "date": TOMORROW},
+    )
+
+
+@bdd_then("the booked slot is marked unavailable")
+def booked_slot_unavailable_step(context: Context) -> None:
+    assert context.last_response is not None
+    assert context.last_response.status_code == 200
+    slots_by_time = {s["start_time"]: s["available"] for s in context.last_response.json()["slots"]}
+    assert slots_by_time["10:00:00"] is False
+
+
+@bdd_then("other slots remain available")
+def other_slots_available_step(context: Context) -> None:
+    assert context.last_response is not None
+    slots_by_time = {s["start_time"]: s["available"] for s in context.last_response.json()["slots"]}
+    assert slots_by_time["09:00:00"] is True
 
 
 @bdd_then("the appointment is booked with a generated reference number")

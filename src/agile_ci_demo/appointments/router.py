@@ -5,7 +5,13 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.appointments.models import Appointment
-from agile_ci_demo.appointments.schemas import AppointmentCreate, AppointmentOut, DoctorSchedule
+from agile_ci_demo.appointments.schemas import (
+    AppointmentCreate,
+    AppointmentOut,
+    DoctorSchedule,
+    DoctorSlots,
+    SlotInfo,
+)
 from agile_ci_demo.appointments.service import (
     DoctorNotFoundError,
     InvalidSlotError,
@@ -14,11 +20,14 @@ from agile_ci_demo.appointments.service import (
     SlotUnavailableError,
     create_appointment,
     get_appointment_by_reference,
+    get_available_slots,
     get_current_doctor,
     get_doctor_schedule,
 )
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
+from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # JSON API used by the frontend's JavaScript.
 api_router = APIRouter(prefix="/api/appointments", tags=["appointments"])
@@ -86,6 +95,36 @@ def get_my_schedule(
         doctor_name=doctor.full_name,
         schedule_date=schedule_date,
         appointments=[_serialize(a) for a in appointments],
+    )
+
+
+@api_router.get("/slots", response_model=DoctorSlots)
+def get_slots(
+    doctor_id: str = Query(..., description="Doctor's public staff_id, e.g. S00001"),
+    schedule_date: dt.date = Query(..., alias="date"),
+    db: Session = Depends(get_db),
+) -> DoctorSlots:
+    """The full working-hours slot grid for a doctor on a date, each marked free or
+    booked, for the booking form's slot picker."""
+    doctor = get_staff_by_staff_id(db, doctor_id)
+    if doctor is None or doctor.role != Role.DOCTOR.value:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No doctor found with staff_id '{doctor_id}'",
+        )
+
+    try:
+        slots = get_available_slots(db, doctor.id, schedule_date)
+    except PastDateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    return DoctorSlots(
+        doctor_id=doctor.staff_id or "",
+        doctor_name=doctor.full_name,
+        schedule_date=schedule_date,
+        slots=[SlotInfo(start_time=s, end_time=e, available=a) for s, e, a in slots],
     )
 
 

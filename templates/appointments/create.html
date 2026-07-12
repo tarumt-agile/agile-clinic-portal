@@ -19,7 +19,14 @@
           <div id="patient-lookup-feedback" class="form-text"></div>
         </div>
 
-        <div class="col-md-6">
+        <div class="col-md-3">
+          <label for="specialty" class="form-label">Specialty</label>
+          <select class="form-select" id="specialty">
+            <option value="">All specialties</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
           <label for="doctor_id" class="form-label">Doctor *</label>
           <select class="form-select" id="doctor_id" name="doctor_id" required>
             <option value="" selected disabled>Loading doctors...</option>
@@ -27,16 +34,19 @@
           <div class="invalid-feedback">Please select a doctor.</div>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-6">
           <label for="appointment_date" class="form-label">Date *</label>
           <input type="date" class="form-control" id="appointment_date" name="appointment_date" required>
           <div class="invalid-feedback">Please choose a date that is not in the past.</div>
         </div>
 
-        <div class="col-md-4">
-          <label for="start_time" class="form-label">Time *</label>
-          <input type="time" class="form-control" id="start_time" name="start_time" required step="1800">
-          <div class="invalid-feedback">Please choose a time between 09:00 and 17:00 (30-minute slots).</div>
+        <div class="col-12">
+          <label class="form-label d-block">Time slot *</label>
+          <input type="hidden" id="start_time" name="start_time" required>
+          <div id="slot-grid" class="d-flex flex-wrap gap-2">
+            <p class="text-muted mb-0" id="slot-placeholder">Select a doctor and date to see available time slots.</p>
+          </div>
+          <div class="invalid-feedback" id="slot-error">Please select an available time slot.</div>
         </div>
 
         <div class="col-md-8">
