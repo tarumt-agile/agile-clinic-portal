@@ -17,6 +17,7 @@ from agile_ci_demo.patients.service import (
     DuplicatePatientError,
     PatientNotFoundError,
     create_patient,
+    get_current_patient,
     get_patient_by_patient_id,
     search_patients,
     update_patient,
@@ -57,6 +58,21 @@ def list_patients(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@api_router.get("/me", response_model=PatientOut)
+def get_my_patient_record(db: Session = Depends(get_db)) -> PatientOut:
+    """The current patient's own record, for self-service booking.
+
+    "Current patient" is a placeholder - see get_current_patient() - until real
+    patient login sessions exist.
+    """
+    patient = get_current_patient(db)
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No patient account found"
+        )
+    return PatientOut.model_validate(patient)
 
 
 @api_router.get("/{patient_id}", response_model=PatientOut)

@@ -9,6 +9,7 @@
   const dateInput = document.getElementById("appointment_date");
   const patientIdInput = document.getElementById("patient_id");
   const patientFeedback = document.getElementById("patient-lookup-feedback");
+  const patientDisplay = document.getElementById("patient-display");
   const specialtySelect = document.getElementById("specialty");
   const doctorSelect = document.getElementById("doctor_id");
   const slotGrid = document.getElementById("slot-grid");
@@ -17,7 +18,12 @@
   const confirmationModalEl = document.getElementById("confirmation-modal");
   const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
 
+  // The receptionist form has a free-text Patient ID field (type="text") the
+  // receptionist looks up. The patient self-booking form locks it (type="hidden")
+  // and auto-fills it from "the current patient" - see loadCurrentPatient().
+  const isSelfBooking = patientIdInput.type === "hidden";
   let allDoctors = [];
+  let currentPatientId = "";
 
   function showAlert(message) {
     alertBox.textContent = message;
@@ -209,6 +215,20 @@
     }
   }
 
+  async function loadCurrentPatient() {
+    try {
+      const response = await fetch("/api/patients/me");
+      if (!response.ok) throw new Error("Request failed");
+      const patient = await response.json();
+      currentPatientId = patient.patient_id;
+      patientIdInput.value = currentPatientId;
+      patientDisplay.textContent = `${patient.full_name} (${currentPatientId})`;
+    } catch (err) {
+      patientDisplay.textContent = "Unable to load your patient record.";
+      showAlert("Unable to load your patient record. Please contact the front desk.");
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     hideAlert();
@@ -234,7 +254,8 @@
         showConfirmation(appointment);
         form.reset();
         form.classList.remove("was-validated");
-        patientFeedback.textContent = "";
+        if (patientFeedback) patientFeedback.textContent = "";
+        if (isSelfBooking) patientIdInput.value = currentPatientId; // form.reset() would blank it
         clearSlots();
         return;
       }
@@ -297,7 +318,11 @@
   specialtySelect.addEventListener("change", renderDoctorOptions);
   doctorSelect.addEventListener("change", loadSlots);
   dateInput.addEventListener("change", loadSlots);
-  patientIdInput.addEventListener("blur", lookupPatient);
+  if (isSelfBooking) {
+    loadCurrentPatient();
+  } else {
+    patientIdInput.addEventListener("blur", lookupPatient);
+  }
   form.addEventListener("submit", handleSubmit);
   loadDoctors();
 })();

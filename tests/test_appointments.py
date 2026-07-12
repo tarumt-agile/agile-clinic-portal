@@ -149,6 +149,13 @@ def test_create_appointment_page_renders(client: TestClient) -> None:
     assert "Book Appointment" in r.text
 
 
+def test_self_book_appointment_page_renders(client: TestClient) -> None:
+    """The HTML patient self-service booking page loads successfully."""
+    r = client.get("/appointments/book")
+    assert r.status_code == 200
+    assert "Book My Appointment" in r.text
+
+
 # --- 2. Required field / validation tests -------------------------------------
 
 

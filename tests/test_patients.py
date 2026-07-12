@@ -120,6 +120,29 @@ def test_get_unknown_patient_returns_404(client: TestClient) -> None:
     assert r.status_code == 404
 
 
+def test_get_current_patient_returns_first_patient_on_record(client: TestClient) -> None:
+    """
+    Scenario: Self-service booking resolves "the current patient"
+      Given two patients are registered
+      When I GET /api/patients/me
+      Then I receive the first-registered patient (a placeholder for real login)
+    """
+    client.post("/api/patients", json=valid_patient_payload())
+    client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="John Lee", ic_or_passport="880311-14-5678"),
+    )
+
+    r = client.get("/api/patients/me")
+    assert r.status_code == 200
+    assert r.json()["full_name"] == "Jane Tan"
+
+
+def test_get_current_patient_no_patients_returns_404(client: TestClient) -> None:
+    r = client.get("/api/patients/me")
+    assert r.status_code == 404
+
+
 # --- 2. Required field / validation tests ------------------------------------
 
 
