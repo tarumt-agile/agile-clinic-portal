@@ -40,3 +40,12 @@ class AppointmentOut(BaseModel):
     status: str
     cancellation_reason: str | None
     created_at: dt.datetime
+
+
+class DoctorSchedule(BaseModel):
+    """A doctor's appointments for a single day, ordered by start time ascending."""
+
+    doctor_id: str
+    doctor_name: str
+    schedule_date: dt.date
+    appointments: list[AppointmentOut]

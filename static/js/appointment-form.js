@@ -171,7 +171,17 @@
     }
   }
 
-  dateInput.min = new Date().toISOString().slice(0, 10);
+  // Local date, not UTC - toISOString() converts to UTC and can be a day off from
+  // the server's dt.date.today() (which uses local time), especially near midnight.
+  function todayLocalISODate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  dateInput.min = todayLocalISODate();
 
   patientIdInput.addEventListener("blur", lookupPatient);
   form.addEventListener("submit", handleSubmit);

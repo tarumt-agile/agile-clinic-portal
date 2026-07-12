@@ -16,3 +16,10 @@ Feature: Appointment booking
     When that doctor already has an appointment at the same date and time
     And I try to book another appointment with that doctor at the same date and time
     Then I receive a 409 response
+
+  Scenario: Doctor views their appointment list for the day
+    Given the clinic portal API is running
+    And a registered patient and an active doctor
+    And that doctor has an appointment booked for tomorrow
+    When I view that doctor's schedule for tomorrow
+    Then the schedule includes that appointment
