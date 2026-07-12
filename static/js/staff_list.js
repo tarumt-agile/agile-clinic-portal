@@ -26,7 +26,7 @@
   async function loadStaff() {
     alertBox.classList.add("d-none");
     tableBody.innerHTML =
-      '<tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr>';
+      '<tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr>';
 
     try {
       const response = await fetch("/api/staff");
@@ -38,10 +38,18 @@
     }
   }
 
+  function formatSpecialty(specialty) {
+    if (!specialty) return "-";
+    return specialty
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+
   function renderTable(items) {
     if (items.length === 0) {
       tableBody.innerHTML =
-        '<tr><td colspan="6" class="text-center text-muted py-4">No staff accounts yet.</td></tr>';
+        '<tr><td colspan="7" class="text-center text-muted py-4">No staff accounts yet.</td></tr>';
       return;
     }
 
@@ -60,6 +68,7 @@
         <td>${escapeHtml(s.full_name)}</td>
         <td>${escapeHtml(s.email)}</td>
         <td class="text-capitalize">${escapeHtml(s.role)}</td>
+        <td>${escapeHtml(formatSpecialty(s.specialty))}</td>
         <td>${statusBadge}</td>
         <td>${actionBtn}</td>
       </tr>`;

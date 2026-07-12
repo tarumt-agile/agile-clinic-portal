@@ -10,6 +10,7 @@ from agile_ci_demo.appointments.models import Appointment
 from agile_ci_demo.appointments.schemas import AppointmentCreate
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import get_patient_by_patient_id
+from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # Clinic working hours and slot size. A teaching-app constant rather than a DB-backed
@@ -34,6 +35,10 @@ class InvalidSlotError(Exception):
 
 class SlotUnavailableError(Exception):
     """Raised when the doctor already has a scheduled appointment overlapping this slot."""
+
+
+class PastDateError(Exception):
+    """Raised when a doctor's schedule is requested for a date before today."""
 
 
 def add_minutes(value: dt.time, minutes: int) -> dt.time:
@@ -118,3 +123,33 @@ def get_appointment_by_reference(db: Session, reference_number: str) -> Appointm
     return db.execute(
         select(Appointment).where(Appointment.reference_number == reference_number)
     ).scalar_one_or_none()
+
+
+def get_current_doctor(db: Session) -> Staff | None:
+    """Stand-in for real authentication: returns the first doctor on record as "the
+    logged-in doctor". There is no session/token yet - swap this for a real
+    Depends(get_current_user) once login sessions are wired up."""
+    return (
+        db.execute(select(Staff).where(Staff.role == Role.DOCTOR.value).order_by(Staff.id))
+        .scalars()
+        .first()
+    )
+
+
+def get_doctor_schedule(db: Session, doctor_id: int, schedule_date: dt.date) -> list[Appointment]:
+    """Return a doctor's appointments for a given date, ordered by start time ascending."""
+    if schedule_date < dt.date.today():
+        raise PastDateError("Cannot view a schedule for a date before today")
+
+    return list(
+        db.execute(
+            select(Appointment)
+            .where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date == schedule_date,
+            )
+            .order_by(Appointment.start_time)
+        )
+        .scalars()
+        .all()
+    )

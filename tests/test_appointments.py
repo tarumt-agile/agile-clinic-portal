@@ -66,6 +66,8 @@ def valid_staff_payload(**overrides: object) -> dict[str, object]:
         "role": "doctor",
     }
     payload.update(overrides)
+    if payload["role"] == "doctor" and "specialty" not in payload:
+        payload["specialty"] = "general_practice"
     return payload
 
 
@@ -286,7 +288,91 @@ def test_same_doctor_different_slot_succeeds(client: TestClient) -> None:
     assert r2.status_code == 201
 
 
-# --- 5. BDD-style tests with pytest-bdd --------------------------------------
+# --- 5. Doctor's daily schedule tests -------------------------------------------
+
+
+def test_get_schedule_returns_current_doctors_appointments(client: TestClient) -> None:
+    """
+    Scenario: View my appointment list for a given day
+      Given I am the (only, and therefore "current") doctor with two appointments
+        booked out of order
+      When I GET /api/appointments/schedule for that date
+      Then I receive both appointments ordered by start time ascending
+    """
+    doctor_id = _register_doctor(client)
+    patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_a, doctor_id, start_time="11:00"),
+    )
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_b, doctor_id, start_time="09:00"),
+    )
+
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doctor_id"] == doctor_id
+    assert body["schedule_date"] == TOMORROW
+    assert [a["start_time"] for a in body["appointments"]] == ["09:00:00", "11:00:00"]
+    assert [a["patient_name"] for a in body["appointments"]] == ["John Lee", "Jane Tan"]
+
+
+def test_get_schedule_excludes_other_doctors_appointments(client: TestClient) -> None:
+    """The schedule for the current (first) doctor must not include another doctor's
+    appointments, even on the same date and time."""
+    first_doctor = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
+    other_doctor = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com")
+    patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+
+    client.post("/api/appointments", json=valid_appointment_payload(patient_a, first_doctor))
+    client.post("/api/appointments", json=valid_appointment_payload(patient_b, other_doctor))
+
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doctor_id"] == first_doctor
+    assert len(body["appointments"]) == 1
+    assert body["appointments"][0]["patient_name"] == "Jane Tan"
+
+
+def test_get_schedule_defaults_to_today_with_no_appointments(client: TestClient) -> None:
+    """With no date param, the schedule defaults to today's date."""
+    _register_doctor(client)
+
+    r = client.get("/api/appointments/schedule")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["schedule_date"] == dt.date.today().isoformat()
+    assert body["appointments"] == []
+
+
+def test_get_schedule_past_date_returns_422(client: TestClient) -> None:
+    _register_doctor(client)
+    yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+
+    r = client.get("/api/appointments/schedule", params={"date": yesterday})
+    assert r.status_code == 422
+
+
+def test_get_schedule_no_doctor_returns_404(client: TestClient) -> None:
+    """If no doctor account exists at all, there is no "current doctor" to show."""
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+    assert r.status_code == 404
+
+
+def test_schedule_page_renders(client: TestClient) -> None:
+    """The HTML doctor schedule page loads successfully."""
+    r = client.get("/appointments/schedule")
+    assert r.status_code == 200
+    assert "My Schedule" in r.text
+
+
+# --- 6. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/appointments.feature
 
 scenarios("features/appointments.feature")
@@ -342,6 +428,29 @@ def book_conflicting_appointment_step(api_is_running: dict, context: Context) ->
         "/api/appointments",
         json=valid_appointment_payload(other_patient, context.doctor_id),
     )
+
+
+@bdd_given("that doctor has an appointment booked for tomorrow")
+def doctor_has_tomorrow_appointment_step(api_is_running: dict, context: Context) -> None:
+    client: TestClient = api_is_running["client"]
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(context.patient_id, context.doctor_id),
+    )
+
+
+@bdd_when("I view that doctor's schedule for tomorrow")
+def view_schedule_step(api_is_running: dict, context: Context) -> None:
+    client: TestClient = api_is_running["client"]
+    context.last_response = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+
+
+@bdd_then("the schedule includes that appointment")
+def schedule_includes_appointment_step(context: Context) -> None:
+    assert context.last_response is not None
+    assert context.last_response.status_code == 200
+    names = [a["patient_name"] for a in context.last_response.json()["appointments"]]
+    assert "Jane Tan" in names
 
 
 @bdd_then("the appointment is booked with a generated reference number")

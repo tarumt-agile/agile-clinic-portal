@@ -1,16 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import datetime as dt
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.appointments.models import Appointment
-from agile_ci_demo.appointments.schemas import AppointmentCreate, AppointmentOut
+from agile_ci_demo.appointments.schemas import AppointmentCreate, AppointmentOut, DoctorSchedule
 from agile_ci_demo.appointments.service import (
     DoctorNotFoundError,
     InvalidSlotError,
+    PastDateError,
     PatientNotFoundError,
     SlotUnavailableError,
     create_appointment,
     get_appointment_by_reference,
+    get_current_doctor,
+    get_doctor_schedule,
 )
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.templates import templates
@@ -55,6 +60,35 @@ def book_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)) 
     return _serialize(appointment)
 
 
+@api_router.get("/schedule", response_model=DoctorSchedule)
+def get_my_schedule(
+    schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    db: Session = Depends(get_db),
+) -> DoctorSchedule:
+    """The current doctor's appointments for a given date (defaults to today).
+
+    "Current doctor" is a placeholder - see get_current_doctor() - until real
+    login sessions exist.
+    """
+    doctor = get_current_doctor(db)
+    if doctor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No doctor account found")
+
+    try:
+        appointments = get_doctor_schedule(db, doctor.id, schedule_date)
+    except PastDateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    return DoctorSchedule(
+        doctor_id=doctor.staff_id or "",
+        doctor_name=doctor.full_name,
+        schedule_date=schedule_date,
+        appointments=[_serialize(a) for a in appointments],
+    )
+
+
 @api_router.get("/{reference_number}", response_model=AppointmentOut)
 def get_appointment(reference_number: str, db: Session = Depends(get_db)) -> AppointmentOut:
     appointment = get_appointment_by_reference(db, reference_number)
@@ -66,3 +100,8 @@ def get_appointment(reference_number: str, db: Session = Depends(get_db)) -> App
 @pages_router.get("/create", response_class=HTMLResponse)
 def create_appointment_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "appointments/create.html", {})
+
+
+@pages_router.get("/schedule", response_class=HTMLResponse)
+def schedule_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "appointments/schedule.html", {})
