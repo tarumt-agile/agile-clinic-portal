@@ -49,3 +49,20 @@ class DoctorSchedule(BaseModel):
     doctor_name: str
     schedule_date: dt.date
     appointments: list[AppointmentOut]
+
+
+class SlotInfo(BaseModel):
+    """A single bookable slot on a doctor's day, and whether it is still free."""
+
+    start_time: dt.time
+    end_time: dt.time
+    available: bool
+
+
+class DoctorSlots(BaseModel):
+    """The full working-hours slot grid for a doctor on a given date."""
+
+    doctor_id: str
+    doctor_name: str
+    schedule_date: dt.date
+    slots: list[SlotInfo]

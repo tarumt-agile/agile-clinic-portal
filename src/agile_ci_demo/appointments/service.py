@@ -153,3 +153,38 @@ def get_doctor_schedule(db: Session, doctor_id: int, schedule_date: dt.date) -> 
         .scalars()
         .all()
     )
+
+
+def get_available_slots(
+    db: Session, doctor_id: int, schedule_date: dt.date
+) -> list[tuple[dt.time, dt.time, bool]]:
+    """Compute the full working-hours slot grid for a doctor on a date, marking each
+    slot as available or not. A slot is unavailable if it is already scheduled
+    (cancelled appointments free the slot back up) or already in the past today."""
+    if schedule_date < dt.date.today():
+        raise PastDateError("Cannot view available slots for a date before today")
+
+    booked_starts = set(
+        db.execute(
+            select(Appointment.start_time).where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date == schedule_date,
+                Appointment.status == "scheduled",
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    now = dt.datetime.now()
+    is_today = schedule_date == now.date()
+
+    slots = []
+    current = CLINIC_OPEN
+    while current < CLINIC_CLOSE:
+        end = add_minutes(current, SLOT_MINUTES)
+        is_past = is_today and current < now.time()
+        available = current not in booked_starts and not is_past
+        slots.append((current, end, available))
+        current = end
+    return slots

@@ -23,3 +23,11 @@ Feature: Appointment booking
     And that doctor has an appointment booked for tomorrow
     When I view that doctor's schedule for tomorrow
     Then the schedule includes that appointment
+
+  Scenario: See available time slots when booking
+    Given the clinic portal API is running
+    And a registered patient and an active doctor
+    And that doctor has an appointment booked for tomorrow
+    When I check that doctor's available slots for tomorrow
+    Then the booked slot is marked unavailable
+    And other slots remain available
