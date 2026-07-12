@@ -11,3 +11,19 @@ class Role(str, Enum):
     NURSE = "nurse"
     RECEPTIONIST = "receptionist"
     PHARMACIST = "pharmacist"
+
+
+class Specialty(str, Enum):
+    """Medical specialties a doctor account may be assigned. Only meaningful for
+    staff with role=doctor - other roles do not have a specialty."""
+
+    GENERAL_PRACTICE = "general_practice"
+    PEDIATRICS = "pediatrics"
+    CARDIOLOGY = "cardiology"
+    DERMATOLOGY = "dermatology"
+    ENT = "ent"
+    ORTHOPEDICS = "orthopedics"
+    GYNECOLOGY = "gynecology"
+    PSYCHIATRY = "psychiatry"
+    DENTISTRY = "dentistry"
+    OPHTHALMOLOGY = "ophthalmology"

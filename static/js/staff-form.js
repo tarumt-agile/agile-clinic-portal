@@ -6,6 +6,9 @@
 
   const alertBox = document.getElementById("form-alert");
   const submitBtn = document.getElementById("submit-btn");
+  const roleSelect = document.getElementById("role");
+  const specialtyField = document.getElementById("specialty-field");
+  const specialtySelect = document.getElementById("specialty");
   const confirmationModalEl = document.getElementById("confirmation-modal");
   const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
 
@@ -45,11 +48,25 @@
 
   function collectPayload() {
     const data = new FormData(form);
-    return {
+    const payload = {
       full_name: data.get("full_name")?.trim(),
       email: data.get("email")?.trim(),
       role: data.get("role"),
     };
+    if (data.get("role") === "doctor") {
+      payload.specialty = data.get("specialty");
+    }
+    return payload;
+  }
+
+  function toggleSpecialtyField() {
+    const isDoctor = roleSelect.value === "doctor";
+    specialtyField.classList.toggle("d-none", !isDoctor);
+    specialtySelect.required = isDoctor;
+    if (!isDoctor) {
+      specialtySelect.value = "";
+      specialtySelect.classList.remove("is-invalid");
+    }
   }
 
   async function handleSubmit(event) {
@@ -100,10 +117,29 @@
     }
   }
 
+  function formatSpecialty(specialty) {
+    return specialty
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+
   function showConfirmation(staff) {
     document.getElementById("confirm-staff-id").textContent = staff.staff_id;
     document.getElementById("confirm-full-name").textContent = staff.full_name;
     document.getElementById("confirm-role").textContent = staff.role;
+
+    const specialtyLabel = document.getElementById("confirm-specialty-label");
+    const specialtyValue = document.getElementById("confirm-specialty");
+    if (staff.specialty) {
+      specialtyLabel.classList.remove("d-none");
+      specialtyValue.classList.remove("d-none");
+      specialtyValue.textContent = formatSpecialty(staff.specialty);
+    } else {
+      specialtyLabel.classList.add("d-none");
+      specialtyValue.classList.add("d-none");
+    }
+
     if (confirmationModal) {
       confirmationModal.show();
     } else {
@@ -111,5 +147,6 @@
     }
   }
 
+  roleSelect.addEventListener("change", toggleSpecialtyField);
   form.addEventListener("submit", handleSubmit);
 })();

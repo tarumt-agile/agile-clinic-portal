@@ -129,12 +129,12 @@ PATIENTS = [
 ]
 
 STAFF = [
-    ("Dr. Alan Chua", "alan.chua@clinic.com", "doctor"),
-    ("Dr. Betty Lim", "betty.lim@clinic.com", "doctor"),
-    ("Dr. Chandran Raj", "chandran.raj@clinic.com", "doctor"),
-    ("Nurse Amy Wong", "amy.wong@clinic.com", "nurse"),
-    ("Siti Rahman", "siti.rahman@clinic.com", "receptionist"),
-    ("Admin User", "admin@clinic.com", "admin"),
+    ("Dr. Alan Chua", "alan.chua@clinic.com", "doctor", "general_practice"),
+    ("Dr. Betty Lim", "betty.lim@clinic.com", "doctor", "pediatrics"),
+    ("Dr. Chandran Raj", "chandran.raj@clinic.com", "doctor", "cardiology"),
+    ("Nurse Amy Wong", "amy.wong@clinic.com", "nurse", None),
+    ("Siti Rahman", "siti.rahman@clinic.com", "receptionist", None),
+    ("Admin User", "admin@clinic.com", "admin", None),
 ]
 
 REASONS = [
@@ -189,8 +189,10 @@ def seed(force: bool) -> None:
 
         print(f"Seeding {len(STAFF)} staff accounts...")
         doctor_ids = []
-        for full_name, email, role in STAFF:
-            staff = create_staff(db, StaffCreate(full_name=full_name, email=email, role=role))
+        for full_name, email, role, specialty in STAFF:
+            staff = create_staff(
+                db, StaffCreate(full_name=full_name, email=email, role=role, specialty=specialty)
+            )
             if role == "doctor":
                 doctor_ids.append(staff.staff_id)
 
