@@ -99,7 +99,7 @@ def edit_patient(
 
 @pages_router.get("/register", response_class=HTMLResponse)
 def register_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "patients/register.html", {})
+    return templates.TemplateResponse(request, "patients/receptionist_registerPatients.html", {})
 
 
 @pages_router.get("", response_class=HTMLResponse)
@@ -107,6 +107,15 @@ def list_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/list.html", {})
 
 
+@pages_router.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page(request: Request) -> HTMLResponse:
+    """Patient self-service home page. Patient identity is a placeholder (see
+    get_current_patient) until real login sessions exist."""
+    return templates.TemplateResponse(request, "patients/patient_dashboard.html", {})
+
+
 @pages_router.get("/{patient_id}", response_class=HTMLResponse)
 def detail_page(request: Request, patient_id: str) -> HTMLResponse:
-    return templates.TemplateResponse(request, "patients/detail.html", {"patient_id": patient_id})
+    return templates.TemplateResponse(
+        request, "patients/patients_details.html", {"patient_id": patient_id}
+    )

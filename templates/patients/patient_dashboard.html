@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}My Dashboard - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div id="dashboard-alert" class="alert alert-danger d-none" role="alert"></div>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1" id="dashboard-greeting">Welcome back</h1>
+    <div class="text-muted" id="dashboard-subtitle">&nbsp;</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/appointments/book" class="btn btn-primary">Book Appointment</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="card text-bg-primary h-100">
+      <div class="card-body">
+        <div class="fs-2 fw-bold" id="stat-upcoming">-</div>
+        <div>Upcoming Appointments</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card text-bg-success h-100">
+      <div class="card-body">
+        <div class="fs-2 fw-bold" id="stat-visits">-</div>
+        <div>Recorded Visits</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card text-bg-warning h-100">
+      <div class="card-body">
+        <div class="fs-2 fw-bold" id="stat-prescriptions">-</div>
+        <div>Active Prescriptions</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Upcoming Appointments</span>
+        <a href="/appointments/mine" class="small">View all</a>
+      </div>
+      <div class="list-group list-group-flush" id="upcoming-appointments-list">
+        <div class="list-group-item text-muted">Loading...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Recent Visits</span>
+      </div>
+      <div class="list-group list-group-flush" id="recent-visits-list">
+        <div class="list-group-item text-muted">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>My Prescriptions</span>
+        <span class="badge text-bg-secondary">Sample data</span>
+      </div>
+      <div class="list-group list-group-flush" id="prescriptions-list"></div>
+      <div class="card-footer text-muted small">
+        Prescription tracking isn't connected to the pharmacy system yet - these are
+        placeholder entries.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>My Information</span>
+        <a href="#" id="my-info-link" class="small">Edit</a>
+      </div>
+      <div class="card-body" id="my-info-body">
+        <p class="text-muted mb-0">Loading...</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/patient-dashboard.js"></script>
+{% endblock %}
