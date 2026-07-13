@@ -31,3 +31,10 @@ Feature: Appointment booking
     When I check that doctor's available slots for tomorrow
     Then the booked slot is marked unavailable
     And other slots remain available
+
+  Scenario: Cancel an appointment
+    Given the clinic portal API is running
+    And a registered patient and an active doctor
+    And that doctor has an appointment booked for tomorrow
+    When I cancel that appointment with a reason
+    Then the appointment is cancelled

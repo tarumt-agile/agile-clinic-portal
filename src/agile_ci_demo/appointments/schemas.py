@@ -42,6 +42,29 @@ class AppointmentOut(BaseModel):
     created_at: dt.datetime
 
 
+class AppointmentCancel(BaseModel):
+    """Payload for cancelling an appointment. A reason is required."""
+
+    cancellation_reason: str = Field(min_length=2, max_length=255)
+
+    @field_validator("cancellation_reason")
+    @classmethod
+    def reason_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("A cancellation reason is required")
+        return v
+
+
+class PatientAppointments(BaseModel):
+    """A patient's own upcoming appointments (today or later), ordered by date then
+    start time ascending."""
+
+    patient_id: str
+    patient_name: str
+    appointments: list[AppointmentOut]
+
+
 class DoctorSchedule(BaseModel):
     """A doctor's appointments for a single day, ordered by start time ascending."""
 

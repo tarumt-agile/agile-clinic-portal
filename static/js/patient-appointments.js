@@ -1,12 +1,11 @@
 (function () {
   "use strict";
 
-  const tableBody = document.getElementById("schedule-table-body");
+  const tableBody = document.getElementById("appointments-table-body");
   if (!tableBody) return;
 
-  const heading = document.getElementById("schedule-heading");
-  const dateInput = document.getElementById("schedule-date");
-  const alertBox = document.getElementById("schedule-alert");
+  const heading = document.getElementById("appointments-heading");
+  const alertBox = document.getElementById("appointments-alert");
 
   const cancelModalEl = document.getElementById("cancel-modal");
   const cancelModal = window.bootstrap ? new bootstrap.Modal(cancelModalEl) : null;
@@ -39,41 +38,35 @@
     alertBox.textContent = "";
   }
 
-  async function loadSchedule(dateValue) {
+  async function loadAppointments() {
     hideAlert();
     tableBody.innerHTML =
-      '<tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>';
+      '<tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr>';
 
     try {
-      const response = await fetch(`/api/appointments/schedule?date=${dateValue}`);
+      const response = await fetch("/api/appointments/mine");
       const body = await response.json();
-
-      if (response.status === 422) {
-        tableBody.innerHTML = "";
-        showAlert(body.detail || "Please choose today or a future date.");
-        return;
-      }
 
       if (response.status === 404) {
         tableBody.innerHTML = "";
-        showAlert(body.detail || "No doctor account found.");
+        showAlert(body.detail || "No patient account found.");
         return;
       }
 
       if (!response.ok) throw new Error("Request failed");
 
-      heading.textContent = `${body.doctor_name}'s Schedule`;
+      heading.textContent = `${body.patient_name}'s Appointments`;
       renderTable(body.appointments);
     } catch (err) {
       tableBody.innerHTML = "";
-      showAlert("Unable to load the schedule. Please try again.");
+      showAlert("Unable to load your appointments. Please try again.");
     }
   }
 
   function renderTable(appointments) {
     if (appointments.length === 0) {
       tableBody.innerHTML =
-        '<tr><td colspan="5" class="text-center text-muted py-4">No appointments for this date.</td></tr>';
+        '<tr><td colspan="6" class="text-center text-muted py-4">You have no upcoming appointments.</td></tr>';
       return;
     }
 
@@ -82,12 +75,13 @@
         const badgeClass = STATUS_BADGE[a.status] || "text-bg-light";
         const action =
           a.status === "scheduled"
-            ? `<button type="button" class="btn btn-sm btn-outline-danger cancel-btn" data-reference="${escapeHtml(a.reference_number)}" data-patient-name="${escapeHtml(a.patient_name)}">Cancel</button>`
+            ? `<button type="button" class="btn btn-sm btn-outline-danger cancel-btn" data-reference="${escapeHtml(a.reference_number)}" data-doctor-name="${escapeHtml(a.doctor_name)}">Cancel</button>`
             : "-";
         return `
       <tr>
+        <td>${escapeHtml(a.appointment_date)}</td>
         <td>${escapeHtml(a.start_time.slice(0, 5))} - ${escapeHtml(a.end_time.slice(0, 5))}</td>
-        <td>${escapeHtml(a.patient_name)} (${escapeHtml(a.patient_id)})</td>
+        <td>${escapeHtml(a.doctor_name)}</td>
         <td>${escapeHtml(a.reason)}</td>
         <td><span class="badge ${badgeClass} text-capitalize">${escapeHtml(a.status)}</span></td>
         <td>${action}</td>
@@ -96,13 +90,13 @@
       .join("");
 
     tableBody.querySelectorAll(".cancel-btn").forEach((btn) => {
-      btn.addEventListener("click", () => openCancelModal(btn.dataset.reference, btn.dataset.patientName));
+      btn.addEventListener("click", () => openCancelModal(btn.dataset.reference, btn.dataset.doctorName));
     });
   }
 
-  function openCancelModal(referenceNumber, patientName) {
+  function openCancelModal(referenceNumber, doctorName) {
     pendingReferenceNumber = referenceNumber;
-    cancelTargetPatient.textContent = patientName;
+    cancelTargetPatient.textContent = doctorName;
     cancelReasonInput.value = "";
     cancelForm.classList.remove("was-validated");
     cancelReasonInput.classList.remove("is-invalid");
@@ -110,7 +104,7 @@
     if (cancelModal) {
       cancelModal.show();
     } else {
-      const reason = window.prompt(`Cancel appointment with ${patientName}? Enter a reason:`);
+      const reason = window.prompt(`Cancel your appointment with ${doctorName}? Enter a reason:`);
       if (reason && reason.trim()) submitCancellation(referenceNumber, reason.trim());
     }
   }
@@ -141,7 +135,7 @@
 
       if (response.ok) {
         if (cancelModal) cancelModal.hide();
-        loadSchedule(dateInput.value);
+        loadAppointments();
         return;
       }
 
@@ -166,21 +160,6 @@
     }
   }
 
-  // Local date, not UTC - toISOString() converts to UTC and can be a day off from
-  // the server's dt.date.today() (which uses local time), especially near midnight.
-  function todayLocalISODate() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  const today = todayLocalISODate();
-  dateInput.min = today;
-  dateInput.value = today;
-
-  dateInput.addEventListener("change", () => loadSchedule(dateInput.value));
   cancelForm.addEventListener("submit", handleCancelSubmit);
-  loadSchedule(today);
+  loadAppointments();
 })();

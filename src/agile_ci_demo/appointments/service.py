@@ -41,6 +41,14 @@ class PastDateError(Exception):
     """Raised when a doctor's schedule is requested for a date before today."""
 
 
+class AppointmentNotFoundError(Exception):
+    """Raised when a reference_number does not match any stored appointment."""
+
+
+class AlreadyCancelledError(Exception):
+    """Raised when attempting to cancel an appointment that is already cancelled."""
+
+
 def add_minutes(value: dt.time, minutes: int) -> dt.time:
     combined = dt.datetime.combine(dt.date.today(), value) + dt.timedelta(minutes=minutes)
     return combined.time()
@@ -125,6 +133,25 @@ def get_appointment_by_reference(db: Session, reference_number: str) -> Appointm
     ).scalar_one_or_none()
 
 
+def cancel_appointment(db: Session, reference_number: str, cancellation_reason: str) -> Appointment:
+    """Cancel a scheduled appointment. Frees its slot for other patients - the slot
+    grid and double-booking check both only treat status="scheduled" as occupied."""
+    appointment = get_appointment_by_reference(db, reference_number)
+    if appointment is None:
+        raise AppointmentNotFoundError(
+            f"No appointment found with reference number '{reference_number}'"
+        )
+
+    if appointment.status == "cancelled":
+        raise AlreadyCancelledError(f"Appointment '{reference_number}' is already cancelled")
+
+    appointment.status = "cancelled"
+    appointment.cancellation_reason = cancellation_reason
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+
 def get_current_doctor(db: Session) -> Staff | None:
     """Stand-in for real authentication: returns the first doctor on record as "the
     logged-in doctor". There is no session/token yet - swap this for a real
@@ -149,6 +176,23 @@ def get_doctor_schedule(db: Session, doctor_id: int, schedule_date: dt.date) -> 
                 Appointment.appointment_date == schedule_date,
             )
             .order_by(Appointment.start_time)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_patient_appointments(db: Session, patient_id: int) -> list[Appointment]:
+    """A patient's own upcoming appointments (today or later), ordered by date then
+    start time ascending - includes cancelled ones so they can see the status."""
+    return list(
+        db.execute(
+            select(Appointment)
+            .where(
+                Appointment.patient_id == patient_id,
+                Appointment.appointment_date >= dt.date.today(),
+            )
+            .order_by(Appointment.appointment_date, Appointment.start_time)
         )
         .scalars()
         .all()
