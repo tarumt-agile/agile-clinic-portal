@@ -1,31 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}My Schedule - Agile Clinic Portal{% endblock %}
+{% block title %}My Appointments - Agile Clinic Portal{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="h3 mb-0" id="schedule-heading">My Schedule</h1>
-  <div>
-    <label for="schedule-date" class="visually-hidden">Date</label>
-    <input type="date" id="schedule-date" class="form-control">
-  </div>
-</div>
+<h1 class="h3 mb-4" id="appointments-heading">My Appointments</h1>
 
-<div id="schedule-alert" class="alert alert-danger d-none" role="alert"></div>
+<div id="appointments-alert" class="alert alert-danger d-none" role="alert"></div>
 
 <div class="table-responsive">
   <table class="table table-hover align-middle bg-white">
     <thead>
       <tr>
+        <th scope="col">Date</th>
         <th scope="col">Time</th>
-        <th scope="col">Patient</th>
+        <th scope="col">Doctor</th>
         <th scope="col">Reason</th>
         <th scope="col">Status</th>
         <th scope="col">Action</th>
       </tr>
     </thead>
-    <tbody id="schedule-table-body">
-      <tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>
+    <tbody id="appointments-table-body">
+      <tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr>
     </tbody>
   </table>
 </div>
@@ -41,8 +36,7 @@
       <form id="cancel-form" novalidate>
         <div class="modal-body">
           <p class="mb-3">
-            Cancel the appointment with <strong id="cancel-target-patient"></strong>?
-            The slot will be freed for other patients.
+            Cancel your appointment with <strong id="cancel-target-patient"></strong>?
           </p>
           <label for="cancel-reason" class="form-label">Reason for cancellation *</label>
           <textarea class="form-control" id="cancel-reason" name="cancellation_reason" rows="2" required minlength="2" maxlength="255"></textarea>
@@ -60,5 +54,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/doctor-schedule.js"></script>
+<script src="/static/js/patient-appointments.js"></script>
 {% endblock %}
