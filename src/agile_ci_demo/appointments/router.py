@@ -180,12 +180,14 @@ def cancel_appointment_endpoint(
 
 @pages_router.get("/create", response_class=HTMLResponse)
 def create_appointment_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "appointments/create.html", {})
+    return templates.TemplateResponse(
+        request, "appointments/receptionist_createAppointment.html", {}
+    )
 
 
 @pages_router.get("/schedule", response_class=HTMLResponse)
 def schedule_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "appointments/schedule.html", {})
+    return templates.TemplateResponse(request, "appointments/doctor_viewSchedule.html", {})
 
 
 @pages_router.get("/book", response_class=HTMLResponse)
@@ -193,9 +195,9 @@ def self_book_appointment_page(request: Request) -> HTMLResponse:
     """Patient self-service booking. Patient identity is a placeholder (see
     patients.service.get_current_patient) - the form auto-fills and locks the
     Patient ID field instead of asking the patient to type their own ID."""
-    return templates.TemplateResponse(request, "appointments/book.html", {})
+    return templates.TemplateResponse(request, "appointments/patient_bookAppointment.html", {})
 
 
 @pages_router.get("/mine", response_class=HTMLResponse)
 def my_appointments_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "appointments/mine.html", {})
+    return templates.TemplateResponse(request, "appointments/patient_appointment.html", {})
