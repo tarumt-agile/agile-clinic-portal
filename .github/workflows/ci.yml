@@ -63,6 +63,7 @@ jobs:
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import os
           import xml.etree.ElementTree as ET
+          from collections import defaultdict
 
           print("## Test Summary")
           print()
@@ -84,6 +85,44 @@ jobs:
               print(f"| Failed | {failures + errors} |")
               print(f"| Skipped | {skipped} |")
               print(f"| **Total** | **{total}** |")
+              print()
+
+              # Tests are auto-classified into "acceptance" (BDD/Gherkin scenarios)
+              # or "io" (hits TestClient/a DB session) by tests/conftest.py, via a
+              # "category" property recorded on each testcase. Anything the
+              # conftest didn't classify shows up here as "other" - this stays
+              # accurate as new tests are added without needing to be updated.
+              by_category = defaultdict(lambda: {"passed": 0, "failed": 0, "skipped": 0})
+              for testcase in suite.findall("testcase"):
+                  category = "other"
+                  for prop in testcase.findall("./properties/property"):
+                      if prop.get("name") == "category":
+                          category = prop.get("value")
+
+                  if testcase.find("failure") is not None or testcase.find("error") is not None:
+                      by_category[category]["failed"] += 1
+                  elif testcase.find("skipped") is not None:
+                      by_category[category]["skipped"] += 1
+                  else:
+                      by_category[category]["passed"] += 1
+
+              labels = {"acceptance": "Acceptance", "io": "I/O", "other": "Other"}
+              order = ["acceptance", "io", "other"]
+              categories = [c for c in order if c in by_category]
+              categories += [c for c in by_category if c not in categories]
+
+              print("### By test type")
+              print()
+              print("| Type | Passed | Failed | Skipped | Total |")
+              print("|---|---|---|---|---|")
+              for category in categories:
+                  counts = by_category[category]
+                  cat_total = counts["passed"] + counts["failed"] + counts["skipped"]
+                  label = labels.get(category, category.title())
+                  print(
+                      f"| {label} | {counts['passed']} | {counts['failed']} | "
+                      f"{counts['skipped']} | {cat_total} |"
+                  )
           else:
               print("_No test results found (the Python 3.13 job may not have completed)._")
           print()

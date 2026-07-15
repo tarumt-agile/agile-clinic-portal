@@ -52,6 +52,10 @@ target-version = ['py311']
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+  "acceptance: BDD/Gherkin scenario tests (see tests/features/*.feature)",
+  "io: tests that exercise a real system boundary (HTTP via TestClient, or a database session)",
+]
 
 [tool.mypy]
 python_version = "3.11"
