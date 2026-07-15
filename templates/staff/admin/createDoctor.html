@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Create Doctor - Agile Clinic Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/createDoctor.css">
+{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+  <div class="admin-header">
+    <div>
+      <p class="admin-label">Admin / Doctor Management</p>
+      <h1>Create Doctor Profile</h1>
+      <p class="admin-subtitle">
+        Create a doctor account and doctor profile for appointment assignment.
+      </p>
+    </div>
+  </div>
+
+  <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
+
+  <div class="admin-card">
+    <div class="admin-card-header">
+      <h2>Doctor Registration Form</h2>
+      <p>Fields marked with * are required.</p>
+    </div>
+
+    <form id="create-doctor-form" novalidate>
+      <div class="admin-form-grid">
+        <div class="form-field field-wide">
+          <label for="full_name">Doctor Full Name *</label>
+          <input
+            type="text"
+            id="full_name"
+            name="full_name"
+            required
+            minlength="2"
+            maxlength="120"
+            placeholder="Example: Dr Tan Wei Ming"
+          >
+          <div class="invalid-feedback">Doctor full name is required.</div>
+        </div>
+
+        <div class="form-field">
+          <label for="status">Status *</label>
+          <select id="status" name="status" required>
+            <option value="active" selected>Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <div class="invalid-feedback">Please select a status.</div>
+        </div>
+
+        <div class="form-field field-wide">
+          <label for="email">Email *</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            placeholder="doctor@example.com"
+          >
+          <div class="invalid-feedback">Enter a valid email address.</div>
+        </div>
+
+        <div class="form-field">
+          <label for="license_number">License Number *</label>
+          <input
+            type="text"
+            id="license_number"
+            name="license_number"
+            required
+            minlength="3"
+            maxlength="50"
+            placeholder="MMC12345"
+          >
+          <div class="invalid-feedback">License number is required.</div>
+        </div>
+
+        <div class="form-field">
+          <label for="specialty">Specialty *</label>
+          <select id="specialty" name="specialty" required>
+            <option value="" selected disabled>Choose specialty...</option>
+            <option value="General Medicine">General Medicine</option>
+            <option value="Cardiology">Cardiology</option>
+            <option value="Dermatology">Dermatology</option>
+            <option value="Paediatrics">Paediatrics</option>
+            <option value="Orthopaedics">Orthopaedics</option>
+            <option value="Neurology">Neurology</option>
+          </select>
+          <div class="invalid-feedback">Please select a specialty.</div>
+        </div>
+
+        <div class="form-field">
+          <label for="department">Department *</label>
+          <input
+            type="text"
+            id="department"
+            name="department"
+            required
+            minlength="2"
+            maxlength="80"
+            placeholder="Example: Medical Department"
+          >
+          <div class="invalid-feedback">Department is required.</div>
+        </div>
+      </div>
+
+      <div class="admin-note">
+        The system will automatically create a linked staff user account with the role
+        <strong>Doctor</strong>. A temporary password will be emailed to the doctor.
+      </div>
+
+      <div class="admin-actions">
+        <button type="submit" id="submit-btn" class="btn btn-primary">
+          Create Doctor
+        </button>
+        <button type="reset" class="btn btn-outline-secondary">
+          Clear
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="confirmation-modal" tabindex="-1" aria-labelledby="confirmation-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="confirmation-modal-label">Doctor Created</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <p>The doctor account and doctor profile have been created successfully.</p>
+
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Doctor ID</dt>
+          <dd class="col-sm-8">
+            <span id="confirm-doctor-id" class="fw-bold"></span>
+          </dd>
+
+          <dt class="col-sm-4">Staff ID</dt>
+          <dd class="col-sm-8" id="confirm-staff-id"></dd>
+
+          <dt class="col-sm-4">Full Name</dt>
+          <dd class="col-sm-8" id="confirm-full-name"></dd>
+
+          <dt class="col-sm-4">Specialty</dt>
+          <dd class="col-sm-8" id="confirm-specialty"></dd>
+        </dl>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/admin-create-doctor.js"></script>
+{% endblock %}
