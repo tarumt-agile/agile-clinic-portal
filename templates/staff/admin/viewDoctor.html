@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Doctor Details - Agile Clinic Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/listDoctor.css">
+{% endblock %}
+
+{% block content %}
+<div
+  id="doctor-detail-root"
+  class="doctor-page"
+  data-doctor-id="{{ doctor_id }}"
+>
+  <header class="doctor-detail-header">
+    <div>
+      <p class="doctor-breadcrumb">Admin / Doctor Management</p>
+
+      <h1>
+        Doctor Profile
+        <span id="doctor-heading-id" class="doctor-heading-id"></span>
+      </h1>
+
+      <p class="doctor-page-description">
+        View the doctor’s account and professional information.
+      </p>
+    </div>
+
+    <div class="doctor-header-actions">
+      <a
+        href="/staff/admin/listDoctor"
+        class="btn btn-outline-secondary"
+      >
+        Back to Doctor List
+      </a>
+    </div>
+  </header>
+
+  <div
+    id="doctor-detail-alert"
+    class="alert alert-danger d-none"
+    role="alert"
+  ></div>
+
+  <div
+    id="doctor-not-found"
+    class="alert alert-warning d-none"
+    role="alert"
+  >
+    The requested doctor profile could not be found.
+  </div>
+
+  <div id="doctor-detail-loading" class="doctor-detail-loading">
+    Loading doctor details...
+  </div>
+
+  <div id="doctor-detail-content" class="d-none">
+    <section class="doctor-profile-card">
+      <div class="doctor-profile-header">
+        <div class="doctor-avatar" aria-hidden="true">
+          <span id="doctor-avatar-text">DR</span>
+        </div>
+
+        <div class="doctor-profile-heading">
+          <div class="doctor-profile-title-row">
+            <h2 id="doctor-full-name">—</h2>
+            <span id="doctor-status-badge" class="doctor-status-badge">
+              —
+            </span>
+          </div>
+
+          <p id="doctor-specialty-heading">—</p>
+          <p id="doctor-email-heading">—</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="doctor-detail-grid">
+      <section class="doctor-detail-card">
+        <div class="doctor-detail-card-header">
+          <h2>Professional Information</h2>
+        </div>
+
+        <dl class="doctor-detail-list">
+          <div class="doctor-detail-item">
+            <dt>Doctor ID</dt>
+            <dd id="view-doctor-id">—</dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Licence Number</dt>
+            <dd id="view-license-number">—</dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Specialty</dt>
+            <dd id="view-specialty">—</dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Department</dt>
+            <dd id="view-department">—</dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Doctor Status</dt>
+            <dd id="view-doctor-status">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="doctor-detail-card">
+        <div class="doctor-detail-card-header">
+          <h2>Linked Staff Account</h2>
+        </div>
+
+        <dl class="doctor-detail-list">
+          <div class="doctor-detail-item">
+            <dt>Staff ID</dt>
+            <dd id="view-staff-id">—</dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Full Name</dt>
+            <dd id="view-full-name">—</dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Email Address</dt>
+            <dd>
+              <a id="view-email" href="#">—</a>
+            </dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Account Role</dt>
+            <dd>Doctor</dd>
+          </div>
+
+          <div class="doctor-detail-item">
+            <dt>Date Registered</dt>
+            <dd id="view-created-at">—</dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+
+    <section class="doctor-account-note">
+      <div>
+        <h2>Account Relationship</h2>
+        <p>
+          This doctor profile is linked to staff account
+          <strong id="linked-staff-id">—</strong>.
+          The doctor uses the linked staff account to access the system.
+        </p>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/viewDoctor.js"></script>
+{% endblock %}

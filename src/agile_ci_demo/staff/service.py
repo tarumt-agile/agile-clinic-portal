@@ -24,14 +24,14 @@ class DoctorEmailAlreadyExistsError(Exception):
 class DuplicateDoctorLicenseError(Exception):
     """Raised when a doctor profile with the same license number already exists."""
 
-
 class DoctorProfileAlreadyExistsError(Exception):
     """Raised when the selected staff account already has a doctor profile."""
-
 
 class StaffAccountIsNotDoctorError(Exception):
     """Raised when the selected staff account is not using the doctor role."""
 
+class DoctorNotFoundError(Exception):
+    """Raised when a doctor_id does not match any doctor profile."""
 
 
 def create_staff(db: Session, data: StaffCreate) -> Staff:
@@ -205,6 +205,40 @@ def list_doctors(db: Session) -> list[DoctorOut]:
         )
         for doctor, staff in rows
     ]
+
+def get_doctor_by_doctor_id(
+    db: Session,
+    doctor_id: str,
+) -> DoctorOut:
+    """Return one doctor and the linked staff account."""
+
+    row = db.execute(
+        select(DoctorProfile, Staff)
+        .join(
+            Staff,
+            DoctorProfile.staff_account_id == Staff.id,
+        )
+        .where(DoctorProfile.doctor_id == doctor_id)
+    ).one_or_none()
+
+    if row is None:
+        raise DoctorNotFoundError(
+            f"No doctor profile found with doctor_id '{doctor_id}'"
+        )
+
+    doctor, staff = row
+
+    return DoctorOut(
+        doctor_id=doctor.doctor_id or "",
+        staff_id=staff.staff_id or "",
+        full_name=staff.full_name,
+        email=staff.email,
+        license_number=doctor.license_number,
+        specialty=doctor.specialty,
+        department=doctor.department,
+        status=doctor.status,
+        created_at=doctor.created_at,
+    )
 
 def create_doctor_with_account(db: Session, data: DoctorRegister) -> DoctorOut:
     """Create a doctor staff account and doctor profile together from the admin page."""

@@ -7,6 +7,7 @@ from agile_ci_demo.core.templates import templates
 from agile_ci_demo.staff.schemas import DoctorCreate, DoctorOut, DoctorRegister, StaffCreate, StaffOut, StaffStatusUpdate
 from agile_ci_demo.staff.service import (
     DoctorEmailAlreadyExistsError,
+    DoctorNotFoundError,
     DoctorProfileAlreadyExistsError,
     DuplicateDoctorLicenseError,
     DuplicateStaffEmailError,
@@ -15,6 +16,7 @@ from agile_ci_demo.staff.service import (
     create_doctor_profile,
     create_doctor_with_account,
     create_staff,
+    get_doctor_by_doctor_id,
     list_available_doctor_staff_accounts,
     list_doctors,
     list_staff,
@@ -65,6 +67,19 @@ def get_doctor_list(db: Session = Depends(get_db)) -> list[DoctorOut]:
     return list_doctors(db)
 
 
+@api_router.get("/doctors/{doctor_id}",response_model=DoctorOut)
+def get_doctor_details(doctor_id: str,db: Session = Depends(get_db)
+) -> DoctorOut:
+    """Return one doctor using the public doctor ID."""
+    try:
+        return get_doctor_by_doctor_id(db, doctor_id)
+    except DoctorNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
 @api_router.patch("/{staff_id}/status", response_model=StaffOut)
 def update_staff_status(
     staff_id: str, payload: StaffStatusUpdate, db: Session = Depends(get_db)
@@ -76,6 +91,7 @@ def update_staff_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return StaffOut.model_validate(staff)
 
+
 @api_router.post("/admin/doctors", response_model=DoctorOut, status_code=status.HTTP_201_CREATED)
 def admin_create_doctor(payload: DoctorRegister, db: Session = Depends(get_db)) -> DoctorOut:
     """Admin creates a doctor account and doctor profile together."""
@@ -86,6 +102,7 @@ def admin_create_doctor(payload: DoctorRegister, db: Session = Depends(get_db)) 
     except DuplicateDoctorLicenseError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     
+
 @pages_router.get("/create", response_class=HTMLResponse)
 def create_staff_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "staff/create.html", {})
@@ -99,3 +116,23 @@ def staff_list_page(request: Request) -> HTMLResponse:
 def admin_create_doctor_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "staff/admin/createDoctor.html", {})
 
+
+@pages_router.get("/admin/listDoctor",response_class=HTMLResponse,)
+def admin_doctor_list_page(request: Request
+) -> HTMLResponse:
+    """Render the doctor list page."""
+    return templates.TemplateResponse( request,"staff/admin/listDoctor.html",{},)
+
+
+@pages_router.get("/admin/viewDoctor/{doctor_id}",response_class=HTMLResponse,)
+def admin_view_doctor_page(request: Request,doctor_id: str,
+) -> HTMLResponse:
+    """Render the selected doctor detail page."""
+
+    return templates.TemplateResponse(
+        request,
+        "staff/admin/viewDoctor.html",
+        {
+            "doctor_id": doctor_id,
+        },
+    )
