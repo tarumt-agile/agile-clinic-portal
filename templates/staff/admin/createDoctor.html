@@ -28,93 +28,139 @@
 
     <form id="create-doctor-form" novalidate>
       <div class="admin-form-grid">
+
+        <!-- Full Name -->
         <div class="form-field field-wide">
           <label for="full_name">Doctor Full Name *</label>
+
           <input
             type="text"
             id="full_name"
             name="full_name"
-            required
-            minlength="2"
             maxlength="120"
-            placeholder="Example: Dr Tan Wei Ming"
+            autocomplete="name"
+            placeholder="Example: Tan Wei Ming"
           >
-          <div class="invalid-feedback">Doctor full name is required.</div>
+
+          <div
+            id="full_name_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
         </div>
 
-        <div class="form-field">
-          <label for="status">Status *</label>
-          <select id="status" name="status" required>
-            <option value="active" selected>Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <div class="invalid-feedback">Please select a status.</div>
-        </div>
-
+        <!-- Email -->
         <div class="form-field field-wide">
-          <label for="email">Email *</label>
+          <label for="email">Email Address *</label>
+
           <input
             type="email"
             id="email"
             name="email"
-            required
-            placeholder="doctor@example.com"
+            maxlength="254"
+            autocomplete="email"
+            placeholder="Example: doctor@example.com"
           >
-          <div class="invalid-feedback">Enter a valid email address.</div>
+
+          <div
+            id="email_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
         </div>
 
+        <!-- Licence Number -->
         <div class="form-field">
-          <label for="license_number">License Number *</label>
+          <label for="license_number">MMC Registration Number *</label>
+
           <input
             type="text"
             id="license_number"
             name="license_number"
-            required
-            minlength="3"
-            maxlength="50"
-            placeholder="MMC12345"
+            maxlength="9"
+            autocomplete="off"
+            placeholder="Example: MMC-12345"
           >
-          <div class="invalid-feedback">License number is required.</div>
+
+          <small class="form-text text-muted">
+            Required format: MMC-12345
+          </small>
+
+          <div
+            id="license_number_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
         </div>
 
+        <!-- Specialty -->
         <div class="form-field">
           <label for="specialty">Specialty *</label>
-          <select id="specialty" name="specialty" required>
-            <option value="" selected disabled>Choose specialty...</option>
+
+          <select id="specialty" name="specialty">
+            <option value="">Choose a specialty...</option>
             <option value="General Medicine">General Medicine</option>
+            <option value="Family Medicine">Family Medicine</option>
+            <option value="Internal Medicine">Internal Medicine</option>
             <option value="Cardiology">Cardiology</option>
             <option value="Dermatology">Dermatology</option>
-            <option value="Paediatrics">Paediatrics</option>
-            <option value="Orthopaedics">Orthopaedics</option>
+            <option value="Emergency Medicine">Emergency Medicine</option>
+            <option value="Endocrinology">Endocrinology</option>
+            <option value="Gastroenterology">Gastroenterology</option>
+            <option value="General Surgery">General Surgery</option>
             <option value="Neurology">Neurology</option>
+            <option value="Obstetrics and Gynaecology">
+              Obstetrics and Gynaecology
+            </option>
+            <option value="Oncology">Oncology</option>
+            <option value="Ophthalmology">Ophthalmology</option>
+            <option value="Orthopaedics">Orthopaedics</option>
+            <option value="Otorhinolaryngology">
+              Otorhinolaryngology
+            </option>
+            <option value="Paediatrics">Paediatrics</option>
+            <option value="Psychiatry">Psychiatry</option>
+            <option value="Radiology">Radiology</option>
+            <option value="Urology">Urology</option>
           </select>
-          <div class="invalid-feedback">Please select a specialty.</div>
+
+          <div
+            id="specialty_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
         </div>
 
+        <!-- Status -->
         <div class="form-field">
-          <label for="department">Department *</label>
-          <input
-            type="text"
-            id="department"
-            name="department"
-            required
-            minlength="2"
-            maxlength="80"
-            placeholder="Example: Medical Department"
-          >
-          <div class="invalid-feedback">Department is required.</div>
+          <label for="status">Status *</label>
+
+          <select id="status" name="status">
+            <option value="">Choose a status...</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+
+          <div
+            id="status_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
         </div>
+
       </div>
 
       <div class="admin-note">
-        The system will automatically create a linked staff user account with the role
-        <strong>Doctor</strong>. A temporary password will be emailed to the doctor.
+        The system will automatically create a linked staff account with the role
+        <strong>Doctor</strong>. A temporary password will be emailed to the
+        doctor.
       </div>
 
       <div class="admin-actions">
         <button type="submit" id="submit-btn" class="btn btn-primary">
           Create Doctor
         </button>
+
         <button type="reset" class="btn btn-outline-secondary">
           Clear
         </button>
@@ -162,5 +208,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/admin-create-doctor.js"></script>
+<script src="/static/js/createDoctor.js"></script>
 {% endblock %}
