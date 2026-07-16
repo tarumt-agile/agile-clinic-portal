@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -133,3 +134,18 @@ class DoctorRegister(BaseModel):
             )
 
         return value
+    
+class DoctorOut(BaseModel):
+    """Doctor profile details returned by the API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    doctor_id: str
+    staff_id: str
+    full_name: str
+    email: EmailStr
+    license_number: str
+    specialty: str
+    department: str
+    status: str
+    created_at: dt.datetime 

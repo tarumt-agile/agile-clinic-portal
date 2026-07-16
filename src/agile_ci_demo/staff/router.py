@@ -4,20 +4,16 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.templates import templates
-from agile_ci_demo.staff.schemas import DoctorCreate, DoctorOut, DoctorRegister, StaffCreate, StaffOut, StaffStatusUpdate
+from agile_ci_demo.staff.schemas import DoctorOut, DoctorRegister, StaffCreate, StaffOut, StaffStatusUpdate
 from agile_ci_demo.staff.service import (
     DoctorEmailAlreadyExistsError,
     DoctorNotFoundError,
-    DoctorProfileAlreadyExistsError,
     DuplicateDoctorLicenseError,
     DuplicateStaffEmailError,
-    StaffAccountIsNotDoctorError,
     StaffNotFoundError,
-    create_doctor_profile,
     create_doctor_with_account,
     create_staff,
     get_doctor_by_doctor_id,
-    list_available_doctor_staff_accounts,
     list_doctors,
     list_staff,
     set_staff_active_status,
@@ -40,26 +36,6 @@ def register_staff(payload: StaffCreate, db: Session = Depends(get_db)) -> Staff
 @api_router.get("", response_model=list[StaffOut])
 def get_staff_list(db: Session = Depends(get_db)) -> list[StaffOut]:
     return [StaffOut.model_validate(s) for s in list_staff(db)]
-
-
-@api_router.get("/doctor-accounts/available", response_model=list[StaffOut])
-def get_available_doctor_staff_accounts(db: Session = Depends(get_db)) -> list[StaffOut]:
-    return [StaffOut.model_validate(s) for s in list_available_doctor_staff_accounts(db)]
-
-
-@api_router.post("/doctors", response_model=DoctorOut, status_code=status.HTTP_201_CREATED)
-def register_doctor_profile(payload: DoctorCreate, db: Session = Depends(get_db)) -> DoctorOut:
-    """Create a doctor profile linked to an existing doctor staff account."""
-    try:
-        return create_doctor_profile(db, payload)
-    except StaffNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except StaffAccountIsNotDoctorError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except DoctorProfileAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except DuplicateDoctorLicenseError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @api_router.get("/doctors", response_model=list[DoctorOut])

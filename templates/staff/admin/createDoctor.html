@@ -3,20 +3,26 @@
 {% block title %}Create Doctor - Agile Clinic Portal{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/createDoctor.css">
+<link rel="stylesheet" href="/static/css/createDoctor.css?v=2">
 {% endblock %}
 
 {% block content %}
 <div class="admin-page">
-  <div class="admin-header">
+  <header class="doctor-page-header">
     <div>
-      <p class="admin-label">Admin / Doctor Management</p>
+      <a href="/staff/admin/listDoctor" class="admin-back-link">
+        <span aria-hidden="true">← Back to Doctor List</span>
+      </a>
+
+      <p class="admin-label">Doctor Management</p>
+
       <h1>Create Doctor Profile</h1>
+
       <p class="admin-subtitle">
         Create a doctor account and doctor profile for appointment assignment.
       </p>
     </div>
-  </div>
+  </header>
 
   <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
 
@@ -81,11 +87,6 @@
             autocomplete="off"
             placeholder="Example: MMC-12345"
           >
-
-          <small class="form-text text-muted">
-            Required format: MMC-12345
-          </small>
-
           <div
             id="license_number_error"
             class="invalid-feedback"
