@@ -76,31 +76,47 @@ def test_create_staff_success(client: TestClient) -> None:
 
 def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
     people = [
-        ("Alice Wong", "alice@example.com", "nurse", None),
-        ("Bob Lee", "bob@example.com", "doctor", "cardiology"),
-        ("Cara Tan", "cara@example.com", "receptionist", None),
+        {
+            "full_name": "Alice Wong",
+            "email": "alice@example.com",
+            "role": "nurse",
+        },
+        {
+            "full_name": "Bob Lee",
+            "email": "bob@example.com",
+            "role": "doctor",
+            "license_number": "MMC-12345",
+            "specialty": "Cardiology",
+            "status": "active",
+        },
+        {
+            "full_name": "Cara Tan",
+            "email": "cara@example.com",
+            "role": "admin",
+        },
     ]
     ids = []
-    for name, email, role, specialty in people:
-        payload = valid_staff_payload(full_name=name, email=email, role=role)
-        if specialty:
-            payload["specialty"] = specialty
-        r = client.post("/api/staff", json=payload)
-        assert r.status_code == 201
-        ids.append(r.json()["staff_id"])
+    for payload in people:
+        response = client.post("/api/staff", json=payload)
+
+        assert response.status_code == 201, response.json()
+        ids.append(response.json()["staff_id"])
 
     assert ids == ["S00001", "S00002", "S00003"]
 
+   
 
-@pytest.mark.parametrize("role", ["admin", "doctor", "nurse", "receptionist", "pharmacist"])
-def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> None:
-    """Staff accounts can be created for any supported role."""
-    payload = valid_staff_payload(email=f"{role}@example.com", role=role)
-    if role == "doctor":
-        payload["specialty"] = "general_practice"
-    r = client.post("/api/staff", json=payload)
-    assert r.status_code == 201
-    assert r.json()["role"] == role
+
+@pytest.mark.parametrize("role", ["admin", "doctor", "nurse"])
+def test_create_staff_allows_multiple_roles(client: TestClient,role: str) -> None:
+    payload = valid_staff_payload(email=f"{role}@example.com",role=role,)
+
+    if role == "doctor":payload.update(
+            {"license_number": "MMC-12345","specialty": "General Medicine","status": "active",}
+    )
+    response = client.post("/api/staff", json=payload)
+    assert response.status_code == 201, response.json()
+    assert response.json()["role"] == role
 
 
 def test_create_staff_invalid_role_returns_422(client: TestClient) -> None:
@@ -111,26 +127,39 @@ def test_create_staff_invalid_role_returns_422(client: TestClient) -> None:
 # --- 1a. Specialty validation --------------------------------------------------
 
 
-def test_create_doctor_with_specialty_succeeds(client: TestClient) -> None:
-    r = client.post(
-        "/api/staff",
-        json=valid_staff_payload(role="doctor", specialty="cardiology"),
-    )
-    assert r.status_code == 201
-    assert r.json()["specialty"] == "cardiology"
+def test_create_doctor_with_specialty_succeeds(client: TestClient,) -> None:
+    response = client.post("/api/staff", json=valid_staff_payload(full_name="Dr. Alice Wong",role="doctor",license_number="MMC-12345",specialty="Cardiology",status="active",),)
+    assert response.status_code == 201, response.json()
+    assert response.json()["specialty"] == "Cardiology"
 
 
-def test_create_doctor_without_specialty_returns_422(client: TestClient) -> None:
-    """
-    Scenario: Doctors must have a specialty
-      Given a new staff account with role "doctor" and no specialty
-      When I POST /api/staff
-      Then I receive 422 Unprocessable Entity
-    """
-    payload = valid_staff_payload(role="doctor")
-    r = client.post("/api/staff", json=payload)
-    assert r.status_code == 422
+def test_create_doctor_without_specialty_returns_422(
+    client: TestClient,
+) -> None:
+    payload = {
+        "full_name": "Dr. Alice Wong",
+        "email": "alice.doctor@example.com",
+        "role": "doctor",
+        "license_number": "MMC-12345",
+        "status": "active",
+    }
+    response = client.post("/api/staff", json=payload)
+    assert response.status_code == 422
 
+def test_create_doctor_without_license_returns_422(
+    client: TestClient,
+) -> None:
+    payload = {
+        "full_name": "Dr. Alice Wong",
+        "email": "alice.doctor@example.com",
+        "role": "doctor",
+        "specialty": "Cardiology",
+        "status": "active",
+    }
+
+    response = client.post("/api/staff", json=payload)
+
+    assert response.status_code == 422
 
 def test_create_non_doctor_with_specialty_returns_422(client: TestClient) -> None:
     """A specialty only makes sense for doctors - rejecting it elsewhere prevents

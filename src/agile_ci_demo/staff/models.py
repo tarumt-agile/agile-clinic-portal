@@ -35,19 +35,30 @@ class Staff(Base):
 
     @property
     def license_number(self) -> str | None:
-        return self.doctor_profile.license_number if self.doctor_profile else None
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.license_number
+
 
     @property
     def specialty(self) -> str | None:
-        return self.doctor_profile.specialty if self.doctor_profile else None
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.specialty
+
 
     @property
     def department(self) -> str | None:
-        return self.doctor_profile.department if self.doctor_profile else None
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.department
+
 
     @property
     def doctor_status(self) -> str | None:
-        return self.doctor_profile.status if self.doctor_profile else None
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.status
 
 
 class DoctorProfile(Base):

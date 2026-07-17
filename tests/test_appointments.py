@@ -65,10 +65,11 @@ def valid_staff_payload(**overrides: object) -> dict[str, object]:
         "full_name": "Dr. Alan Chua",
         "email": "alan.chua@example.com",
         "role": "doctor",
+        "license_number": "MMC-12345",
+        "specialty": "General Medicine",
+        "status": "active",
     }
     payload.update(overrides)
-    if payload["role"] == "doctor" and "specialty" not in payload:
-        payload["specialty"] = "general_practice"
     return payload
 
 
@@ -78,7 +79,14 @@ def _register_patient(client: TestClient, **overrides: object) -> str:
 
 
 def _register_doctor(client: TestClient, **overrides: object) -> str:
-    body = client.post("/api/staff", json=valid_staff_payload(**overrides)).json()
+    response = client.post(
+        "/api/staff",
+        json=valid_staff_payload(**overrides),
+    )
+
+    assert response.status_code == 201, response.json()
+
+    body = response.json()
     return str(body["staff_id"])
 
 
@@ -272,7 +280,7 @@ def test_different_doctor_same_slot_succeeds(client: TestClient) -> None:
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
     doctor_a = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
-    doctor_b = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com")
+    doctor_b = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com",license_number="MMC-67980")
 
     r1 = client.post("/api/appointments", json=valid_appointment_payload(patient_a, doctor_a))
     assert r1.status_code == 201
@@ -333,7 +341,7 @@ def test_get_schedule_excludes_other_doctors_appointments(client: TestClient) ->
     """The schedule for the current (first) doctor must not include another doctor's
     appointments, even on the same date and time."""
     first_doctor = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
-    other_doctor = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com")
+    other_doctor = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67954")
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
 

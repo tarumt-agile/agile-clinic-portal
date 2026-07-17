@@ -62,10 +62,11 @@ def valid_staff_payload(**overrides: object) -> dict[str, object]:
         "full_name": "Dr. Alan Chua",
         "email": "alan.chua@example.com",
         "role": "doctor",
+        "license_number": "MMC-12345",
+        "specialty": "General Medicine",
+        "status": "active",
     }
     payload.update(overrides)
-    if payload["role"] == "doctor" and "specialty" not in payload:
-        payload["specialty"] = "general_practice"
     return payload
 
 
@@ -75,7 +76,14 @@ def _register_patient(client: TestClient, **overrides: object) -> str:
 
 
 def _register_doctor(client: TestClient, **overrides: object) -> str:
-    body = client.post("/api/staff", json=valid_staff_payload(**overrides)).json()
+    response = client.post(
+        "/api/staff",
+        json=valid_staff_payload(**overrides),
+    )
+
+    assert response.status_code == 201, response.json()
+
+    body = response.json()
     return str(body["staff_id"])
 
 
