@@ -17,7 +17,6 @@ from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
-
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
     """FastAPI test client backed by a fresh in-memory SQLite DB for every test."""
