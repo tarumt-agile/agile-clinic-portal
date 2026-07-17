@@ -8,14 +8,20 @@ from agile_ci_demo.core.email import send_email
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import generate_temp_password, hash_password
 from agile_ci_demo.staff.models import DoctorProfile, Staff
-from agile_ci_demo.staff.schemas import DoctorOut, DoctorRegister, DoctorStatus, DoctorUpdate, StaffCreate
+from agile_ci_demo.staff.schemas import DoctorOut, DoctorRegister, DoctorStatus, DoctorUpdate, StaffCreate, StaffUpdate
 
 
-class DuplicateStaffEmailError(Exception):
+class DuplicateStaffEmailError(Exception):  
     """Raised when a staff account with the same email already exists."""
 
 class StaffNotFoundError(Exception):
     """Raised when a staff_id does not match any stored staff account."""
+
+class StaffUpdateEmailExistsError(Exception):
+    """Raised when another staff account uses the email."""
+
+class StaffUpdateLicenseExistsError(Exception):
+    """Raised when another doctor uses the MMC number."""
 
 class DoctorEmailAlreadyExistsError(Exception):
     """Raised when a staff account with the same email already exists."""
@@ -103,6 +109,112 @@ def create_staff(db: Session, data: StaffCreate) -> Staff:
     )
 
     return staff
+
+def update_staff(
+    db: Session,
+    staff_id: str,
+    data: StaffUpdate,
+) -> Staff:
+    staff = get_staff_by_staff_id(
+        db,
+        staff_id,
+    )
+
+    if staff is None:
+        raise StaffNotFoundError(
+            f"No staff account found with "
+            f"staff_id '{staff_id}'"
+        )
+
+    duplicate_email = db.execute(
+        select(Staff)
+        .where(
+            Staff.email == str(data.email)
+        )
+        .where(
+            Staff.id != staff.id
+        )
+    ).scalar_one_or_none()
+
+    if duplicate_email is not None:
+        raise StaffUpdateEmailExistsError(
+            "This email address is already registered."
+        )
+
+    staff.full_name = data.full_name
+    staff.email = str(data.email)
+    staff.is_active = data.is_active
+
+    if staff.role == Role.DOCTOR.value:
+        doctor = staff.doctor_profile
+
+        if doctor is None:
+            raise StaffNotFoundError(
+                "The doctor profile linked to this "
+                "staff account was not found."
+            )
+
+        if data.license_number is None:
+            raise ValueError(
+                "MMC registration number is required "
+                "for a doctor."
+            )
+
+        if data.specialty is None:
+            raise ValueError(
+                "Specialty is required for a doctor."
+            )
+
+        duplicate_license = db.execute(
+            select(DoctorProfile)
+            .where(
+                DoctorProfile.license_number
+                == data.license_number
+            )
+            .where(
+                DoctorProfile.id != doctor.id
+            )
+        ).scalar_one_or_none()
+
+        if duplicate_license is not None:
+            raise StaffUpdateLicenseExistsError(
+                "This registration number is "
+                "already registered."
+            )
+
+        doctor.license_number = (
+            data.license_number
+        )
+
+        doctor.specialty = (
+            data.specialty.value
+        )
+
+        doctor.status = (
+            data.doctor_status
+            or DoctorStatus.ACTIVE
+        ).value
+
+        staff.is_active = (
+            doctor.status
+            == DoctorStatus.ACTIVE.value
+        )
+
+    try:
+        db.commit()
+        db.refresh(staff)
+
+    except IntegrityError:
+        db.rollback()
+        raise
+
+    return (
+        get_staff_by_staff_id(
+            db,
+            staff_id,
+        )
+        or staff
+    )
 
 
 def list_staff(db: Session) -> list[Staff]:

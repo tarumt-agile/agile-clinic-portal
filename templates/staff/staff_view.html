@@ -1,0 +1,377 @@
+    {% extends "base.html" %}
+
+{% block title %}
+Staff Details - Agile Clinic Portal
+{% endblock %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="/static/css/staff_view.css?v=1"
+>
+{% endblock %}
+
+{% block content %}
+<div
+  id="staff-detail-root"
+  class="staff-detail-page"
+  data-staff-id="{{ staff_id }}"
+>
+  <header class="staff-detail-header">
+    <div>
+      <a
+        href="/staff"
+        class="staff-back-link"
+      >
+        ← Back to Staff List
+      </a>
+
+      <p class="staff-detail-breadcrumb">
+        Admin / Staff Management
+      </p>
+
+      <h1>
+        Staff Profile
+        <span id="staff-heading-id"></span>
+      </h1>
+
+      <p>
+        View and update the staff
+        account details.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      id="edit-staff-button"
+      class="btn btn-primary d-none"
+    >
+      Edit Staff
+    </button>
+  </header>
+
+  <div
+    id="staff-detail-alert"
+    class="alert alert-danger d-none"
+    role="alert"
+  ></div>
+
+  <div
+    id="staff-success-alert"
+    class="alert alert-success d-none"
+    role="alert"
+  ></div>
+
+  <div id="staff-detail-loading">
+    Loading staff details...
+  </div>
+
+  <div
+    id="staff-detail-content"
+    class="d-none"
+  >
+    <section class="staff-profile-card">
+      <div class="staff-avatar">
+        <span id="staff-avatar-text">
+          ST
+        </span>
+      </div>
+
+      <div>
+        <div class="staff-profile-title-row">
+          <h2 id="staff-full-name">
+            —
+          </h2>
+
+          <span
+            id="staff-status-badge"
+            class="staff-status-badge"
+          >
+            —
+          </span>
+        </div>
+
+        <p id="staff-role-heading">
+          —
+        </p>
+
+        <p id="staff-email-heading">
+          —
+        </p>
+      </div>
+    </section>
+
+    <div class="staff-detail-grid">
+      <section class="staff-detail-card">
+        <h2>Staff Information</h2>
+
+        <dl>
+          <div>
+            <dt>Staff ID</dt>
+            <dd id="view-staff-id">—</dd>
+          </div>
+
+          <div>
+            <dt>Full Name</dt>
+            <dd id="view-full-name">—</dd>
+          </div>
+
+          <div>
+            <dt>Email Address</dt>
+
+            <dd>
+              <a id="view-email">
+                —
+              </a>
+            </dd>
+          </div>
+
+          <div>
+            <dt>Role</dt>
+            <dd id="view-role">—</dd>
+          </div>
+
+          <div>
+            <dt>Date Registered</dt>
+            <dd id="view-created-at">—</dd>
+          </div>
+
+          <div>
+            <dt>Account Status</dt>
+            <dd id="view-account-status">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section
+        id="doctor-information-card"
+        class="staff-detail-card d-none"
+      >
+        <h2>Doctor Information</h2>
+
+        <dl>
+          <div>
+            <dt>
+              MMC Registration Number
+            </dt>
+
+            <dd id="view-license-number">
+              —
+            </dd>
+          </div>
+
+          <div>
+            <dt>Specialty</dt>
+            <dd id="view-specialty">—</dd>
+          </div>
+
+          <div>
+            <dt>Department</dt>
+            <dd id="view-department">—</dd>
+          </div>
+
+          <div>
+            <dt>Doctor Status</dt>
+            <dd id="view-doctor-status">—</dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+
+    <section
+      id="staff-edit-section"
+      class="staff-edit-card d-none"
+    >
+      <h2>Edit Staff Details</h2>
+
+      <div
+        id="staff-update-alert"
+        class="alert alert-danger d-none"
+      ></div>
+
+      <form
+        id="edit-staff-form"
+        novalidate
+      >
+        <div class="staff-edit-grid">
+          <div
+            class="staff-edit-field
+              staff-edit-wide"
+          >
+            <label for="edit-full-name">
+              Full Name *
+            </label>
+
+            <input
+              type="text"
+              id="edit-full-name"
+              maxlength="120"
+            >
+
+            <div
+              id="edit-full-name-error"
+              class="staff-field-error"
+            ></div>
+          </div>
+
+          <div
+            class="staff-edit-field
+              staff-edit-wide"
+          >
+            <label for="edit-email">
+              Email Address *
+            </label>
+
+            <input
+              type="email"
+              id="edit-email"
+              maxlength="254"
+            >
+
+            <div
+              id="edit-email-error"
+              class="staff-field-error"
+            ></div>
+          </div>
+
+          <div class="staff-edit-field">
+            <label for="edit-role">
+              Role
+            </label>
+
+            <input
+              type="text"
+              id="edit-role"
+              disabled
+            >
+          </div>
+
+          <div class="staff-edit-field">
+            <label for="edit-is-active">
+              Account Status *
+            </label>
+
+            <select id="edit-is-active">
+              <option value="true">
+                Active
+              </option>
+
+              <option value="false">
+                Inactive
+              </option>
+            </select>
+          </div>
+
+          <div
+            id="doctor-edit-fields"
+            class="staff-doctor-fields d-none"
+          >
+            <div class="staff-edit-field">
+              <label
+                for="edit-license-number"
+              >
+                MMC Registration Number *
+              </label>
+
+              <input
+                type="text"
+                id="edit-license-number"
+                maxlength="9"
+                placeholder="MMC-12345"
+              >
+
+              <div
+                id="edit-license-number-error"
+                class="staff-field-error"
+              ></div>
+            </div>
+
+            <div class="staff-edit-field">
+              <label for="edit-specialty">
+                Specialty *
+              </label>
+
+              <select id="edit-specialty">
+                <option value="">
+                  Choose a specialty...
+                </option>
+
+                {% for specialty in [
+                  "General Medicine",
+                  "Family Medicine",
+                  "Internal Medicine",
+                  "Cardiology",
+                  "Dermatology",
+                  "Emergency Medicine",
+                  "Endocrinology",
+                  "Gastroenterology",
+                  "General Surgery",
+                  "Neurology",
+                  "Obstetrics and Gynaecology",
+                  "Oncology",
+                  "Ophthalmology",
+                  "Orthopaedics",
+                  "Otorhinolaryngology",
+                  "Paediatrics",
+                  "Psychiatry",
+                  "Radiology",
+                  "Urology"
+                ] %}
+                <option value="{{ specialty }}">
+                  {{ specialty }}
+                </option>
+                {% endfor %}
+              </select>
+
+              <div
+                id="edit-specialty-error"
+                class="staff-field-error"
+              ></div>
+            </div>
+
+            <div class="staff-edit-field">
+              <label
+                for="edit-doctor-status"
+              >
+                Doctor Status *
+              </label>
+
+              <select id="edit-doctor-status">
+                <option value="active">
+                  Active
+                </option>
+
+                <option value="inactive">
+                  Inactive
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="staff-edit-actions">
+          <button
+            type="submit"
+            id="save-staff-button"
+            class="btn btn-primary"
+          >
+            Save Changes
+          </button>
+
+          <button
+            type="button"
+            id="cancel-edit-button"
+            class="btn btn-outline-secondary"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/staff_view.js?v=1"></script>
+{% endblock %}
