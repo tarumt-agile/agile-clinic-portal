@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Create Staff - Agile Clinic Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/staff_Create.css?v=1">
+{% endblock %}
+
+{% block content %}
+<div class="staff-admin-page">
+
+  <header class="staff-page-header">
+    <div>
+      <a href="/staff" class="staff-back-link">
+        <span aria-hidden="true">←</span>
+        Back to Staff List
+      </a>
+
+      <p class="staff-breadcrumb">
+        Admin / Staff Management
+      </p>
+
+      <h1>Create Staff Account</h1>
+
+      <p class="staff-page-description">
+        Create an account for a clinic administrator, nurse,
+        receptionist or pharmacist.
+      </p>
+    </div>
+  </header>
+
+  <div
+    id="staff-form-alert"
+    class="alert alert-danger d-none"
+    role="alert"
+    aria-live="assertive"
+  ></div>
+
+  <section class="staff-form-card">
+    <div class="staff-form-card-header">
+      <h2>Staff Registration Form</h2>
+
+      <p>
+        Fields marked with <span aria-hidden="true">*</span>
+        are required.
+      </p>
+    </div>
+
+    <form id="create-staff-form" novalidate>
+      <div class="staff-form-grid">
+
+        <div class="staff-form-field staff-field-wide">
+          <label for="full_name">
+            Full Name *
+          </label>
+
+          <input
+            type="text"
+            id="full_name"
+            name="full_name"
+            maxlength="120"
+            autocomplete="name"
+            placeholder="Example: Alice Wong"
+            aria-describedby="full_name_error"
+          >
+
+          <div
+            id="full_name_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
+        </div>
+
+        <div class="staff-form-field staff-field-wide">
+          <label for="email">
+            Email Address *
+          </label>
+
+          <input
+            type="email"
+            id="email"
+            name="email"
+            maxlength="254"
+            autocomplete="email"
+            placeholder="Example: alice.wong@example.com"
+            aria-describedby="email_error"
+          >
+
+          <div
+            id="email_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
+        </div>
+
+        <div class="staff-form-field">
+          <label for="role">
+            Staff Role *
+          </label>
+
+          <select
+            id="role"
+            name="role"
+            aria-describedby="role_error"
+          >
+            <option value="">
+              Choose a staff role...
+            </option>
+
+            <option value="admin">
+              Administrator
+            </option>
+
+            <option value="nurse">
+              Nurse
+            </option>
+
+            <option value="receptionist">
+              Receptionist
+            </option>
+
+            <option value="pharmacist">
+              Pharmacist
+            </option>
+          </select>
+
+          <div
+            id="role_error"
+            class="invalid-feedback"
+            aria-live="polite"
+          ></div>
+        </div>
+
+      </div>
+
+      <div class="staff-information-note">
+        <strong>Account information</strong>
+
+        <p>
+          The system will generate a temporary password and send it
+          to the staff member's email address. The staff member must
+          change the temporary password after logging in.
+        </p>
+      </div>
+
+      <div class="staff-doctor-note">
+        <strong>Creating a doctor?</strong>
+
+        <p>
+          Doctors must be created through Doctor Management because
+          a doctor requires an MMC registration number and specialty.
+        </p>
+
+        <a
+          href="/staff/admin/createDoctor"
+          class="btn btn-outline-primary"
+        >
+          Go to Doctor Registration
+        </a>
+      </div>
+
+      <div class="staff-form-actions">
+        <button
+          type="submit"
+          id="submit-staff-button"
+          class="btn btn-primary"
+        >
+          Create Staff
+        </button>
+
+        <button
+          type="reset"
+          id="clear-staff-button"
+          class="btn btn-outline-secondary"
+        >
+          Clear Form
+        </button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div
+  class="modal fade"
+  id="staff-confirmation-modal"
+  tabindex="-1"
+  aria-labelledby="staff-confirmation-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header bg-success text-white">
+        <h2
+          class="modal-title fs-5"
+          id="staff-confirmation-title"
+        >
+          Staff Account Created
+        </h2>
+
+        <button
+          type="button"
+          class="btn-close btn-close-white"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        <p>
+          The staff account has been created successfully.
+        </p>
+
+        <dl class="staff-confirmation-details">
+          <div>
+            <dt>Staff ID</dt>
+            <dd id="confirmation-staff-id"></dd>
+          </div>
+
+          <div>
+            <dt>Full Name</dt>
+            <dd id="confirmation-full-name"></dd>
+          </div>
+
+          <div>
+            <dt>Email</dt>
+            <dd id="confirmation-email"></dd>
+          </div>
+
+          <div>
+            <dt>Role</dt>
+            <dd id="confirmation-role"></dd>
+          </div>
+
+          <div>
+            <dt>Status</dt>
+            <dd>Active</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="modal-footer">
+        <a href="/staff" class="btn btn-primary">
+          View Staff List
+        </a>
+
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-dismiss="modal"
+        >
+          Create Another
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/staff_create.js?v=1"></script>
+{% endblock %}

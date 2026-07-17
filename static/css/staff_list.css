@@ -1,0 +1,406 @@
+.staff-page {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.staff-list-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.staff-list-breadcrumb {
+  margin: 0 0 0.25rem;
+  color: #6c757d;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.staff-list-page-header h1 {
+  margin: 0;
+  color: #212529;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.staff-list-description {
+  margin: 0.4rem 0 0;
+  color: #6c757d;
+}
+
+.staff-create-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.staff-create-button span {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.staff-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.staff-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1.15rem 1.25rem;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.035);
+}
+
+.staff-summary-label {
+  color: #6c757d;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.staff-summary-number {
+  color: #212529;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.staff-list-card {
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.04);
+}
+
+.staff-list-card-header {
+  padding: 1.25rem 1.4rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.staff-list-card-header h2 {
+  margin: 0;
+  color: #212529;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.staff-list-card-header p {
+  margin: 0.3rem 0 0;
+  color: #6c757d;
+  font-size: 0.925rem;
+}
+
+.staff-filter-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(260px, 2fr)
+    minmax(160px, 1fr)
+    minmax(150px, 1fr)
+    auto;
+  gap: 1rem;
+  align-items: end;
+  padding: 1.25rem 1.4rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.staff-filter-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-filter-field label {
+  margin-bottom: 0.4rem;
+  color: #343a40;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.staff-filter-action {
+  display: flex;
+  align-items: flex-end;
+}
+
+.staff-filter-action .btn {
+  white-space: nowrap;
+}
+
+#staff-list-alert {
+  margin: 1rem 1.4rem 0;
+}
+
+.staff-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.staff-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.staff-table th,
+.staff-table td {
+  padding: 1rem 1.1rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.staff-table th {
+  color: #495057;
+  background: #ffffff;
+  font-size: 0.825rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.staff-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.staff-table tbody tr:hover {
+  background: #f4f8ff;
+}
+
+.staff-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.staff-id {
+  color: #0d6efd;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.staff-member-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.staff-member-cell strong {
+  color: #212529;
+  font-weight: 700;
+}
+
+.staff-member-cell span {
+  color: #6c757d;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.staff-role-badge,
+.staff-status-badge,
+.staff-password-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.staff-role-badge {
+  color: #084298;
+  background: #cfe2ff;
+  text-transform: capitalize;
+}
+
+.staff-role-doctor {
+  color: #842029;
+  background: #f8d7da;
+}
+
+.staff-role-admin {
+  color: #664d03;
+  background: #fff3cd;
+}
+
+.staff-role-nurse {
+  color: #0f5132;
+  background: #d1e7dd;
+}
+
+.staff-role-receptionist {
+  color: #055160;
+  background: #cff4fc;
+}
+
+.staff-role-pharmacist {
+  color: #432874;
+  background: #e2d9f3;
+}
+
+.staff-status-active {
+  color: #146c43;
+  background: #d1e7dd;
+}
+
+.staff-status-inactive {
+  color: #5c636a;
+  background: #e2e3e5;
+}
+
+.staff-password-temporary {
+  color: #664d03;
+  background: #fff3cd;
+}
+
+.staff-password-updated {
+  color: #146c43;
+  background: #d1e7dd;
+}
+
+.staff-action-heading,
+.staff-action-cell {
+  text-align: right !important;
+}
+
+.staff-status-button {
+  min-width: 100px;
+}
+
+.staff-table-message {
+  padding: 2.5rem 1rem !important;
+  color: #6c757d;
+  text-align: center !important;
+}
+
+.staff-mobile-list {
+  display: none;
+  padding: 1rem;
+}
+
+.staff-mobile-card {
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 0.65rem;
+}
+
+.staff-mobile-card + .staff-mobile-card {
+  margin-top: 0.8rem;
+}
+
+.staff-mobile-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.staff-mobile-card-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.staff-mobile-card-id {
+  margin: 0.2rem 0 0;
+  color: #0d6efd;
+  font-size: 0.825rem;
+  font-weight: 700;
+}
+
+.staff-mobile-card-email {
+  margin: 0.5rem 0 0;
+  color: #6c757d;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.staff-mobile-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.staff-mobile-card-action {
+  margin-top: 1rem;
+}
+
+.staff-mobile-card-action .btn {
+  width: 100%;
+}
+
+.staff-list-footer {
+  padding: 1rem 1.4rem;
+  color: #6c757d;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  font-size: 0.875rem;
+}
+
+#staff-status-modal .modal-content {
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.75rem;
+}
+
+@media (max-width: 992px) {
+  .staff-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .staff-search-field {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .staff-list-page-header {
+    flex-direction: column;
+  }
+
+  .staff-create-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .staff-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-table-wrapper {
+    display: none;
+  }
+
+  .staff-mobile-list {
+    display: block;
+  }
+}
+
+@media (max-width: 576px) {
+  .staff-page {
+    padding: 0.5rem;
+  }
+
+  .staff-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-search-field {
+    grid-column: auto;
+  }
+
+  .staff-filter-action .btn {
+    width: 100%;
+  }
+
+  .staff-list-page-header h1 {
+    font-size: 1.5rem;
+  }
+}
