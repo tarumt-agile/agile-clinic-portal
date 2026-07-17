@@ -10,6 +10,7 @@ from agile_ci_demo.appointments.models import Appointment
 from agile_ci_demo.appointments.schemas import AppointmentCreate
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import get_patient_by_patient_id
+from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # Clinic working hours and slot size. A teaching-app constant rather than a DB-backed
@@ -34,6 +35,18 @@ class InvalidSlotError(Exception):
 
 class SlotUnavailableError(Exception):
     """Raised when the doctor already has a scheduled appointment overlapping this slot."""
+
+
+class PastDateError(Exception):
+    """Raised when a doctor's schedule is requested for a date before today."""
+
+
+class AppointmentNotFoundError(Exception):
+    """Raised when a reference_number does not match any stored appointment."""
+
+
+class AlreadyCancelledError(Exception):
+    """Raised when attempting to cancel an appointment that is already cancelled."""
 
 
 def add_minutes(value: dt.time, minutes: int) -> dt.time:
@@ -118,3 +131,104 @@ def get_appointment_by_reference(db: Session, reference_number: str) -> Appointm
     return db.execute(
         select(Appointment).where(Appointment.reference_number == reference_number)
     ).scalar_one_or_none()
+
+
+def cancel_appointment(db: Session, reference_number: str, cancellation_reason: str) -> Appointment:
+    """Cancel a scheduled appointment. Frees its slot for other patients - the slot
+    grid and double-booking check both only treat status="scheduled" as occupied."""
+    appointment = get_appointment_by_reference(db, reference_number)
+    if appointment is None:
+        raise AppointmentNotFoundError(
+            f"No appointment found with reference number '{reference_number}'"
+        )
+
+    if appointment.status == "cancelled":
+        raise AlreadyCancelledError(f"Appointment '{reference_number}' is already cancelled")
+
+    appointment.status = "cancelled"
+    appointment.cancellation_reason = cancellation_reason
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+
+def get_current_doctor(db: Session) -> Staff | None:
+    """Stand-in for real authentication: returns the first doctor on record as "the
+    logged-in doctor". There is no session/token yet - swap this for a real
+    Depends(get_current_user) once login sessions are wired up."""
+    return (
+        db.execute(select(Staff).where(Staff.role == Role.DOCTOR.value).order_by(Staff.id))
+        .scalars()
+        .first()
+    )
+
+
+def get_doctor_schedule(db: Session, doctor_id: int, schedule_date: dt.date) -> list[Appointment]:
+    """Return a doctor's appointments for a given date, ordered by start time ascending."""
+    if schedule_date < dt.date.today():
+        raise PastDateError("Cannot view a schedule for a date before today")
+
+    return list(
+        db.execute(
+            select(Appointment)
+            .where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date == schedule_date,
+            )
+            .order_by(Appointment.start_time)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_patient_appointments(db: Session, patient_id: int) -> list[Appointment]:
+    """A patient's own upcoming appointments (today or later), ordered by date then
+    start time ascending - includes cancelled ones so they can see the status."""
+    return list(
+        db.execute(
+            select(Appointment)
+            .where(
+                Appointment.patient_id == patient_id,
+                Appointment.appointment_date >= dt.date.today(),
+            )
+            .order_by(Appointment.appointment_date, Appointment.start_time)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_available_slots(
+    db: Session, doctor_id: int, schedule_date: dt.date
+) -> list[tuple[dt.time, dt.time, bool]]:
+    """Compute the full working-hours slot grid for a doctor on a date, marking each
+    slot as available or not. A slot is unavailable if it is already scheduled
+    (cancelled appointments free the slot back up) or already in the past today."""
+    if schedule_date < dt.date.today():
+        raise PastDateError("Cannot view available slots for a date before today")
+
+    booked_starts = set(
+        db.execute(
+            select(Appointment.start_time).where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date == schedule_date,
+                Appointment.status == "scheduled",
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    now = dt.datetime.now()
+    is_today = schedule_date == now.date()
+
+    slots = []
+    current = CLINIC_OPEN
+    while current < CLINIC_CLOSE:
+        end = add_minutes(current, SLOT_MINUTES)
+        is_past = is_today and current < now.time()
+        available = current not in booked_starts and not is_past
+        slots.append((current, end, available))
+        current = end
+    return slots

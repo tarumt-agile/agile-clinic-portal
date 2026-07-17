@@ -9,9 +9,21 @@
   const dateInput = document.getElementById("appointment_date");
   const patientIdInput = document.getElementById("patient_id");
   const patientFeedback = document.getElementById("patient-lookup-feedback");
+  const patientDisplay = document.getElementById("patient-display");
+  const specialtySelect = document.getElementById("specialty");
   const doctorSelect = document.getElementById("doctor_id");
+  const slotGrid = document.getElementById("slot-grid");
+  const slotError = document.getElementById("slot-error");
+  const startTimeInput = document.getElementById("start_time");
   const confirmationModalEl = document.getElementById("confirmation-modal");
   const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
+
+  // The receptionist form has a free-text Patient ID field (type="text") the
+  // receptionist looks up. The patient self-booking form locks it (type="hidden")
+  // and auto-fills it from "the current patient" - see loadCurrentPatient().
+  const isSelfBooking = patientIdInput.type === "hidden";
+  let allDoctors = [];
+  let currentPatientId = "";
 
   function showAlert(message) {
     alertBox.textContent = message;
@@ -25,11 +37,20 @@
 
   function clearFieldErrors() {
     form.querySelectorAll(".is-invalid").forEach((el) => el.classList.remove("is-invalid"));
+    slotError.classList.remove("d-block");
   }
 
   function fieldNameFromLoc(loc) {
     if (!Array.isArray(loc)) return null;
     return loc[loc.length - 1];
+  }
+
+  function formatSpecialty(specialty) {
+    if (!specialty) return "";
+    return specialty
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   }
 
   // Pydantic 422s have a list `detail` of field errors; service-layer 422s (invalid
@@ -67,21 +88,108 @@
       const response = await fetch("/api/staff");
       if (!response.ok) throw new Error("Request failed");
       const staff = await response.json();
-      const doctors = staff.filter((s) => s.role === "doctor" && s.is_active);
+      allDoctors = staff.filter((s) => s.role === "doctor" && s.is_active);
 
-      if (doctors.length === 0) {
-        doctorSelect.innerHTML = '<option value="" selected disabled>No doctors available</option>';
-        return;
-      }
-
-      doctorSelect.innerHTML =
-        '<option value="" selected disabled>Choose...</option>' +
-        doctors
-          .map((d) => `<option value="${d.staff_id}">${d.full_name}</option>`)
+      const specialties = [...new Set(allDoctors.map((d) => d.specialty))].sort();
+      specialtySelect.innerHTML =
+        '<option value="">All specialties</option>' +
+        specialties
+          .map((s) => `<option value="${s}">${formatSpecialty(s)}</option>`)
           .join("");
+
+      renderDoctorOptions();
     } catch (err) {
       doctorSelect.innerHTML = '<option value="" selected disabled>Unable to load doctors</option>';
     }
+  }
+
+  function renderDoctorOptions() {
+    const specialty = specialtySelect.value;
+    const doctors = specialty
+      ? allDoctors.filter((d) => d.specialty === specialty)
+      : allDoctors;
+
+    if (doctors.length === 0) {
+      doctorSelect.innerHTML = '<option value="" selected disabled>No doctors available</option>';
+      return;
+    }
+
+    doctorSelect.innerHTML =
+      '<option value="" selected disabled selected>Choose...</option>' +
+      doctors
+        .map(
+          (d) =>
+            `<option value="${d.staff_id}">${d.full_name} (${formatSpecialty(d.specialty)})</option>`
+        )
+        .join("");
+    doctorSelect.value = "";
+    clearSlots();
+  }
+
+  function clearSlots() {
+    startTimeInput.value = "";
+    slotGrid.innerHTML =
+      '<p class="text-muted mb-0" id="slot-placeholder">Select a doctor and date to see available time slots.</p>';
+  }
+
+  async function loadSlots() {
+    const doctorId = doctorSelect.value;
+    const date = dateInput.value;
+    if (!doctorId || !date) {
+      clearSlots();
+      return;
+    }
+
+    startTimeInput.value = "";
+    slotGrid.innerHTML = '<p class="text-muted mb-0">Loading slots...</p>';
+
+    try {
+      const response = await fetch(
+        `/api/appointments/slots?doctor_id=${encodeURIComponent(doctorId)}&date=${date}`
+      );
+      const body = await response.json();
+
+      if (!response.ok) {
+        slotGrid.innerHTML = "";
+        showAlert(body.detail || "Unable to load available time slots.");
+        return;
+      }
+
+      renderSlots(body.slots);
+    } catch (err) {
+      slotGrid.innerHTML = "";
+      showAlert("Unable to load available time slots. Please try again.");
+    }
+  }
+
+  function renderSlots(slots) {
+    slotGrid.innerHTML = "";
+    slots.forEach((slot) => {
+      const label = slot.start_time.slice(0, 5);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      btn.dataset.time = slot.start_time;
+      btn.className = slot.available
+        ? "btn btn-outline-primary btn-sm slot-btn"
+        : "btn btn-outline-secondary btn-sm slot-btn disabled";
+      btn.disabled = !slot.available;
+      if (slot.available) {
+        btn.addEventListener("click", () => selectSlot(btn));
+      }
+      slotGrid.appendChild(btn);
+    });
+  }
+
+  function selectSlot(selectedBtn) {
+    slotGrid.querySelectorAll(".slot-btn").forEach((btn) => {
+      btn.classList.remove("btn-primary", "text-white");
+      if (!btn.disabled) btn.classList.add("btn-outline-primary");
+    });
+    selectedBtn.classList.remove("btn-outline-primary");
+    selectedBtn.classList.add("btn-primary", "text-white");
+    startTimeInput.value = selectedBtn.dataset.time;
+    slotError.classList.remove("d-block");
   }
 
   async function lookupPatient() {
@@ -107,13 +215,29 @@
     }
   }
 
+  async function loadCurrentPatient() {
+    try {
+      const response = await fetch("/api/patients/me");
+      if (!response.ok) throw new Error("Request failed");
+      const patient = await response.json();
+      currentPatientId = patient.patient_id;
+      patientIdInput.value = currentPatientId;
+      patientDisplay.textContent = `${patient.full_name} (${currentPatientId})`;
+    } catch (err) {
+      patientDisplay.textContent = "Unable to load your patient record.";
+      showAlert("Unable to load your patient record. Please contact the front desk.");
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     hideAlert();
     clearFieldErrors();
 
-    if (!form.checkValidity()) {
+    const slotMissing = !startTimeInput.value;
+    if (!form.checkValidity() || slotMissing) {
       form.classList.add("was-validated");
+      if (slotMissing) slotError.classList.add("d-block");
       return;
     }
 
@@ -130,14 +254,22 @@
         showConfirmation(appointment);
         form.reset();
         form.classList.remove("was-validated");
-        patientFeedback.textContent = "";
+        if (patientFeedback) patientFeedback.textContent = "";
+        if (isSelfBooking) patientIdInput.value = currentPatientId; // form.reset() would blank it
+        clearSlots();
         return;
       }
 
       const body = await response.json().catch(() => ({}));
 
-      if (response.status === 404 || response.status === 409) {
+      if (response.status === 404) {
         showAlert(body.detail || "This appointment could not be booked.");
+        return;
+      }
+
+      if (response.status === 409) {
+        showAlert(body.detail || "That slot was just taken. Please pick another.");
+        loadSlots(); // refresh - the slot we picked is no longer free
         return;
       }
 
@@ -171,9 +303,26 @@
     }
   }
 
-  dateInput.min = new Date().toISOString().slice(0, 10);
+  // Local date, not UTC - toISOString() converts to UTC and can be a day off from
+  // the server's dt.date.today() (which uses local time), especially near midnight.
+  function todayLocalISODate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
 
-  patientIdInput.addEventListener("blur", lookupPatient);
+  dateInput.min = todayLocalISODate();
+
+  specialtySelect.addEventListener("change", renderDoctorOptions);
+  doctorSelect.addEventListener("change", loadSlots);
+  dateInput.addEventListener("change", loadSlots);
+  if (isSelfBooking) {
+    loadCurrentPatient();
+  } else {
+    patientIdInput.addEventListener("blur", lookupPatient);
+  }
   form.addEventListener("submit", handleSubmit);
   loadDoctors();
 })();

@@ -40,3 +40,52 @@ class AppointmentOut(BaseModel):
     status: str
     cancellation_reason: str | None
     created_at: dt.datetime
+
+
+class AppointmentCancel(BaseModel):
+    """Payload for cancelling an appointment. A reason is required."""
+
+    cancellation_reason: str = Field(min_length=2, max_length=255)
+
+    @field_validator("cancellation_reason")
+    @classmethod
+    def reason_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("A cancellation reason is required")
+        return v
+
+
+class PatientAppointments(BaseModel):
+    """A patient's own upcoming appointments (today or later), ordered by date then
+    start time ascending."""
+
+    patient_id: str
+    patient_name: str
+    appointments: list[AppointmentOut]
+
+
+class DoctorSchedule(BaseModel):
+    """A doctor's appointments for a single day, ordered by start time ascending."""
+
+    doctor_id: str
+    doctor_name: str
+    schedule_date: dt.date
+    appointments: list[AppointmentOut]
+
+
+class SlotInfo(BaseModel):
+    """A single bookable slot on a doctor's day, and whether it is still free."""
+
+    start_time: dt.time
+    end_time: dt.time
+    available: bool
+
+
+class DoctorSlots(BaseModel):
+    """The full working-hours slot grid for a doctor on a given date."""
+
+    doctor_id: str
+    doctor_name: str
+    schedule_date: dt.date
+    slots: list[SlotInfo]

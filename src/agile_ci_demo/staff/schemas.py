@@ -4,9 +4,9 @@ import datetime as dt
 import re
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 
-from agile_ci_demo.core.rbac import Role
+from agile_ci_demo.core.rbac import Role, Specialty
 
 
 class StaffCreate(BaseModel):
@@ -15,6 +15,10 @@ class StaffCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
     role: Role
+    # validate_default=True: the "specialty required for doctors" check must still
+    # run even when the field is omitted entirely (Pydantic skips validators on
+    # unset defaults otherwise).
+    specialty: Specialty | None = Field(default=None, validate_default=True)
 
     @field_validator("full_name")
     @classmethod
@@ -22,6 +26,16 @@ class StaffCreate(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("Full name is required")
+        return v
+
+    @field_validator("specialty")
+    @classmethod
+    def specialty_matches_role(cls, v: Specialty | None, info: ValidationInfo) -> Specialty | None:
+        role = info.data.get("role")
+        if role == Role.DOCTOR and v is None:
+            raise ValueError("Specialty is required for doctors")
+        if role is not None and role != Role.DOCTOR and v is not None:
+            raise ValueError("Only doctors may have a specialty")
         return v
 
 
@@ -34,6 +48,7 @@ class StaffOut(BaseModel):
     full_name: str
     email: EmailStr
     role: Role
+    specialty: Specialty | None
     is_active: bool
     must_change_password: bool
     created_at: dt.datetime

@@ -35,6 +35,24 @@
           <input type="email" class="form-control" id="email" name="email" required>
           <div class="invalid-feedback">Enter a valid email address.</div>
         </div>
+
+        <div class="col-md-6 d-none" id="specialty-field">
+          <label for="specialty" class="form-label">Specialty *</label>
+          <select class="form-select" id="specialty" name="specialty">
+            <option value="" selected disabled>Choose...</option>
+            <option value="general_practice">General Practice</option>
+            <option value="pediatrics">Pediatrics</option>
+            <option value="cardiology">Cardiology</option>
+            <option value="dermatology">Dermatology</option>
+            <option value="ent">ENT</option>
+            <option value="orthopedics">Orthopedics</option>
+            <option value="gynecology">Gynecology</option>
+            <option value="psychiatry">Psychiatry</option>
+            <option value="dentistry">Dentistry</option>
+            <option value="ophthalmology">Ophthalmology</option>
+          </select>
+          <div class="invalid-feedback">Please select a specialty.</div>
+        </div>
       </div>
 
       <p class="text-muted mt-3 mb-0">
@@ -67,6 +85,8 @@
           <dd class="col-sm-8" id="confirm-full-name"></dd>
           <dt class="col-sm-4">Role</dt>
           <dd class="col-sm-8 text-capitalize" id="confirm-role"></dd>
+          <dt class="col-sm-4 d-none" id="confirm-specialty-label">Specialty</dt>
+          <dd class="col-sm-8 d-none" id="confirm-specialty"></dd>
         </dl>
       </div>
       <div class="modal-footer">

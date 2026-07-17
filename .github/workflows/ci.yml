@@ -30,10 +30,127 @@ jobs:
           mypy src
       - name: Test
         run: |
-          pytest --maxfail=1 --disable-warnings -q --cov=src --cov-report=xml
+          pytest --maxfail=1 --disable-warnings -q --cov=src --cov-report=xml --junitxml=junit.xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-${{ matrix.python-version }}
           path: coverage.xml
+      - name: Upload test results artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-${{ matrix.python-version }}
+          path: junit.xml
+
+  summary:
+    needs: build-test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: junit-3.13
+          path: junit-results
+        continue-on-error: true
+      - name: Write test result counts
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import os
+          import xml.etree.ElementTree as ET
+          from collections import defaultdict
+
+          print("## Test Summary")
+          print()
+
+          path = "junit-results/junit.xml"
+          if os.path.exists(path):
+              root = ET.parse(path).getroot()
+              suite = root if root.tag == "testsuite" else root.find("testsuite")
+
+              total = int(suite.get("tests", 0))
+              failures = int(suite.get("failures", 0))
+              errors = int(suite.get("errors", 0))
+              skipped = int(suite.get("skipped", 0))
+              passed = total - failures - errors - skipped
+
+              print("| Result | Count |")
+              print("|---|---|")
+              print(f"| Passed | {passed} |")
+              print(f"| Failed | {failures + errors} |")
+              print(f"| Skipped | {skipped} |")
+              print(f"| **Total** | **{total}** |")
+              print()
+
+              # Tests are auto-classified into "acceptance" (BDD/Gherkin scenarios)
+              # or "io" (hits TestClient/a DB session) by tests/conftest.py, via a
+              # "category" property recorded on each testcase. Anything the
+              # conftest didn't classify shows up here as "other" - this stays
+              # accurate as new tests are added without needing to be updated.
+              by_category = defaultdict(lambda: {"passed": 0, "failed": 0, "skipped": 0})
+              for testcase in suite.findall("testcase"):
+                  category = "other"
+                  for prop in testcase.findall("./properties/property"):
+                      if prop.get("name") == "category":
+                          category = prop.get("value")
+
+                  if testcase.find("failure") is not None or testcase.find("error") is not None:
+                      by_category[category]["failed"] += 1
+                  elif testcase.find("skipped") is not None:
+                      by_category[category]["skipped"] += 1
+                  else:
+                      by_category[category]["passed"] += 1
+
+              labels = {"acceptance": "Acceptance", "io": "I/O", "other": "Other"}
+              order = ["acceptance", "io", "other"]
+              categories = [c for c in order if c in by_category]
+              categories += [c for c in by_category if c not in categories]
+
+              print("### By test type")
+              print()
+              print("| Type | Passed | Failed | Skipped | Total |")
+              print("|---|---|---|---|---|")
+              for category in categories:
+                  counts = by_category[category]
+                  cat_total = counts["passed"] + counts["failed"] + counts["skipped"]
+                  label = labels.get(category, category.title())
+                  print(
+                      f"| {label} | {counts['passed']} | {counts['failed']} | "
+                      f"{counts['skipped']} | {cat_total} |"
+                  )
+          else:
+              print("_No test results found (the Python 3.13 job may not have completed)._")
+          print()
+          PY
+      - name: List files changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          fi
+
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            FILES=$(git show --name-only --pretty=format: "$HEAD" | sed '/^$/d')
+          else
+            FILES=$(git diff --name-only "$BASE" "$HEAD")
+          fi
+          COUNT=$(echo "$FILES" | grep -c .)
+
+          {
+            echo "<details>"
+            echo "<summary>Files changed (${COUNT})</summary>"
+            echo ""
+            echo '```'
+            echo "$FILES"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"

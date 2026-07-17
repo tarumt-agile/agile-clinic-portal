@@ -1,19 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import datetime as dt
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.appointments.models import Appointment
-from agile_ci_demo.appointments.schemas import AppointmentCreate, AppointmentOut
+from agile_ci_demo.appointments.schemas import (
+    AppointmentCancel,
+    AppointmentCreate,
+    AppointmentOut,
+    DoctorSchedule,
+    DoctorSlots,
+    PatientAppointments,
+    SlotInfo,
+)
 from agile_ci_demo.appointments.service import (
+    AlreadyCancelledError,
+    AppointmentNotFoundError,
     DoctorNotFoundError,
     InvalidSlotError,
+    PastDateError,
     PatientNotFoundError,
     SlotUnavailableError,
+    cancel_appointment,
     create_appointment,
     get_appointment_by_reference,
+    get_available_slots,
+    get_current_doctor,
+    get_doctor_schedule,
+    get_patient_appointments,
 )
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
+from agile_ci_demo.patients.service import get_current_patient
+from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # JSON API used by the frontend's JavaScript.
 api_router = APIRouter(prefix="/api/appointments", tags=["appointments"])
@@ -55,6 +76,86 @@ def book_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)) 
     return _serialize(appointment)
 
 
+@api_router.get("/schedule", response_model=DoctorSchedule)
+def get_my_schedule(
+    schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    db: Session = Depends(get_db),
+) -> DoctorSchedule:
+    """The current doctor's appointments for a given date (defaults to today).
+
+    "Current doctor" is a placeholder - see get_current_doctor() - until real
+    login sessions exist.
+    """
+    doctor = get_current_doctor(db)
+    if doctor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No doctor account found")
+
+    try:
+        appointments = get_doctor_schedule(db, doctor.id, schedule_date)
+    except PastDateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    return DoctorSchedule(
+        doctor_id=doctor.staff_id or "",
+        doctor_name=doctor.full_name,
+        schedule_date=schedule_date,
+        appointments=[_serialize(a) for a in appointments],
+    )
+
+
+@api_router.get("/slots", response_model=DoctorSlots)
+def get_slots(
+    doctor_id: str = Query(..., description="Doctor's public staff_id, e.g. S00001"),
+    schedule_date: dt.date = Query(..., alias="date"),
+    db: Session = Depends(get_db),
+) -> DoctorSlots:
+    """The full working-hours slot grid for a doctor on a date, each marked free or
+    booked, for the booking form's slot picker."""
+    doctor = get_staff_by_staff_id(db, doctor_id)
+    if doctor is None or doctor.role != Role.DOCTOR.value:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No doctor found with staff_id '{doctor_id}'",
+        )
+
+    try:
+        slots = get_available_slots(db, doctor.id, schedule_date)
+    except PastDateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    return DoctorSlots(
+        doctor_id=doctor.staff_id or "",
+        doctor_name=doctor.full_name,
+        schedule_date=schedule_date,
+        slots=[SlotInfo(start_time=s, end_time=e, available=a) for s, e, a in slots],
+    )
+
+
+@api_router.get("/mine", response_model=PatientAppointments)
+def get_my_appointments(db: Session = Depends(get_db)) -> PatientAppointments:
+    """The current patient's own upcoming appointments (today or later).
+
+    "Current patient" is a placeholder - see patients.service.get_current_patient()
+    - until real login sessions exist.
+    """
+    patient = get_current_patient(db)
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No patient account found"
+        )
+
+    appointments = get_patient_appointments(db, patient.id)
+    return PatientAppointments(
+        patient_id=patient.patient_id or "",
+        patient_name=patient.full_name,
+        appointments=[_serialize(a) for a in appointments],
+    )
+
+
 @api_router.get("/{reference_number}", response_model=AppointmentOut)
 def get_appointment(reference_number: str, db: Session = Depends(get_db)) -> AppointmentOut:
     appointment = get_appointment_by_reference(db, reference_number)
@@ -63,6 +164,40 @@ def get_appointment(reference_number: str, db: Session = Depends(get_db)) -> App
     return _serialize(appointment)
 
 
+@api_router.patch("/{reference_number}/cancel", response_model=AppointmentOut)
+def cancel_appointment_endpoint(
+    reference_number: str, payload: AppointmentCancel, db: Session = Depends(get_db)
+) -> AppointmentOut:
+    """Cancel a scheduled appointment. Frees its slot for other patients."""
+    try:
+        appointment = cancel_appointment(db, reference_number, payload.cancellation_reason)
+    except AppointmentNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except AlreadyCancelledError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return _serialize(appointment)
+
+
 @pages_router.get("/create", response_class=HTMLResponse)
 def create_appointment_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "appointments/create.html", {})
+    return templates.TemplateResponse(
+        request, "appointments/receptionist_createAppointment.html", {}
+    )
+
+
+@pages_router.get("/schedule", response_class=HTMLResponse)
+def schedule_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "appointments/doctor_viewSchedule.html", {})
+
+
+@pages_router.get("/book", response_class=HTMLResponse)
+def self_book_appointment_page(request: Request) -> HTMLResponse:
+    """Patient self-service booking. Patient identity is a placeholder (see
+    patients.service.get_current_patient) - the form auto-fills and locks the
+    Patient ID field instead of asking the patient to type their own ID."""
+    return templates.TemplateResponse(request, "appointments/patient_bookAppointment.html", {})
+
+
+@pages_router.get("/mine", response_class=HTMLResponse)
+def my_appointments_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "appointments/patient_appointment.html", {})

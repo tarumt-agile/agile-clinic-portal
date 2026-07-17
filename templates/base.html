@@ -10,24 +10,44 @@
   {% block extra_css %}{% endblock %}
 </head>
 <body class="bg-light">
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-2">
     <div class="container">
       <a class="navbar-brand" href="/patients">Agile Clinic Portal</a>
       <div class="navbar-nav">
-        <a class="nav-link" href="/patients">Patients</a>
-        <a class="nav-link" href="/patients/register">Register Patient</a>
-        <a class="nav-link" href="/appointments/create">Book Appointment</a>
+        <a class="nav-link" data-role="receptionist" href="/patients">Patients</a>
+        <a class="nav-link" data-role="receptionist" href="/patients/register">Register Patient</a>
+        <a class="nav-link" data-role="receptionist" href="/appointments/create">Book Appointment</a>
+        <a class="nav-link" data-role="doctor" href="/appointments/schedule">My Schedule</a>
+        <a class="nav-link" data-role="patient" href="/patients/dashboard">My Dashboard</a>
+        <a class="nav-link" data-role="patient" href="/appointments/book">Book My Appointment</a>
+        <a class="nav-link" data-role="patient" href="/appointments/mine">My Appointments</a>
         <a class="nav-link" href="/staff">Staff</a>
         <a class="nav-link" href="/auth/login">Login</a>
       </div>
     </div>
   </nav>
 
-  <main class="container pb-5">
+  <!-- Cosmetic only - no real login/session exists yet. This filters which nav
+       links are shown client-side; it does not restrict access to any page or API,
+       every URL below is still directly reachable regardless of the selection. -->
+  <div class="bg-warning-subtle border-bottom">
+    <div class="container py-1 d-flex align-items-center gap-2">
+      <small class="text-muted">Viewing as (demo only, not real access control):</small>
+      <select id="role-switcher" class="form-select form-select-sm w-auto">
+        <option value="all">Everyone</option>
+        <option value="receptionist">Receptionist</option>
+        <option value="doctor">Doctor</option>
+        <option value="patient">Patient</option>
+      </select>
+    </div>
+  </div>
+
+  <main class="container pt-3 pb-5">
     {% block content %}{% endblock %}
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/role-view.js"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

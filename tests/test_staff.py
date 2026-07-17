@@ -76,15 +76,16 @@ def test_create_staff_success(client: TestClient) -> None:
 
 def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
     people = [
-        ("Alice Wong", "alice@example.com", "nurse"),
-        ("Bob Lee", "bob@example.com", "doctor"),
-        ("Cara Tan", "cara@example.com", "receptionist"),
+        ("Alice Wong", "alice@example.com", "nurse", None),
+        ("Bob Lee", "bob@example.com", "doctor", "cardiology"),
+        ("Cara Tan", "cara@example.com", "receptionist", None),
     ]
     ids = []
-    for name, email, role in people:
-        r = client.post(
-            "/api/staff", json=valid_staff_payload(full_name=name, email=email, role=role)
-        )
+    for name, email, role, specialty in people:
+        payload = valid_staff_payload(full_name=name, email=email, role=role)
+        if specialty:
+            payload["specialty"] = specialty
+        r = client.post("/api/staff", json=payload)
         assert r.status_code == 201
         ids.append(r.json()["staff_id"])
 
@@ -94,7 +95,10 @@ def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
 @pytest.mark.parametrize("role", ["admin", "doctor", "nurse", "receptionist", "pharmacist"])
 def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> None:
     """Staff accounts can be created for any supported role."""
-    r = client.post("/api/staff", json=valid_staff_payload(email=f"{role}@example.com", role=role))
+    payload = valid_staff_payload(email=f"{role}@example.com", role=role)
+    if role == "doctor":
+        payload["specialty"] = "general_practice"
+    r = client.post("/api/staff", json=payload)
     assert r.status_code == 201
     assert r.json()["role"] == role
 
@@ -102,6 +106,54 @@ def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> No
 def test_create_staff_invalid_role_returns_422(client: TestClient) -> None:
     r = client.post("/api/staff", json=valid_staff_payload(role="superuser"))
     assert r.status_code == 422
+
+
+# --- 1a. Specialty validation --------------------------------------------------
+
+
+def test_create_doctor_with_specialty_succeeds(client: TestClient) -> None:
+    r = client.post(
+        "/api/staff",
+        json=valid_staff_payload(role="doctor", specialty="cardiology"),
+    )
+    assert r.status_code == 201
+    assert r.json()["specialty"] == "cardiology"
+
+
+def test_create_doctor_without_specialty_returns_422(client: TestClient) -> None:
+    """
+    Scenario: Doctors must have a specialty
+      Given a new staff account with role "doctor" and no specialty
+      When I POST /api/staff
+      Then I receive 422 Unprocessable Entity
+    """
+    payload = valid_staff_payload(role="doctor")
+    r = client.post("/api/staff", json=payload)
+    assert r.status_code == 422
+
+
+def test_create_non_doctor_with_specialty_returns_422(client: TestClient) -> None:
+    """A specialty only makes sense for doctors - rejecting it elsewhere prevents
+    nonsensical data like a nurse with a "cardiology" specialty."""
+    r = client.post(
+        "/api/staff",
+        json=valid_staff_payload(role="nurse", specialty="cardiology"),
+    )
+    assert r.status_code == 422
+
+
+def test_create_staff_invalid_specialty_returns_422(client: TestClient) -> None:
+    r = client.post(
+        "/api/staff",
+        json=valid_staff_payload(role="doctor", specialty="not-a-real-specialty"),
+    )
+    assert r.status_code == 422
+
+
+def test_create_non_doctor_without_specialty_omits_it(client: TestClient) -> None:
+    r = client.post("/api/staff", json=valid_staff_payload(role="nurse"))
+    assert r.status_code == 201
+    assert r.json()["specialty"] is None
 
 
 @pytest.mark.parametrize("missing_field", ["full_name", "email", "role"])

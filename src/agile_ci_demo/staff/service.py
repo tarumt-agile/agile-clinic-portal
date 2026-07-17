@@ -44,6 +44,7 @@ def create_staff(db: Session, data: StaffCreate) -> Staff:
         full_name=data.full_name,
         email=data.email,
         role=data.role.value,
+        specialty=data.specialty.value if data.specialty else None,
         password_hash=hash_password(temp_password),
         must_change_password=True,
         is_active=True,

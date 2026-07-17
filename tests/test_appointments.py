@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from agile_ci_demo.app import app
 from agile_ci_demo.appointments import models as _appointments_models  # noqa: F401
+from agile_ci_demo.appointments.service import get_appointment_by_reference
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
@@ -66,6 +67,8 @@ def valid_staff_payload(**overrides: object) -> dict[str, object]:
         "role": "doctor",
     }
     payload.update(overrides)
+    if payload["role"] == "doctor" and "specialty" not in payload:
+        payload["specialty"] = "general_practice"
     return payload
 
 
@@ -144,6 +147,13 @@ def test_create_appointment_page_renders(client: TestClient) -> None:
     r = client.get("/appointments/create")
     assert r.status_code == 200
     assert "Book Appointment" in r.text
+
+
+def test_self_book_appointment_page_renders(client: TestClient) -> None:
+    """The HTML patient self-service booking page loads successfully."""
+    r = client.get("/appointments/book")
+    assert r.status_code == 200
+    assert "Book My Appointment" in r.text
 
 
 # --- 2. Required field / validation tests -------------------------------------
@@ -286,7 +296,377 @@ def test_same_doctor_different_slot_succeeds(client: TestClient) -> None:
     assert r2.status_code == 201
 
 
-# --- 5. BDD-style tests with pytest-bdd --------------------------------------
+# --- 5. Doctor's daily schedule tests -------------------------------------------
+
+
+def test_get_schedule_returns_current_doctors_appointments(client: TestClient) -> None:
+    """
+    Scenario: View my appointment list for a given day
+      Given I am the (only, and therefore "current") doctor with two appointments
+        booked out of order
+      When I GET /api/appointments/schedule for that date
+      Then I receive both appointments ordered by start time ascending
+    """
+    doctor_id = _register_doctor(client)
+    patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_a, doctor_id, start_time="11:00"),
+    )
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_b, doctor_id, start_time="09:00"),
+    )
+
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doctor_id"] == doctor_id
+    assert body["schedule_date"] == TOMORROW
+    assert [a["start_time"] for a in body["appointments"]] == ["09:00:00", "11:00:00"]
+    assert [a["patient_name"] for a in body["appointments"]] == ["John Lee", "Jane Tan"]
+
+
+def test_get_schedule_excludes_other_doctors_appointments(client: TestClient) -> None:
+    """The schedule for the current (first) doctor must not include another doctor's
+    appointments, even on the same date and time."""
+    first_doctor = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
+    other_doctor = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com")
+    patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+
+    client.post("/api/appointments", json=valid_appointment_payload(patient_a, first_doctor))
+    client.post("/api/appointments", json=valid_appointment_payload(patient_b, other_doctor))
+
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doctor_id"] == first_doctor
+    assert len(body["appointments"]) == 1
+    assert body["appointments"][0]["patient_name"] == "Jane Tan"
+
+
+def test_get_schedule_defaults_to_today_with_no_appointments(client: TestClient) -> None:
+    """With no date param, the schedule defaults to today's date."""
+    _register_doctor(client)
+
+    r = client.get("/api/appointments/schedule")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["schedule_date"] == dt.date.today().isoformat()
+    assert body["appointments"] == []
+
+
+def test_get_schedule_past_date_returns_422(client: TestClient) -> None:
+    _register_doctor(client)
+    yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+
+    r = client.get("/api/appointments/schedule", params={"date": yesterday})
+    assert r.status_code == 422
+
+
+def test_get_schedule_no_doctor_returns_404(client: TestClient) -> None:
+    """If no doctor account exists at all, there is no "current doctor" to show."""
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+    assert r.status_code == 404
+
+
+def test_schedule_page_renders(client: TestClient) -> None:
+    """The HTML doctor schedule page loads successfully."""
+    r = client.get("/appointments/schedule")
+    assert r.status_code == 200
+    assert "My Schedule" in r.text
+
+
+# --- 6. Available slots tests ---------------------------------------------------
+
+
+def test_get_slots_full_grid_when_nothing_booked(client: TestClient) -> None:
+    """
+    Scenario: See available time slots when booking
+      Given a doctor with no appointments on a given date
+      When I GET /api/appointments/slots for that doctor and date
+      Then every 30-minute slot between 09:00 and 17:00 is available
+    """
+    doctor_id = _register_doctor(client)
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": TOMORROW})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["doctor_id"] == doctor_id
+    assert len(body["slots"]) == 16  # (17:00 - 09:00) / 30 minutes
+    assert all(slot["available"] for slot in body["slots"])
+    assert body["slots"][0]["start_time"] == "09:00:00"
+    assert body["slots"][-1]["start_time"] == "16:30:00"
+
+
+def test_get_slots_marks_booked_slot_unavailable(client: TestClient) -> None:
+    doctor_id = _register_doctor(client)
+    patient_id = _register_patient(client)
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, start_time="10:00"),
+    )
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": TOMORROW})
+    slots_by_time = {s["start_time"]: s["available"] for s in r.json()["slots"]}
+    assert slots_by_time["10:00:00"] is False
+    assert slots_by_time["09:00:00"] is True
+    assert slots_by_time["10:30:00"] is True
+
+
+def test_get_slots_cancelled_appointment_frees_the_slot(client: TestClient) -> None:
+    """A cancelled appointment's slot must show as available again - the double-
+    booking check in create_appointment() already only looks at status="scheduled",
+    so the slot grid should be consistent with that."""
+    doctor_id = _register_doctor(client)
+    patient_id = _register_patient(client)
+    created = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, start_time="10:00"),
+    ).json()
+
+    # No cancel endpoint yet - reach into the test's own in-memory DB session (the
+    # same one the `client` fixture registered as the get_db override) to simulate
+    # a cancellation directly.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        appointment = get_appointment_by_reference(db, created["reference_number"])
+        assert appointment is not None
+        appointment.status = "cancelled"
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": TOMORROW})
+    slots_by_time = {s["start_time"]: s["available"] for s in r.json()["slots"]}
+    assert slots_by_time["10:00:00"] is True
+
+
+def test_get_slots_unknown_doctor_returns_404(client: TestClient) -> None:
+    r = client.get("/api/appointments/slots", params={"doctor_id": "S99999", "date": TOMORROW})
+    assert r.status_code == 404
+
+
+def test_get_slots_past_date_returns_422(client: TestClient) -> None:
+    doctor_id = _register_doctor(client)
+    yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": yesterday})
+    assert r.status_code == 422
+
+
+# --- 7. Cancel appointment tests ------------------------------------------------
+
+
+def test_cancel_appointment_success(client: TestClient) -> None:
+    """
+    Scenario: Cancel an appointment
+      Given a scheduled appointment
+      When I PATCH /api/appointments/{reference_number}/cancel with a reason
+      Then the appointment's status becomes "cancelled" and the reason is stored
+    """
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+
+    r = client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "Patient requested reschedule"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "cancelled"
+    assert body["cancellation_reason"] == "Patient requested reschedule"
+
+
+def test_cancel_appointment_frees_the_slot_for_rebooking(client: TestClient) -> None:
+    """Cancelling must free the slot so another patient can book it - this is the
+    whole point of the story ("so that the slot is freed for other patients")."""
+    patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_a, doctor_id)
+    ).json()
+
+    client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "Doctor unavailable"},
+    )
+
+    r = client.post("/api/appointments", json=valid_appointment_payload(patient_b, doctor_id))
+    assert r.status_code == 201
+
+
+def test_cancel_appointment_missing_reason_returns_422(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+
+    r = client.patch(f"/api/appointments/{created['reference_number']}/cancel", json={})
+    assert r.status_code == 422
+
+
+def test_cancel_appointment_blank_reason_returns_422(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+
+    r = client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "   "},
+    )
+    assert r.status_code == 422
+
+
+def test_cancel_unknown_appointment_returns_404(client: TestClient) -> None:
+    r = client.patch(
+        "/api/appointments/A99999/cancel",
+        json={"cancellation_reason": "No such appointment"},
+    )
+    assert r.status_code == 404
+
+
+def test_cancel_already_cancelled_appointment_returns_409(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+
+    client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "First cancellation"},
+    )
+    r = client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "Second cancellation"},
+    )
+    assert r.status_code == 409
+
+
+def test_cancelled_appointment_shows_in_schedule_with_cancelled_status(
+    client: TestClient,
+) -> None:
+    """The schedule view must keep showing a cancelled appointment (with its status)
+    rather than removing it from the list."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+    client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "Patient requested reschedule"},
+    )
+
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+    appointments = r.json()["appointments"]
+    assert len(appointments) == 1
+    assert appointments[0]["status"] == "cancelled"
+    assert appointments[0]["cancellation_reason"] == "Patient requested reschedule"
+
+
+# --- 8. Patient's own appointments (view + self-service cancel) ----------------
+
+
+def test_get_my_appointments_returns_current_patients_upcoming_appointments(
+    client: TestClient,
+) -> None:
+    """
+    Scenario: Patient views their own upcoming appointments
+      Given the current (first-registered) patient has an appointment booked
+      When I GET /api/appointments/mine
+      Then I receive that appointment
+    """
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+
+    r = client.get("/api/appointments/mine")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["patient_id"] == patient_id
+    assert len(body["appointments"]) == 1
+    assert body["appointments"][0]["reference_number"] == created["reference_number"]
+
+
+def test_get_my_appointments_excludes_other_patients(client: TestClient) -> None:
+    """The current (first-registered) patient's list must not include another
+    patient's appointment."""
+    patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    doctor_id = _register_doctor(client)
+    client.post("/api/appointments", json=valid_appointment_payload(patient_b, doctor_id))
+
+    r = client.get("/api/appointments/mine")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["patient_id"] == patient_a
+    assert body["appointments"] == []
+
+
+def test_get_my_appointments_no_patient_returns_404(client: TestClient) -> None:
+    """If no patient account exists at all, there is no "current patient" to show."""
+    r = client.get("/api/appointments/mine")
+    assert r.status_code == 404
+
+
+def test_get_my_appointments_includes_cancelled_status(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+    client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "Patient requested reschedule"},
+    )
+
+    r = client.get("/api/appointments/mine")
+    body = r.json()
+    assert len(body["appointments"]) == 1
+    assert body["appointments"][0]["status"] == "cancelled"
+
+
+def test_patient_can_cancel_their_own_appointment(client: TestClient) -> None:
+    """The same cancel endpoint used by the schedule view works for a patient
+    cancelling their own booking - no separate cancel logic needed."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    created = client.post(
+        "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
+    ).json()
+
+    r = client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "Can no longer attend"},
+    )
+    assert r.status_code == 200
+
+    mine = client.get("/api/appointments/mine").json()
+    assert mine["appointments"][0]["status"] == "cancelled"
+
+
+def test_my_appointments_page_renders(client: TestClient) -> None:
+    """The HTML "My Appointments" page loads successfully."""
+    r = client.get("/appointments/mine")
+    assert r.status_code == 200
+    assert "My Appointments" in r.text
+
+
+# --- 9. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/appointments.feature
 
 scenarios("features/appointments.feature")
@@ -297,6 +677,7 @@ class Context:
         self.last_response = None  # type: ignore[assignment]
         self.patient_id: str = ""
         self.doctor_id: str = ""
+        self.reference_number: str = ""
 
 
 @pytest.fixture
@@ -344,6 +725,54 @@ def book_conflicting_appointment_step(api_is_running: dict, context: Context) ->
     )
 
 
+@bdd_given("that doctor has an appointment booked for tomorrow")
+def doctor_has_tomorrow_appointment_step(api_is_running: dict, context: Context) -> None:
+    client: TestClient = api_is_running["client"]
+    body = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(context.patient_id, context.doctor_id),
+    ).json()
+    context.reference_number = body["reference_number"]
+
+
+@bdd_when("I view that doctor's schedule for tomorrow")
+def view_schedule_step(api_is_running: dict, context: Context) -> None:
+    client: TestClient = api_is_running["client"]
+    context.last_response = client.get("/api/appointments/schedule", params={"date": TOMORROW})
+
+
+@bdd_then("the schedule includes that appointment")
+def schedule_includes_appointment_step(context: Context) -> None:
+    assert context.last_response is not None
+    assert context.last_response.status_code == 200
+    names = [a["patient_name"] for a in context.last_response.json()["appointments"]]
+    assert "Jane Tan" in names
+
+
+@bdd_when("I check that doctor's available slots for tomorrow")
+def check_available_slots_step(api_is_running: dict, context: Context) -> None:
+    client: TestClient = api_is_running["client"]
+    context.last_response = client.get(
+        "/api/appointments/slots",
+        params={"doctor_id": context.doctor_id, "date": TOMORROW},
+    )
+
+
+@bdd_then("the booked slot is marked unavailable")
+def booked_slot_unavailable_step(context: Context) -> None:
+    assert context.last_response is not None
+    assert context.last_response.status_code == 200
+    slots_by_time = {s["start_time"]: s["available"] for s in context.last_response.json()["slots"]}
+    assert slots_by_time["10:00:00"] is False
+
+
+@bdd_then("other slots remain available")
+def other_slots_available_step(context: Context) -> None:
+    assert context.last_response is not None
+    slots_by_time = {s["start_time"]: s["available"] for s in context.last_response.json()["slots"]}
+    assert slots_by_time["09:00:00"] is True
+
+
 @bdd_then("the appointment is booked with a generated reference number")
 def appointment_is_booked_step(context: Context) -> None:
     assert context.last_response is not None
@@ -356,3 +785,19 @@ def appointment_is_booked_step(context: Context) -> None:
 def i_receive_status_code_step(context: Context, status_code: int) -> None:
     assert context.last_response is not None
     assert context.last_response.status_code == status_code
+
+
+@bdd_when("I cancel that appointment with a reason")
+def cancel_appointment_step(api_is_running: dict, context: Context) -> None:
+    client: TestClient = api_is_running["client"]
+    context.last_response = client.patch(
+        f"/api/appointments/{context.reference_number}/cancel",
+        json={"cancellation_reason": "Patient requested reschedule"},
+    )
+
+
+@bdd_then("the appointment is cancelled")
+def appointment_is_cancelled_step(context: Context) -> None:
+    assert context.last_response is not None
+    assert context.last_response.status_code == 200
+    assert context.last_response.json()["status"] == "cancelled"

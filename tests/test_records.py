@@ -65,6 +65,8 @@ def valid_staff_payload(**overrides: object) -> dict[str, object]:
         "role": "doctor",
     }
     payload.update(overrides)
+    if payload["role"] == "doctor" and "specialty" not in payload:
+        payload["specialty"] = "general_practice"
     return payload
 
 
