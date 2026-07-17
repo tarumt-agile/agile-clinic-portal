@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.templates import templates
-from agile_ci_demo.staff.schemas import DoctorOut, DoctorRegister, StaffCreate, StaffOut, StaffStatusUpdate
+from agile_ci_demo.staff.schemas import DoctorOut, DoctorRegister, DoctorUpdate, StaffCreate, StaffOut, StaffStatusUpdate
 from agile_ci_demo.staff.service import (
     DoctorEmailAlreadyExistsError,
     DoctorNotFoundError,
+    DoctorUpdateEmailExistsError,
+    DoctorUpdateLicenseExistsError,
     DuplicateDoctorLicenseError,
     DuplicateStaffEmailError,
     StaffNotFoundError,
@@ -17,6 +19,7 @@ from agile_ci_demo.staff.service import (
     list_doctors,
     list_staff,
     set_staff_active_status,
+    update_doctor,
 )
 
 api_router = APIRouter(prefix="/api/staff", tags=["staff"])
@@ -112,3 +115,34 @@ def admin_view_doctor_page(request: Request,doctor_id: str,
             "doctor_id": doctor_id,
         },
     )
+
+@api_router.patch(
+    "/doctors/{doctor_id}",
+    response_model=DoctorOut,
+)
+def update_doctor_details(
+    doctor_id: str,
+    payload: DoctorUpdate,
+    db: Session = Depends(get_db),
+) -> DoctorOut:
+    try:
+        return update_doctor(
+            db,
+            doctor_id,
+            payload,
+        )
+    except DoctorNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except DoctorUpdateEmailExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except DoctorUpdateLicenseExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc

@@ -148,4 +148,48 @@ class DoctorOut(BaseModel):
     specialty: str
     department: str
     status: str
-    created_at: dt.datetime 
+    created_at: dt.datetime
+
+class DoctorUpdate(BaseModel):
+    full_name: str = Field(max_length=120)
+    email: EmailStr
+    license_number: str
+    specialty: Specialty
+    status: DoctorStatus
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, value: str) -> str:
+        value = " ".join(value.strip().split())
+
+        if not value:
+            raise ValueError(
+                "Doctor full name must be filled in."
+            )
+
+        if len(value.split()) < 2:
+            raise ValueError(
+                "Doctor full name must contain at least 2 words."
+            )
+
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def normalise_email(cls, value: EmailStr) -> str:
+        return str(value).strip().lower()
+
+    @field_validator("license_number")
+    @classmethod
+    def validate_license_number(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip().upper()
+
+        if not re.fullmatch(r"MMC-\d{5}", value):
+            raise ValueError(
+                "Registration number must use the format MMC-12345."
+            )
+
+        return value
