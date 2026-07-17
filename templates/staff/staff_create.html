@@ -3,260 +3,113 @@
 {% block title %}Create Staff - Agile Clinic Portal{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/staff_Create.css?v=1">
+<link rel="stylesheet" href="/static/css/staff_create.css?v=3">
 {% endblock %}
 
 {% block content %}
-<div class="staff-admin-page">
-
-  <header class="staff-page-header">
+<div class="admin-page">
+  <header class="doctor-page-header">
     <div>
-      <a href="/staff" class="staff-back-link">
-        <span aria-hidden="true">←</span>
-        Back to Staff List
-      </a>
-
-      <p class="staff-breadcrumb">
-        Admin / Staff Management
-      </p>
-
+      <a href="/staff" class="admin-back-link"><span>← Back to Staff List</span></a>
+      <p class="admin-label">Staff Management</p>
       <h1>Create Staff Account</h1>
-
-      <p class="staff-page-description">
-        Create an account for a clinic administrator, nurse,
-        receptionist or pharmacist.
-      </p>
+      <p class="admin-subtitle">Create an account for a doctor, nurse (receptionist), or administrator.</p>
     </div>
   </header>
 
-  <div
-    id="staff-form-alert"
-    class="alert alert-danger d-none"
-    role="alert"
-    aria-live="assertive"
-  ></div>
+  <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
 
-  <section class="staff-form-card">
-    <div class="staff-form-card-header">
+  <div class="admin-card">
+    <div class="admin-card-header">
       <h2>Staff Registration Form</h2>
-
-      <p>
-        Fields marked with <span aria-hidden="true">*</span>
-        are required.
-      </p>
+      <p>Fields marked with * are required.</p>
     </div>
 
     <form id="create-staff-form" novalidate>
-      <div class="staff-form-grid">
-
-        <div class="staff-form-field staff-field-wide">
-          <label for="full_name">
-            Full Name *
-          </label>
-
-          <input
-            type="text"
-            id="full_name"
-            name="full_name"
-            maxlength="120"
-            autocomplete="name"
-            placeholder="Example: Alice Wong"
-            aria-describedby="full_name_error"
-          >
-
-          <div
-            id="full_name_error"
-            class="invalid-feedback"
-            aria-live="polite"
-          ></div>
+      <div class="admin-form-grid">
+        <div class="form-field field-wide">
+          <label for="full_name">Full Name *</label>
+          <input type="text" id="full_name" name="full_name" maxlength="120" autocomplete="name" placeholder="Example: Tan Wei Ming">
+          <div id="full_name_error" class="invalid-feedback" aria-live="polite"></div>
         </div>
 
-        <div class="staff-form-field staff-field-wide">
-          <label for="email">
-            Email Address *
-          </label>
-
-          <input
-            type="email"
-            id="email"
-            name="email"
-            maxlength="254"
-            autocomplete="email"
-            placeholder="Example: alice.wong@example.com"
-            aria-describedby="email_error"
-          >
-
-          <div
-            id="email_error"
-            class="invalid-feedback"
-            aria-live="polite"
-          ></div>
+        <div class="form-field field-wide">
+          <label for="email">Email Address *</label>
+          <input type="email" id="email" name="email" maxlength="254" autocomplete="email" placeholder="Example: staff@example.com">
+          <div id="email_error" class="invalid-feedback" aria-live="polite"></div>
         </div>
 
-        <div class="staff-form-field">
-          <label for="role">
-            Staff Role *
-          </label>
-
-          <select
-            id="role"
-            name="role"
-            aria-describedby="role_error"
-          >
-            <option value="">
-              Choose a staff role...
-            </option>
-
-            <option value="admin">
-              Administrator
-            </option>
-
-            <option value="nurse">
-              Nurse
-            </option>
-
-            <option value="receptionist">
-              Receptionist
-            </option>
-
-            <option value="pharmacist">
-              Pharmacist
-            </option>
+        <div class="form-field field-wide">
+          <label for="role">Staff Role *</label>
+          <select id="role" name="role">
+            <option value="">Choose a staff role...</option>
+            <option value="doctor">Doctor</option>
+            <option value="nurse">Nurse</option>
+            <option value="admin">Administration</option>
           </select>
-
-          <div
-            id="role_error"
-            class="invalid-feedback"
-            aria-live="polite"
-          ></div>
+          <div id="role_error" class="invalid-feedback" aria-live="polite"></div>
         </div>
 
+        <div id="doctor-fields" class="doctor-fields d-none field-wide">
+          <div class="admin-form-grid">
+            <div class="form-field">
+              <label for="license_number">MMC Registration Number *</label>
+              <input type="text" id="license_number" name="license_number" maxlength="9" autocomplete="off" placeholder="Example: MMC-12345">
+              <div id="license_number_error" class="invalid-feedback" aria-live="polite"></div>
+            </div>
+
+            <div class="form-field">
+              <label for="specialty">Specialty *</label>
+              <select id="specialty" name="specialty">
+                <option value="">Choose a specialty...</option>
+                <option>General Medicine</option><option>Family Medicine</option><option>Internal Medicine</option>
+                <option>Cardiology</option><option>Dermatology</option><option>Emergency Medicine</option>
+                <option>Endocrinology</option><option>Gastroenterology</option><option>General Surgery</option>
+                <option>Neurology</option><option>Obstetrics and Gynaecology</option><option>Oncology</option>
+                <option>Ophthalmology</option><option>Orthopaedics</option><option>Otorhinolaryngology</option>
+                <option>Paediatrics</option><option>Psychiatry</option><option>Radiology</option><option>Urology</option>
+              </select>
+              <div id="specialty_error" class="invalid-feedback" aria-live="polite"></div>
+            </div>
+
+            <div class="form-field">
+              <label for="status">Doctor Status *</label>
+              <select id="status" name="status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <div id="status_error" class="invalid-feedback" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="staff-information-note">
         <strong>Account information</strong>
-
-        <p>
-          The system will generate a temporary password and send it
-          to the staff member's email address. The staff member must
-          change the temporary password after logging in.
-        </p>
-      </div>
-
-      <div class="staff-doctor-note">
-        <strong>Creating a doctor?</strong>
-
-        <p>
-          Doctors must be created through Doctor Management because
-          a doctor requires an MMC registration number and specialty.
-        </p>
-
-        <a
-          href="/staff/admin/createDoctor"
-          class="btn btn-outline-primary"
-        >
-          Go to Doctor Registration
-        </a>
+        <p>The system generates a temporary password and emails it to the staff member.</p>
       </div>
 
       <div class="staff-form-actions">
-        <button
-          type="submit"
-          id="submit-staff-button"
-          class="btn btn-primary"
-        >
-          Create Staff
-        </button>
-
-        <button
-          type="reset"
-          id="clear-staff-button"
-          class="btn btn-outline-secondary"
-        >
-          Clear Form
-        </button>
+        <button type="submit" id="submit-btn" class="btn btn-primary">Create Staff</button>
+        <button type="reset" class="btn btn-outline-secondary">Clear Form</button>
       </div>
     </form>
-  </section>
+  </div>
 </div>
 
-<div
-  class="modal fade"
-  id="staff-confirmation-modal"
-  tabindex="-1"
-  aria-labelledby="staff-confirmation-title"
-  aria-hidden="true"
->
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-
-      <div class="modal-header bg-success text-white">
-        <h2
-          class="modal-title fs-5"
-          id="staff-confirmation-title"
-        >
-          Staff Account Created
-        </h2>
-
-        <button
-          type="button"
-          class="btn-close btn-close-white"
-          data-bs-dismiss="modal"
-          aria-label="Close"
-        ></button>
-      </div>
-
-      <div class="modal-body">
-        <p>
-          The staff account has been created successfully.
-        </p>
-
-        <dl class="staff-confirmation-details">
-          <div>
-            <dt>Staff ID</dt>
-            <dd id="confirmation-staff-id"></dd>
-          </div>
-
-          <div>
-            <dt>Full Name</dt>
-            <dd id="confirmation-full-name"></dd>
-          </div>
-
-          <div>
-            <dt>Email</dt>
-            <dd id="confirmation-email"></dd>
-          </div>
-
-          <div>
-            <dt>Role</dt>
-            <dd id="confirmation-role"></dd>
-          </div>
-
-          <div>
-            <dt>Status</dt>
-            <dd>Active</dd>
-          </div>
-        </dl>
-      </div>
-
-      <div class="modal-footer">
-        <a href="/staff" class="btn btn-primary">
-          View Staff List
-        </a>
-
-        <button
-          type="button"
-          class="btn btn-outline-secondary"
-          data-bs-dismiss="modal"
-        >
-          Create Another
-        </button>
-      </div>
-    </div>
-  </div>
+<div class="modal fade" id="confirmation-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header bg-success text-white"><h2 class="modal-title fs-5">Staff Account Created</h2><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><p>The staff account was created successfully.</p><dl>
+      <div><dt>Staff ID</dt><dd id="confirm-staff-id"></dd></div>
+      <div><dt>Full Name</dt><dd id="confirm-full-name"></dd></div>
+      <div><dt>Role</dt><dd id="confirm-role"></dd></div>
+    </dl></div>
+    <div class="modal-footer"><a href="/staff" class="btn btn-primary">View Staff List</a><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Create Another</button></div>
+  </div></div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/staff_create.js?v=1"></script>
+<script src="/static/js/staff_create.js?v=3"></script>
 {% endblock %}

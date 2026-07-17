@@ -84,11 +84,9 @@
 
   function formatRole(role) {
     const roleLabels = {
-      admin: "Administrator",
+      admin: "Administration",
       doctor: "Doctor",
-      nurse: "Nurse",
-      receptionist: "Receptionist",
-      pharmacist: "Pharmacist"
+      nurse: "Nurse (Receptionist)"
     };
 
     return roleLabels[role] || role || "Unknown";
@@ -98,9 +96,7 @@
     const validRoles = [
       "admin",
       "doctor",
-      "nurse",
-      "receptionist",
-      "pharmacist"
+      "nurse"
     ];
 
     if (!validRoles.includes(role)) {

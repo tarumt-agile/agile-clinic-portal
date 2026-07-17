@@ -1,274 +1,297 @@
-.staff-admin-page {
-  max-width: 960px;
+/* =========================
+   Page layout
+========================= */
+
+.admin-page {
+  width: 100%;
+  max-width: 980px;
   margin: 0 auto;
+  padding: 1rem;
 }
 
-.staff-page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
-}
+/* =========================
+   Back link
+========================= */
 
-.staff-back-link,
-.staff-back-link:link,
-.staff-back-link:visited {
+.admin-back-link,
+.admin-back-link:link,
+.admin-back-link:visited {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
+
   margin-bottom: 1.25rem;
+
   color: #212529;
+  font-size: 1rem;
   font-weight: 600;
   text-decoration: none;
 }
 
-.staff-back-link:hover {
+.admin-back-link:hover {
   color: #0d6efd;
   text-decoration: underline;
 }
 
-.staff-back-link span {
-  font-size: 1.25rem;
+.admin-back-link span:first-child {
+  color: #212529;
+  font-size: 1.3rem;
   line-height: 1;
 }
 
-.staff-breadcrumb {
+.admin-back-link:hover span:first-child {
+  color: #0d6efd;
+}
+
+/* =========================
+   Header
+========================= */
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-label {
   margin: 0 0 0.25rem;
   color: #6c757d;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
-.staff-page-header h1 {
-  margin: 0;
+.admin-header h1 {
+  margin: 0 0 0.25rem;
   color: #212529;
-  font-size: 1.8rem;
+  font-size: 1.75rem;
   font-weight: 700;
 }
 
-.staff-page-description {
-  margin: 0.4rem 0 0;
+.admin-subtitle {
+  margin: 0;
   color: #6c757d;
 }
 
-#staff-form-alert {
-  margin-bottom: 1rem;
-}
+/* =========================
+   Form card
+========================= */
 
-.staff-form-card {
+.admin-card {
   padding: 1.5rem;
-  background: #ffffff;
+
+  background-color: #ffffff;
   border: 1px solid #dee2e6;
   border-radius: 0.75rem;
+
   box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.04);
 }
 
-.staff-form-card-header {
+.admin-card-header {
   margin-bottom: 1.25rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e9ecef;
 }
 
-.staff-form-card-header h2 {
-  margin: 0;
+.admin-card-header h2 {
+  margin: 0 0 0.25rem;
   color: #212529;
   font-size: 1.25rem;
   font-weight: 700;
 }
 
-.staff-form-card-header p {
-  margin: 0.3rem 0 0;
+.admin-card-header p {
+  margin: 0;
   color: #6c757d;
 }
 
-.staff-form-grid {
+/* =========================
+   Form layout
+========================= */
+
+.admin-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
-.staff-field-wide {
+.field-wide {
   grid-column: 1 / -1;
 }
 
-.staff-form-field {
+.form-field {
   display: flex;
   flex-direction: column;
 }
 
-.staff-form-field label {
-  margin-bottom: 0.4rem;
+.form-field label {
+  margin-bottom: 0.35rem;
   color: #212529;
   font-weight: 600;
 }
 
-.staff-form-field input,
-.staff-form-field select {
+/* =========================
+   Inputs and selects
+========================= */
+
+.form-field input,
+.form-field select {
   width: 100%;
   min-height: 44px;
-  padding: 0.65rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+
   color: #212529;
-  background: #ffffff;
+  background-color: #ffffff;
   border: 1px solid #ced4da;
   border-radius: 0.5rem;
+
   font-size: 0.95rem;
+
   transition:
     border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
 }
 
-.staff-form-field input::placeholder {
+.form-field input::placeholder {
   color: #98a2b3;
 }
 
-.staff-form-field input:focus,
-.staff-form-field select:focus {
+.form-field input:focus,
+.form-field select:focus {
   outline: none;
   border-color: #86b7fe;
   box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
 }
 
-.staff-form-field input.is-valid,
-.staff-form-field select.is-valid {
+.form-field input.is-valid,
+.form-field select.is-valid {
   border-color: #198754;
 }
 
-.staff-form-field input.is-invalid,
-.staff-form-field select.is-invalid {
+.form-field input.is-invalid,
+.form-field select.is-invalid {
   border-color: #dc3545;
   box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.12);
 }
 
+/* =========================
+   Validation messages
+========================= */
+
 .invalid-feedback {
   display: none;
   margin-top: 0.35rem;
+
   color: #dc3545;
   font-size: 0.875rem;
   line-height: 1.35;
 }
 
-.staff-form-field input.is-invalid + .invalid-feedback,
-.staff-form-field select.is-invalid + .invalid-feedback {
+.form-field input.is-invalid + .invalid-feedback,
+.form-field select.is-invalid + .invalid-feedback {
   display: block;
 }
 
-.staff-information-note,
-.staff-doctor-note {
-  margin-top: 1.25rem;
-  padding: 1rem;
-  border-radius: 0.6rem;
+/* =========================
+   Information note
+========================= */
+
+.admin-note {
+  margin-top: 1rem;
+  padding: 0.95rem 1rem;
+
+  color: #495057;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 0.5rem;
+
   line-height: 1.5;
 }
 
-.staff-information-note {
-  color: #495057;
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
-}
+/* =========================
+   Action buttons
+========================= */
 
-.staff-doctor-note {
-  color: #084298;
-  background: #e7f1ff;
-  border: 1px solid #b6d4fe;
-}
-
-.staff-information-note strong,
-.staff-doctor-note strong {
-  display: block;
-  margin-bottom: 0.3rem;
-}
-
-.staff-information-note p,
-.staff-doctor-note p {
-  margin: 0;
-}
-
-.staff-doctor-note .btn {
-  margin-top: 0.8rem;
-}
-
-.staff-form-actions {
+.admin-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
 }
 
-.staff-form-actions .btn {
-  min-width: 145px;
+.admin-actions .btn {
+  min-width: 140px;
   padding: 0.65rem 1rem;
   font-weight: 600;
 }
 
-#staff-confirmation-modal .modal-content {
-  overflow: hidden;
+/* =========================
+   Alert
+========================= */
+
+#form-alert {
+  margin-bottom: 1rem;
+}
+
+/* =========================
+   Modal adjustments
+========================= */
+
+#confirmation-modal .modal-content {
   border: 0;
   border-radius: 0.75rem;
+  overflow: hidden;
 }
 
-.staff-confirmation-details {
-  display: grid;
-  gap: 0;
-  margin: 1rem 0 0;
-}
-
-.staff-confirmation-details div {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 1rem;
-  padding: 0.65rem 0;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.staff-confirmation-details div:last-child {
+#confirmation-modal .modal-header {
   border-bottom: 0;
 }
 
-.staff-confirmation-details dt {
-  color: #6c757d;
-  font-weight: 600;
+#confirmation-modal .modal-footer {
+  border-top: 1px solid #e9ecef;
 }
 
-.staff-confirmation-details dd {
-  margin: 0;
-  color: #212529;
-  overflow-wrap: anywhere;
-}
+/* =========================
+   Responsive design
+========================= */
 
 @media (max-width: 768px) {
-  .staff-admin-page {
-    padding: 0.5rem;
+  .admin-page {
+    padding: 0.75rem;
   }
 
-  .staff-form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .staff-field-wide {
-    grid-column: auto;
-  }
-
-  .staff-form-actions {
+  .admin-header {
     flex-direction: column;
   }
 
-  .staff-form-actions .btn {
+  .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-wide {
+    grid-column: auto;
+  }
+
+  .admin-actions {
+    flex-direction: column;
+  }
+
+  .admin-actions .btn {
     width: 100%;
   }
 }
 
+
 @media (max-width: 576px) {
-  .staff-form-card {
+  .admin-back-link {
+    width: 100%;
+  }
+
+  .admin-card {
     padding: 1rem;
   }
 
-  .staff-page-header h1 {
+  .admin-header h1 {
     font-size: 1.5rem;
-  }
-
-  .staff-confirmation-details div {
-    grid-template-columns: 1fr;
-    gap: 0.15rem;
   }
 }

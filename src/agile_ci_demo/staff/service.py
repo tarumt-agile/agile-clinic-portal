@@ -34,30 +34,59 @@ class DoctorUpdateLicenseExistsError(Exception):
     """Raised when another doctor already uses the licence."""
 
 def create_staff(db: Session, data: StaffCreate) -> Staff:
-    """Create a staff account with a generated temporary password and email it to them."""
-    existing = db.execute(select(Staff).where(Staff.email == data.email)).scalar_one_or_none()
+    """Create any staff account and add a doctor profile when role=doctor."""
+    existing = db.execute(
+        select(Staff).where(Staff.email == str(data.email))
+    ).scalar_one_or_none()
     if existing is not None:
-        raise DuplicateStaffEmailError(f"A staff account with email '{data.email}' already exists")
+        raise DuplicateStaffEmailError(
+            f"A staff account with email '{data.email}' already exists"
+        )
+
+    if data.role == Role.DOCTOR:
+        existing_license = db.execute(
+            select(DoctorProfile).where(
+                DoctorProfile.license_number == data.license_number
+            )
+        ).scalar_one_or_none()
+        if existing_license is not None:
+            raise DuplicateStaffEmailError(
+                f"Doctor registration number '{data.license_number}' already exists"
+            )
 
     temp_password = generate_temp_password()
     staff = Staff(
         full_name=data.full_name,
-        email=data.email,
+        email=str(data.email).lower(),
         role=data.role.value,
         password_hash=hash_password(temp_password),
         must_change_password=True,
-        is_active=True,
+        is_active=(data.status == DoctorStatus.ACTIVE),
     )
     db.add(staff)
 
     try:
         db.flush()
         staff.staff_id = f"S{staff.id:05d}"
+
+        if data.role == Role.DOCTOR:
+            doctor = DoctorProfile(
+                staff_account_id=staff.id,
+                license_number=data.license_number,
+                specialty=data.specialty.value,
+                department="Clinical Services",
+                status=data.status.value,
+            )
+            staff.doctor_profile = doctor
+            db.add(doctor)
+            db.flush()
+            doctor.doctor_id = f"D{doctor.id:05d}"
+
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise DuplicateStaffEmailError(
-            "Staff account could not be created due to a conflict"
+            "Staff account could not be created because the email or doctor registration number already exists"
         ) from exc
 
     db.refresh(staff)
