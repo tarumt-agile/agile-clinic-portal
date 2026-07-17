@@ -18,8 +18,6 @@ class Staff(Base):
     full_name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     role: Mapped[str] = mapped_column(String(30))
-    # Only set when role="doctor" - other roles have no specialty.
-    specialty: Mapped[str | None] = mapped_column(String(30), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
