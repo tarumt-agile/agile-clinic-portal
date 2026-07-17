@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Staff List - Agile Clinic Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/staff_list.css?v=1">
+{% endblock %}
+
+{% block content %}
+<div class="staff-page">
+
+  <header class="staff-list-page-header">
+    <div>
+      <p class="staff-list-breadcrumb">
+        Admin / Staff Management
+      </p>
+
+      <h1>Staff List</h1>
+
+      <p class="staff-list-description">
+        View and manage clinic staff accounts.
+      </p>
+    </div>
+
+    <a
+      href="/staff/create"
+      class="btn btn-primary staff-create-button"
+    >
+      <span aria-hidden="true">+</span>
+      Create Staff
+    </a>
+  </header>
+
+  <section
+    class="staff-summary-grid"
+    aria-label="Staff account summary"
+  >
+    <article class="staff-summary-card">
+      <span class="staff-summary-label">
+        Total Staff
+      </span>
+
+      <strong
+        id="total-staff"
+        class="staff-summary-number"
+      >
+        0
+      </strong>
+    </article>
+
+    <article class="staff-summary-card">
+      <span class="staff-summary-label">
+        Active Staff
+      </span>
+
+      <strong
+        id="active-staff"
+        class="staff-summary-number"
+      >
+        0
+      </strong>
+    </article>
+
+    <article class="staff-summary-card">
+      <span class="staff-summary-label">
+        Inactive Staff
+      </span>
+
+      <strong
+        id="inactive-staff"
+        class="staff-summary-number"
+      >
+        0
+      </strong>
+    </article>
+  </section>
+
+  <section class="staff-list-card">
+    <div class="staff-list-card-header">
+      <div>
+        <h2>Registered Staff Accounts</h2>
+
+        <p>
+          Search, filter, activate or deactivate staff accounts.
+        </p>
+      </div>
+    </div>
+
+    <div class="staff-filter-grid">
+      <div class="staff-filter-field staff-search-field">
+        <label for="staff-search">
+          Search staff
+        </label>
+
+        <input
+          type="search"
+          id="staff-search"
+          class="form-control"
+          placeholder="Search by staff ID, name or email"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="staff-filter-field">
+        <label for="role-filter">
+          Role
+        </label>
+
+        <select
+          id="role-filter"
+          class="form-select"
+        >
+          <option value="">All roles</option>
+          <option value="admin">Administrator</option>
+          <option value="doctor">Doctor</option>
+          <option value="nurse">Nurse</option>
+          <option value="receptionist">Receptionist</option>
+          <option value="pharmacist">Pharmacist</option>
+        </select>
+      </div>
+
+      <div class="staff-filter-field">
+        <label for="staff-status-filter">
+          Status
+        </label>
+
+        <select
+          id="staff-status-filter"
+          class="form-select"
+        >
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+
+      <div class="staff-filter-action">
+        <button
+          type="button"
+          id="clear-staff-filters"
+          class="btn btn-outline-secondary"
+        >
+          Clear Filters
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="staff-list-alert"
+      class="alert alert-danger d-none"
+      role="alert"
+      aria-live="assertive"
+    ></div>
+
+    <div class="staff-table-wrapper">
+      <table class="staff-table">
+        <thead>
+          <tr>
+            <th scope="col">Staff ID</th>
+            <th scope="col">Staff Member</th>
+            <th scope="col">Role</th>
+            <th scope="col">Account Status</th>
+            <th scope="col">Password Status</th>
+            <th
+              scope="col"
+              class="staff-action-heading"
+            >
+              Action
+            </th>
+          </tr>
+        </thead>
+
+        <tbody id="staff-table-body">
+          <tr>
+            <td
+              colspan="6"
+              class="staff-table-message"
+            >
+              Loading staff accounts...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div
+      id="staff-mobile-list"
+      class="staff-mobile-list"
+    ></div>
+
+    <div
+      id="staff-list-footer"
+      class="staff-list-footer"
+    >
+      Showing
+      <strong id="visible-staff-count">0</strong>
+      of
+      <strong id="all-staff-count">0</strong>
+      staff accounts
+    </div>
+  </section>
+</div>
+
+<div
+  class="modal fade"
+  id="staff-status-modal"
+  tabindex="-1"
+  aria-labelledby="staff-status-modal-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h2
+          id="staff-status-modal-title"
+          class="modal-title fs-5"
+        >
+          Confirm Status Change
+        </h2>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        <p id="staff-status-modal-message"></p>
+
+        <div
+          id="staff-status-modal-alert"
+          class="alert alert-danger d-none"
+          role="alert"
+        ></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-dismiss="modal"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          id="confirm-staff-status-button"
+          class="btn btn-danger"
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/staff_list.js?v=1"></script>
+{% endblock %}
