@@ -76,6 +76,7 @@ def create_staff(db: Session, data: StaffCreate) -> Staff:
         staff.staff_id = f"S{staff.id:05d}"
 
         if data.role == Role.DOCTOR:
+            assert data.specialty is not None  # guaranteed by StaffCreate.validate_doctor_fields
             doctor = DoctorProfile(
                 staff_account_id=staff.id,
                 license_number=data.license_number,

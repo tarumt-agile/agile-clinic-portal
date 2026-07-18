@@ -18,6 +18,7 @@ from agile_ci_demo.patients.service import (
     PatientNotFoundError,
     create_patient,
     get_current_patient,
+    get_patient_by_ic,
     get_patient_by_patient_id,
     search_patients,
     update_patient,
@@ -75,6 +76,19 @@ def get_my_patient_record(db: Session = Depends(get_db)) -> PatientOut:
     return PatientOut.model_validate(patient)
 
 
+@api_router.get("/by-ic/{ic_or_passport}", response_model=PatientOut)
+def get_patient_by_ic_number(ic_or_passport: str, db: Session = Depends(get_db)) -> PatientOut:
+    """Look up a patient by their exact IC/passport number, for front-desk staff
+    identifying a patient from the IC the patient hands over in person."""
+    patient = get_patient_by_ic(db, ic_or_passport)
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No patient found with IC/passport '{ic_or_passport}'",
+        )
+    return PatientOut.model_validate(patient)
+
+
 @api_router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(patient_id: str, db: Session = Depends(get_db)) -> PatientOut:
     patient = get_patient_by_patient_id(db, patient_id)
@@ -92,8 +106,6 @@ def edit_patient(
         patient = update_patient(db, patient_id, payload)
     except PatientNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except DuplicatePatientError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return PatientOut.model_validate(patient)
 
 

@@ -12,10 +12,11 @@
     <form id="appointment-form" novalidate>
       <div class="row g-3">
         <div class="col-md-6">
-          <label for="patient_id" class="form-label">Patient ID *</label>
-          <input type="text" class="form-control" id="patient_id" name="patient_id" required
-                 placeholder="e.g. P00001">
-          <div class="invalid-feedback">A valid, registered patient ID is required.</div>
+          <label for="patient_ic" class="form-label">Patient IC *</label>
+          <input type="text" class="form-control" id="patient_ic" name="patient_ic" required
+                 placeholder="e.g. 900520-05-1893">
+          <input type="hidden" id="patient_id" name="patient_id">
+          <div class="invalid-feedback">A valid, registered patient IC is required.</div>
           <div id="patient-lookup-feedback" class="form-text"></div>
         </div>
 

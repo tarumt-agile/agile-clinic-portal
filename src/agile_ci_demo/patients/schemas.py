@@ -23,7 +23,6 @@ class PatientCreate(BaseModel):
     gender: Gender
     phone_number: str = Field(min_length=7, max_length=20)
     email: EmailStr | None = None
-    ic_or_passport: str = Field(min_length=5, max_length=30)
     address: str | None = Field(default=None, max_length=255)
 
     @field_validator("full_name")
@@ -47,14 +46,6 @@ class PatientCreate(BaseModel):
         v = v.strip()
         if not _PHONE_RE.fullmatch(v):
             raise ValueError("Phone number must be 7-20 digits, optionally starting with '+'")
-        return v
-
-    @field_validator("ic_or_passport")
-    @classmethod
-    def ic_or_passport_not_blank(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("IC / passport number is required")
         return v
 
     @field_validator("address")

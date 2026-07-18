@@ -63,6 +63,7 @@
   function showConfirmation(patient) {
     document.getElementById("confirm-patient-id").textContent = patient.patient_id;
     document.getElementById("confirm-full-name").textContent = patient.full_name;
+    document.getElementById("confirm-ic").textContent = patient.ic_or_passport;
     document.getElementById("confirm-phone").textContent = patient.phone_number;
     if (confirmationModal) {
       confirmationModal.show();

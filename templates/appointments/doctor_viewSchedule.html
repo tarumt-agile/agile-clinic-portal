@@ -5,29 +5,34 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0" id="schedule-heading">My Schedule</h1>
-  <div>
-    <label for="schedule-date" class="visually-hidden">Date</label>
-    <input type="date" id="schedule-date" class="form-control">
-  </div>
 </div>
 
 <div id="schedule-alert" class="alert alert-danger d-none" role="alert"></div>
 
-<div class="table-responsive">
-  <table class="table table-hover align-middle bg-white">
-    <thead>
-      <tr>
-        <th scope="col">Time</th>
-        <th scope="col">Patient</th>
-        <th scope="col">Reason</th>
-        <th scope="col">Status</th>
-        <th scope="col">Action</th>
-      </tr>
-    </thead>
-    <tbody id="schedule-table-body">
-      <tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>
-    </tbody>
-  </table>
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Appointments</span>
+    <div>
+      <label for="schedule-date" class="visually-hidden">Date</label>
+      <input type="date" id="schedule-date" class="form-control form-control-sm">
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th scope="col">Time</th>
+          <th scope="col">Patient</th>
+          <th scope="col">Reason</th>
+          <th scope="col">Status</th>
+          <th scope="col">Action</th>
+        </tr>
+      </thead>
+      <tbody id="schedule-table-body">
+        <tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <!-- Cancellation dialog, shown when cancelling an appointment -->

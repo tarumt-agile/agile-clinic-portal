@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Generator
 
 import pytest
@@ -49,7 +50,6 @@ def valid_patient_payload(**overrides: object) -> dict[str, object]:
         "gender": "female",
         "phone_number": "012-3456789",
         "email": "jane.tan@example.com",
-        "ic_or_passport": "900520-10-1234",
         "address": "1 Jalan Testing, Kuala Lumpur",
     }
     payload.update(overrides)
@@ -81,15 +81,8 @@ def test_register_patient_generates_sequential_ids(client: TestClient) -> None:
       Then each receives the next sequential patient_id
     """
     ids = []
-    people = [
-        ("Jane Tan", "900520-10-1234"),
-        ("John Lee", "880311-14-5678"),
-        ("Ah Kow", "950101-08-9012"),
-    ]
-    for name, ic in people:
-        r = client.post(
-            "/api/patients", json=valid_patient_payload(full_name=name, ic_or_passport=ic)
-        )
+    for name in ("Jane Tan", "John Lee", "Ah Kow"):
+        r = client.post("/api/patients", json=valid_patient_payload(full_name=name))
         assert r.status_code == 201
         ids.append(r.json()["patient_id"])
 
@@ -128,10 +121,7 @@ def test_get_current_patient_returns_first_patient_on_record(client: TestClient)
       Then I receive the first-registered patient (a placeholder for real login)
     """
     client.post("/api/patients", json=valid_patient_payload())
-    client.post(
-        "/api/patients",
-        json=valid_patient_payload(full_name="John Lee", ic_or_passport="880311-14-5678"),
-    )
+    client.post("/api/patients", json=valid_patient_payload(full_name="John Lee"))
 
     r = client.get("/api/patients/me")
     assert r.status_code == 200
@@ -148,7 +138,7 @@ def test_get_current_patient_no_patients_returns_404(client: TestClient) -> None
 
 @pytest.mark.parametrize(
     "missing_field",
-    ["full_name", "date_of_birth", "gender", "phone_number", "ic_or_passport"],
+    ["full_name", "date_of_birth", "gender", "phone_number"],
 )
 def test_register_missing_required_field_returns_422(
     client: TestClient, missing_field: str
@@ -205,19 +195,32 @@ def test_register_without_optional_fields_succeeds(client: TestClient) -> None:
     assert r.json()["address"] is None
 
 
-def test_register_duplicate_ic_returns_409(client: TestClient) -> None:
+def test_register_generates_ic_from_date_of_birth(client: TestClient) -> None:
     """
-    Scenario: Reject duplicate IC/passport registration
-      Given a patient with a given IC/passport is already registered
-      When I POST another patient with the same IC/passport
-      Then I receive 409 Conflict
+    Scenario: IC number is generated automatically, not client-supplied
+      Given a patient is registered with date_of_birth "1990-05-20"
+      Then the generated ic_or_passport starts with "900520-0" and is
+        formatted YYMMDD-0X-XXXX
     """
-    payload = valid_patient_payload()
-    r1 = client.post("/api/patients", json=payload)
-    assert r1.status_code == 201
+    r = client.post("/api/patients", json=valid_patient_payload(date_of_birth="1990-05-20"))
+    assert r.status_code == 201
+    ic = r.json()["ic_or_passport"]
+    assert re.fullmatch(r"900520-0[1-9]-\d{4}", ic)
 
-    r2 = client.post("/api/patients", json=valid_patient_payload(full_name="Different Name"))
-    assert r2.status_code == 409
+
+def test_register_generates_unique_ic_for_same_date_of_birth(client: TestClient) -> None:
+    """Two patients sharing a date_of_birth must still get distinct IC numbers."""
+    r1 = client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="Jane Tan", date_of_birth="1990-05-20"),
+    )
+    r2 = client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="John Lee", date_of_birth="1990-05-20"),
+    )
+    assert r1.status_code == 201
+    assert r2.status_code == 201
+    assert r1.json()["ic_or_passport"] != r2.json()["ic_or_passport"]
 
 
 def test_register_page_renders(client: TestClient) -> None:
@@ -231,17 +234,9 @@ def test_register_page_renders(client: TestClient) -> None:
 
 
 def _register_sample_patients(client: TestClient) -> list[str]:
-    people = [
-        ("Jane Tan", "900520-10-1234"),
-        ("John Lee", "880311-14-5678"),
-        ("Ah Kow", "950101-08-9012"),
-        ("Janet Wong", "921212-05-4321"),
-    ]
     ids = []
-    for name, ic in people:
-        r = client.post(
-            "/api/patients", json=valid_patient_payload(full_name=name, ic_or_passport=ic)
-        )
+    for name in ("Jane Tan", "John Lee", "Ah Kow", "Janet Wong"):
+        r = client.post("/api/patients", json=valid_patient_payload(full_name=name))
         assert r.status_code == 201
         ids.append(r.json()["patient_id"])
     return ids
@@ -379,30 +374,11 @@ def test_update_patient_invalid_phone_returns_422(client: TestClient) -> None:
     assert r.status_code == 422
 
 
-def test_update_patient_duplicate_ic_returns_409(client: TestClient) -> None:
-    """
-    Scenario: Reject changing a patient's IC to one already used by another patient
-    """
-    client.post(
-        "/api/patients",
-        json=valid_patient_payload(full_name="Jane Tan", ic_or_passport="900520-10-1234"),
-    )
-    other = client.post(
-        "/api/patients",
-        json=valid_patient_payload(full_name="John Lee", ic_or_passport="880311-14-5678"),
-    ).json()
-
-    r = client.put(
-        f"/api/patients/{other['patient_id']}",
-        json=valid_patient_payload(full_name="John Lee", ic_or_passport="900520-10-1234"),
-    )
-    assert r.status_code == 409
-
-
-def test_update_patient_same_ic_succeeds(client: TestClient) -> None:
-    """Updating a patient without changing their own IC/passport must not be rejected as a
-    self-conflict."""
+def test_update_patient_does_not_change_ic(client: TestClient) -> None:
+    """IC/passport is system-generated at registration and stays fixed across edits,
+    even though older clients may still send an ic_or_passport field (ignored)."""
     created = client.post("/api/patients", json=valid_patient_payload()).json()
+    original_ic = created["ic_or_passport"]
 
     r = client.put(
         f"/api/patients/{created['patient_id']}",
@@ -410,6 +386,7 @@ def test_update_patient_same_ic_succeeds(client: TestClient) -> None:
     )
     assert r.status_code == 200
     assert r.json()["phone_number"] == "019-9998888"
+    assert r.json()["ic_or_passport"] == original_ic
 
 
 def test_detail_page_renders(client: TestClient) -> None:

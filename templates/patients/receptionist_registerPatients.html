@@ -51,14 +51,9 @@
         </div>
 
         <div class="col-md-6">
-          <label for="ic_or_passport" class="form-label">IC / Passport number *</label>
-          <input type="text" class="form-control" id="ic_or_passport" name="ic_or_passport" required minlength="5" maxlength="30">
-          <div class="invalid-feedback">IC / passport number is required.</div>
-        </div>
-
-        <div class="col-md-6">
           <label for="address" class="form-label">Address</label>
           <input type="text" class="form-control" id="address" name="address" placeholder="optional" maxlength="255">
+          <div class="form-text">IC number is generated automatically from the date of birth after registration.</div>
         </div>
       </div>
 
@@ -85,6 +80,8 @@
           <dd class="col-sm-8"><span id="confirm-patient-id" class="fw-bold"></span></dd>
           <dt class="col-sm-4">Full name</dt>
           <dd class="col-sm-8" id="confirm-full-name"></dd>
+          <dt class="col-sm-4">IC number</dt>
+          <dd class="col-sm-8"><span id="confirm-ic" class="fw-bold"></span></dd>
           <dt class="col-sm-4">Phone</dt>
           <dd class="col-sm-8" id="confirm-phone"></dd>
         </dl>
