@@ -1,0 +1,62 @@
+[project]
+name = "agile-demo"
+version = "0.1.0"
+description = "Teaching repo: Agile + Tests + CI/CD"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "sqlalchemy>=2.0",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
+  "email-validator>=2.1",
+  "python-dotenv>=1.0"
+]
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "hypothesis",
+  "pytest-bdd",
+  "ruff==0.15.21",
+  "black==26.5.1",
+  "mypy",
+  "fastapi[testclient]",
+  "uvicorn>=0.30",
+  "jinja2>=3.1",
+  "sqlalchemy",
+  "dnspython",
+  "email-validator",
+  "httpx",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+  "acceptance: BDD/Gherkin scenario tests (see tests/features/*.feature)",
+  "io: tests that exercise a real system boundary (HTTP via TestClient, or a database session)",
+]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["src"]

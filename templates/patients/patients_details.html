@@ -1,0 +1,653 @@
+{% extends "base.html" %}
+
+{% block title %}
+Patient Details - Agile Clinic Portal
+{% endblock %}
+
+{% block content %}
+<div
+  id="patient-detail-root"
+  data-patient-id="{{ patient_id }}"
+>
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div
+        class="d-flex justify-content-between
+          align-items-center mb-4"
+      >
+        <h1 class="h3 mb-0">
+          Patient
+          <span id="heading-patient-id"></span>
+        </h1>
+
+        <div>
+          <a
+            href="/patients"
+            class="btn btn-outline-secondary"
+          >
+            Back to List
+          </a>
+
+          <button
+            type="button"
+            class="btn btn-primary"
+            id="edit-btn"
+          >
+            Edit
+          </button>
+        </div>
+      </div>
+
+      <ul
+        class="nav nav-tabs mb-3"
+        id="patient-tabs"
+        role="tablist"
+      >
+        <li
+          class="nav-item"
+          role="presentation"
+        >
+          <button
+            class="nav-link active"
+            id="details-tab-btn"
+            data-bs-toggle="tab"
+            data-bs-target="#details-tab"
+            type="button"
+            role="tab"
+          >
+            Details
+          </button>
+        </li>
+
+        <li
+          class="nav-item"
+          role="presentation"
+        >
+          <button
+            class="nav-link"
+            id="history-tab-btn"
+            data-bs-toggle="tab"
+            data-bs-target="#history-tab"
+            type="button"
+            role="tab"
+          >
+            Medical History
+          </button>
+        </li>
+
+        <li
+          class="nav-item"
+          role="presentation"
+        >
+          <button
+            class="nav-link"
+            id="prescriptions-tab-btn"
+            data-bs-toggle="tab"
+            data-bs-target="#prescriptions-tab"
+            type="button"
+            role="tab"
+          >
+            Prescriptions
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <div
+          class="tab-pane fade show active"
+          id="details-tab"
+          role="tabpanel"
+        >
+          <div
+            id="detail-alert"
+            class="alert alert-danger d-none"
+            role="alert"
+          ></div>
+
+          <div
+            id="not-found-alert"
+            class="alert alert-warning d-none"
+            role="alert"
+          >
+            No patient found with this ID.
+          </div>
+
+          <div id="view-mode">
+            <dl class="row">
+              <dt class="col-sm-4">
+                Full name
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-full-name"
+              ></dd>
+
+              <dt class="col-sm-4">
+                Date of birth
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-dob"
+              ></dd>
+
+              <dt class="col-sm-4">
+                Gender
+              </dt>
+
+              <dd
+                class="col-sm-8 text-capitalize"
+                id="view-gender"
+              ></dd>
+
+              <dt class="col-sm-4">
+                Phone number
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-phone"
+              ></dd>
+
+              <dt class="col-sm-4">
+                Email
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-email"
+              ></dd>
+
+              <dt class="col-sm-4">
+                IC / Passport
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-ic"
+              ></dd>
+
+              <dt class="col-sm-4">
+                Address
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-address"
+              ></dd>
+            </dl>
+          </div>
+
+          <form
+            id="edit-form"
+            class="d-none"
+            novalidate
+          >
+            <div class="row g-3">
+              <div class="col-md-8">
+                <label
+                  for="edit-full_name"
+                  class="form-label"
+                >
+                  Full name *
+                </label>
+
+                <input
+                  type="text"
+                  class="form-control"
+                  id="edit-full_name"
+                  name="full_name"
+                  required
+                  minlength="2"
+                  maxlength="120"
+                >
+
+                <div class="invalid-feedback">
+                  Full name is required.
+                </div>
+              </div>
+
+              <div class="col-md-4">
+                <label
+                  for="edit-date_of_birth"
+                  class="form-label"
+                >
+                  Date of birth *
+                </label>
+
+                <input
+                  type="date"
+                  class="form-control"
+                  id="edit-date_of_birth"
+                  name="date_of_birth"
+                  required
+                >
+
+                <div class="invalid-feedback">
+                  A valid date of birth is required.
+                </div>
+              </div>
+
+              <div class="col-md-4">
+                <label
+                  for="edit-gender"
+                  class="form-label"
+                >
+                  Gender *
+                </label>
+
+                <select
+                  class="form-select"
+                  id="edit-gender"
+                  name="gender"
+                  required
+                >
+                  <option value="" disabled>
+                    Choose...
+                  </option>
+
+                  <option value="male">
+                    Male
+                  </option>
+
+                  <option value="female">
+                    Female
+                  </option>
+
+                  <option value="other">
+                    Other
+                  </option>
+                </select>
+
+                <div class="invalid-feedback">
+                  Please select a gender.
+                </div>
+              </div>
+
+              <div class="col-md-4">
+                <label
+                  for="edit-phone_number"
+                  class="form-label"
+                >
+                  Phone number *
+                </label>
+
+                <input
+                  type="tel"
+                  class="form-control"
+                  id="edit-phone_number"
+                  name="phone_number"
+                  required
+                  placeholder="e.g. 012-3456789"
+                  pattern="^\+?\d[\d\s\-]{6,19}$"
+                >
+
+                <div class="invalid-feedback">
+                  Enter a valid phone number.
+                </div>
+              </div>
+
+              <div class="col-md-4">
+                <label
+                  for="edit-email"
+                  class="form-label"
+                >
+                  Email
+                </label>
+
+                <input
+                  type="email"
+                  class="form-control"
+                  id="edit-email"
+                  name="email"
+                  placeholder="optional"
+                >
+
+                <div class="invalid-feedback">
+                  Enter a valid email address.
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <label
+                  for="edit-address"
+                  class="form-label"
+                >
+                  Address
+                </label>
+
+                <input
+                  type="text"
+                  class="form-control"
+                  id="edit-address"
+                  name="address"
+                  placeholder="optional"
+                  maxlength="255"
+                >
+
+                <div class="form-text">
+                  IC number is system-generated
+                  and cannot be edited.
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+              <button
+                type="submit"
+                class="btn btn-primary"
+                id="save-btn"
+              >
+                Save Changes
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-outline-secondary"
+                id="cancel-btn"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div
+          class="tab-pane fade"
+          id="history-tab"
+          role="tabpanel"
+        >
+          <div
+            class="d-flex justify-content-between
+              align-items-center mb-3"
+          >
+            <label
+              for="history-search"
+              class="visually-hidden"
+            >
+              Search medical history
+            </label>
+
+            <input
+              type="search"
+              id="history-search"
+              class="form-control me-3"
+              placeholder="Search by diagnosis or note keyword"
+              autocomplete="off"
+            >
+
+            <a
+              href="#"
+              id="new-record-link"
+              class="btn btn-primary text-nowrap"
+            >
+              + New Consultation Note
+            </a>
+          </div>
+
+          <div
+            id="history-alert"
+            class="alert alert-danger d-none"
+            role="alert"
+          ></div>
+
+          <div
+            id="history-empty"
+            class="text-muted text-center
+              py-4 d-none"
+          >
+            No consultation notes found.
+          </div>
+
+          <div id="history-list"></div>
+        </div>
+
+        <div
+          class="tab-pane fade"
+          id="prescriptions-tab"
+          role="tabpanel"
+        >
+          <div class="mb-3">
+            <h2 class="h5 mb-1">
+              Prescription History
+            </h2>
+
+            <p class="text-muted mb-0">
+              Newest prescriptions are shown first.
+            </p>
+          </div>
+
+          <div
+            id="prescriptions-alert"
+            class="alert alert-danger d-none"
+            role="alert"
+          ></div>
+
+          <div
+            id="prescriptions-empty"
+            class="text-muted text-center
+              py-4 d-none"
+          >
+            No prescriptions found.
+          </div>
+
+          <div id="prescriptions-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal fade"
+  id="success-modal"
+  tabindex="-1"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div
+        class="modal-header bg-success text-white"
+      >
+        <h2 class="modal-title h5">
+          Patient Updated
+        </h2>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        Patient details were updated successfully.
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-primary"
+          data-bs-dismiss="modal"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal fade"
+  id="edit-prescription-modal"
+  tabindex="-1"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form
+        id="edit-prescription-form"
+        novalidate
+      >
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title h5">
+              Update Prescription Instructions
+            </h2>
+
+            <p
+              id="edit-prescription-diagnosis"
+              class="text-muted small mb-0"
+            ></p>
+          </div>
+
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+          ></button>
+        </div>
+
+        <div class="modal-body">
+          <div
+            id="edit-prescription-alert"
+            class="alert alert-danger d-none"
+          ></div>
+
+          <input
+            type="hidden"
+            id="edit-prescription-id"
+          >
+
+          <div class="mb-3">
+            <label
+              for="edit-prescription-medication"
+              class="form-label"
+            >
+              Medication
+            </label>
+
+            <input
+              type="text"
+              id="edit-prescription-medication"
+              class="form-control"
+              readonly
+            >
+
+            <div class="form-text">
+              To change the medicine, cancel this
+              prescription and issue a new one.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="edit-prescription-dosage"
+              class="form-label"
+            >
+              Dosage *
+            </label>
+
+            <select
+              id="edit-prescription-dosage"
+              class="form-select"
+              required
+            ></select>
+
+            <div class="invalid-feedback">
+              Please select a dosage.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="edit-prescription-frequency"
+              class="form-label"
+            >
+              Frequency *
+            </label>
+
+            <select
+              id="edit-prescription-frequency"
+              class="form-select"
+              required
+            ></select>
+
+            <div class="invalid-feedback">
+              Please select a frequency.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="edit-prescription-duration"
+              class="form-label"
+            >
+              Duration *
+            </label>
+
+            <select
+              id="edit-prescription-duration"
+              class="form-select"
+              required
+            ></select>
+
+            <div class="invalid-feedback">
+              Please select a duration.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="edit-prescription-reason"
+              class="form-label"
+            >
+              Reason for Change *
+            </label>
+
+            <textarea
+              id="edit-prescription-reason"
+              class="form-control"
+              rows="3"
+              minlength="3"
+              maxlength="500"
+              required
+              placeholder="Explain why the instructions are being corrected."
+            ></textarea>
+
+            <div class="invalid-feedback">
+              A reason for the change is required.
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            id="save-prescription-instructions-button"
+            class="btn btn-primary"
+          >
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/patient-form.js"></script>
+<script src="/static/js/patient_detail.js"></script>
+<script src="/static/js/medical_history.js"></script>
+<script src="/static/js/prescription-history.js?v=2"></script>
+{% endblock %}

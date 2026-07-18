@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FastAPI: agile_ci_demo",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["agile_ci_demo.app:app", "--reload", "--port", "8000"],
+      "jinja": true,
+      "justMyCode": true
+    }
+  ]
+}

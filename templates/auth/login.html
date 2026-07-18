@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <h1 class="h3 mb-4">Log In</h1>
+
+    <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
+
+    <form id="login-form" novalidate>
+      <div class="mb-3">
+        <label for="email" class="form-label">Email</label>
+        <input type="email" class="form-control" id="email" name="email" required>
+        <div class="invalid-feedback">Enter a valid email address.</div>
+      </div>
+
+      <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input type="password" class="form-control" id="password" name="password" required>
+        <div class="invalid-feedback">Password is required.</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submit-btn">Log In</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/auth-login.js"></script>
+{% endblock %}

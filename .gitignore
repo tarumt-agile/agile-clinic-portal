@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.coverage
+coverage.xml
+dist/
+.cache/
+.hypothesis/
+*.egg-info/
+*.db
+*.db-journal
+.env
