@@ -120,9 +120,12 @@ def test_create_consultation_note_success(client: TestClient) -> None:
     assert body["doctor_id"] == doctor_id
     assert body["doctor_name"] == "Dr. Alan Chua"
     assert body["notes"] == "Patient presented with fever and cough for 3 days."
-    assert body["diagnoses"] == [
-        {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
-    ]
+    assert len(body["diagnoses"]) == 1
+    diagnosis = body["diagnoses"][0]
+    assert isinstance(diagnosis["id"], int)
+    assert diagnosis["id"] > 0
+    assert diagnosis["icd10_code"] == "J00"
+    assert diagnosis["description"] == "Acute nasopharyngitis (common cold)"
 
 
 def test_create_consultation_note_then_fetch_by_record_id(client: TestClient) -> None:
