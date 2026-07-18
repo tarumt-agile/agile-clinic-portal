@@ -107,6 +107,7 @@ class StaffOut(BaseModel):
     department: str | None = None
     doctor_status: str | None = None
 
+
 class StaffUpdate(BaseModel):
     full_name: str = Field(max_length=120)
     email: EmailStr
@@ -121,26 +122,17 @@ class StaffUpdate(BaseModel):
         value = " ".join(value.strip().split())
 
         if not value:
-            raise ValueError(
-                "Full name must be filled in."
-            )
+            raise ValueError("Full name must be filled in.")
 
         if len(value.split()) < 2:
-            raise ValueError(
-                "Full name must contain at least 2 words."
-            )
+            raise ValueError("Full name must contain at least 2 words.")
 
         if not all(
-            word
-            .replace("-", "")
-            .replace("'", "")
-            .replace(".", "")
-            .isalpha()
+            word.replace("-", "").replace("'", "").replace(".", "").isalpha()
             for word in value.split()
         ):
             raise ValueError(
-                "Full name may only contain letters, spaces, "
-                "apostrophes, periods and hyphens."
+                "Full name may only contain letters, spaces, " "apostrophes, periods and hyphens."
             )
 
         return value
@@ -168,14 +160,11 @@ class StaffUpdate(BaseModel):
             r"MMC-\d{5}",
             value,
         ):
-            raise ValueError(
-                "Registration number must use the "
-                "format MMC-12345."
-            )
+            raise ValueError("Registration number must use the " "format MMC-12345.")
 
         return value
-    
-    
+
+
 class StaffStatusUpdate(BaseModel):
     is_active: bool
 

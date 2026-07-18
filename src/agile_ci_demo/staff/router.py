@@ -32,7 +32,6 @@ from agile_ci_demo.staff.service import (
     update_staff,
 )
 
-
 api_router = APIRouter(
     prefix="/api/staff",
     tags=["staff"],
@@ -73,9 +72,7 @@ def register_staff(
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-            ),
+            status_code=(status.HTTP_422_UNPROCESSABLE_ENTITY),
             detail=str(exc),
         ) from exc
 
@@ -92,10 +89,7 @@ def get_staff_list(
 ) -> list[StaffOut]:
     staff_accounts = list_staff(db)
 
-    return [
-        StaffOut.model_validate(staff)
-        for staff in staff_accounts
-    ]
+    return [StaffOut.model_validate(staff) for staff in staff_accounts]
 
 
 # =========================================================
@@ -140,6 +134,7 @@ def get_doctor_details(
 # STAFF DETAILS AND UPDATE API
 # =========================================================
 
+
 # This route activates or deactivates one staff account.
 @api_router.patch(
     "/{staff_id}/status",
@@ -165,6 +160,7 @@ def update_staff_status(
 
     return StaffOut.model_validate(staff)
 
+
 # This route returns the details of one staff account.
 @api_router.get(
     "/{staff_id}",
@@ -182,10 +178,7 @@ def get_staff_details(
     if staff is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No staff account found with "
-                f"staff_id '{staff_id}'."
-            ),
+            detail=("No staff account found with " f"staff_id '{staff_id}'."),
         )
 
     return StaffOut.model_validate(staff)
@@ -225,9 +218,7 @@ def update_staff_details(
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-            ),
+            status_code=(status.HTTP_422_UNPROCESSABLE_ENTITY),
             detail=str(exc),
         ) from exc
 
