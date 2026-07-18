@@ -14,6 +14,7 @@ from agile_ci_demo.staff.schemas import (
     DoctorOut,
     StaffCreate,
     StaffOut,
+    StaffStatusUpdate,
     StaffUpdate,
 )
 from agile_ci_demo.staff.service import (
@@ -27,6 +28,7 @@ from agile_ci_demo.staff.service import (
     get_staff_by_staff_id,
     list_doctors,
     list_staff,
+    set_staff_active_status,
     update_staff,
 )
 
@@ -138,6 +140,30 @@ def get_doctor_details(
 # STAFF DETAILS AND UPDATE API
 # =========================================================
 
+# This route activates or deactivates one staff account.
+@api_router.patch(
+    "/{staff_id}/status",
+    response_model=StaffOut,
+)
+def update_staff_status(
+    staff_id: str,
+    payload: StaffStatusUpdate,
+    db: Session = Depends(get_db),
+) -> StaffOut:
+    try:
+        staff = set_staff_active_status(
+            db,
+            staff_id,
+            payload.is_active,
+        )
+
+    except StaffNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return StaffOut.model_validate(staff)
 
 # This route returns the details of one staff account.
 @api_router.get(

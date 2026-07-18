@@ -121,7 +121,7 @@ def test_create_consultation_note_success(client: TestClient) -> None:
     assert body["doctor_name"] == "Dr. Alan Chua"
     assert body["notes"] == "Patient presented with fever and cough for 3 days."
     assert body["diagnoses"] == [
-        {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+        {"id": 1, "icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
     ]
 
 
