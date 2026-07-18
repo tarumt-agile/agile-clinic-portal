@@ -427,13 +427,36 @@
 
       populateForm();
 
-      byId(
+      const editSection = byId(
         "staff-edit-section"
-      ).classList.remove("d-none");
+      );
+
+      editSection.classList.remove(
+        "d-none"
+      );
 
       byId(
         "edit-staff-button"
-      ).classList.add("d-none");
+      ).classList.add(
+        "d-none"
+      );
+
+      window.requestAnimationFrame(
+        function () {
+          editSection.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+          });
+
+          window.setTimeout(
+            function () {
+              nameInput.focus();
+              nameInput.select();
+            },
+            350
+          );
+        }
+      );
     }
   );
 
