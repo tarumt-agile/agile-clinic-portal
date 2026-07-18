@@ -1,131 +1,386 @@
 {% extends "base.html" %}
 
-{% block title %}Patient Details - Agile Clinic Portal{% endblock %}
+{% block title %}
+Patient Details - Agile Clinic Portal
+{% endblock %}
 
 {% block content %}
-<div id="patient-detail-root" data-patient-id="{{ patient_id }}">
+<div
+  id="patient-detail-root"
+  data-patient-id="{{ patient_id }}"
+>
   <div class="row justify-content-center">
     <div class="col-lg-8">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0">Patient <span id="heading-patient-id"></span></h1>
+      <div
+        class="d-flex justify-content-between
+          align-items-center mb-4"
+      >
+        <h1 class="h3 mb-0">
+          Patient
+          <span id="heading-patient-id"></span>
+        </h1>
+
         <div>
-          <a href="/patients" class="btn btn-outline-secondary">Back to list</a>
-          <button type="button" class="btn btn-primary" id="edit-btn">Edit</button>
+          <a
+            href="/patients"
+            class="btn btn-outline-secondary"
+          >
+            Back to List
+          </a>
+
+          <button
+            type="button"
+            class="btn btn-primary"
+            id="edit-btn"
+          >
+            Edit
+          </button>
         </div>
       </div>
 
-      <ul class="nav nav-tabs mb-3" id="patient-tabs" role="tablist">
-        <li class="nav-item" role="presentation">
-          <button class="nav-link active" id="details-tab-btn" data-bs-toggle="tab"
-                  data-bs-target="#details-tab" type="button" role="tab">Details</button>
+      <ul
+        class="nav nav-tabs mb-3"
+        id="patient-tabs"
+        role="tablist"
+      >
+        <li
+          class="nav-item"
+          role="presentation"
+        >
+          <button
+            class="nav-link active"
+            id="details-tab-btn"
+            data-bs-toggle="tab"
+            data-bs-target="#details-tab"
+            type="button"
+            role="tab"
+          >
+            Details
+          </button>
         </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="history-tab-btn" data-bs-toggle="tab"
-                  data-bs-target="#history-tab" type="button" role="tab">Medical History</button>
+
+        <li
+          class="nav-item"
+          role="presentation"
+        >
+          <button
+            class="nav-link"
+            id="history-tab-btn"
+            data-bs-toggle="tab"
+            data-bs-target="#history-tab"
+            type="button"
+            role="tab"
+          >
+            Medical History
+          </button>
         </li>
       </ul>
 
       <div class="tab-content">
-        <div class="tab-pane fade show active" id="details-tab" role="tabpanel">
-          <div id="detail-alert" class="alert alert-danger d-none" role="alert"></div>
-          <div id="not-found-alert" class="alert alert-warning d-none" role="alert">
+        <div
+          class="tab-pane fade show active"
+          id="details-tab"
+          role="tabpanel"
+        >
+          <div
+            id="detail-alert"
+            class="alert alert-danger d-none"
+            role="alert"
+          ></div>
+
+          <div
+            id="not-found-alert"
+            class="alert alert-warning d-none"
+            role="alert"
+          >
             No patient found with this ID.
           </div>
 
-          <!-- View mode -->
           <div id="view-mode">
             <dl class="row">
-              <dt class="col-sm-4">Full name</dt>
-              <dd class="col-sm-8" id="view-full-name"></dd>
+              <dt class="col-sm-4">
+                Full name
+              </dt>
 
-              <dt class="col-sm-4">Date of birth</dt>
-              <dd class="col-sm-8" id="view-dob"></dd>
+              <dd
+                class="col-sm-8"
+                id="view-full-name"
+              ></dd>
 
-              <dt class="col-sm-4">Gender</dt>
-              <dd class="col-sm-8 text-capitalize" id="view-gender"></dd>
+              <dt class="col-sm-4">
+                Date of birth
+              </dt>
 
-              <dt class="col-sm-4">Phone number</dt>
-              <dd class="col-sm-8" id="view-phone"></dd>
+              <dd
+                class="col-sm-8"
+                id="view-dob"
+              ></dd>
 
-              <dt class="col-sm-4">Email</dt>
-              <dd class="col-sm-8" id="view-email"></dd>
+              <dt class="col-sm-4">
+                Gender
+              </dt>
 
-              <dt class="col-sm-4">IC / Passport</dt>
-              <dd class="col-sm-8" id="view-ic"></dd>
+              <dd
+                class="col-sm-8 text-capitalize"
+                id="view-gender"
+              ></dd>
 
-              <dt class="col-sm-4">Address</dt>
-              <dd class="col-sm-8" id="view-address"></dd>
+              <dt class="col-sm-4">
+                Phone number
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-phone"
+              ></dd>
+
+              <dt class="col-sm-4">
+                Email
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-email"
+              ></dd>
+
+              <dt class="col-sm-4">
+                IC / Passport
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-ic"
+              ></dd>
+
+              <dt class="col-sm-4">
+                Address
+              </dt>
+
+              <dd
+                class="col-sm-8"
+                id="view-address"
+              ></dd>
             </dl>
           </div>
 
-          <!-- Edit mode -->
-          <form id="edit-form" class="d-none" novalidate>
+          <form
+            id="edit-form"
+            class="d-none"
+            novalidate
+          >
             <div class="row g-3">
               <div class="col-md-8">
-                <label for="edit-full_name" class="form-label">Full name *</label>
-                <input type="text" class="form-control" id="edit-full_name" name="full_name" required minlength="2" maxlength="120">
-                <div class="invalid-feedback">Full name is required.</div>
+                <label
+                  for="edit-full_name"
+                  class="form-label"
+                >
+                  Full name *
+                </label>
+
+                <input
+                  type="text"
+                  class="form-control"
+                  id="edit-full_name"
+                  name="full_name"
+                  required
+                  minlength="2"
+                  maxlength="120"
+                >
+
+                <div class="invalid-feedback">
+                  Full name is required.
+                </div>
               </div>
 
               <div class="col-md-4">
-                <label for="edit-date_of_birth" class="form-label">Date of birth *</label>
-                <input type="date" class="form-control" id="edit-date_of_birth" name="date_of_birth" required>
-                <div class="invalid-feedback">A valid date of birth (not in the future) is required.</div>
+                <label
+                  for="edit-date_of_birth"
+                  class="form-label"
+                >
+                  Date of birth *
+                </label>
+
+                <input
+                  type="date"
+                  class="form-control"
+                  id="edit-date_of_birth"
+                  name="date_of_birth"
+                  required
+                >
+
+                <div class="invalid-feedback">
+                  A valid date of birth is required.
+                </div>
               </div>
 
               <div class="col-md-4">
-                <label for="edit-gender" class="form-label">Gender *</label>
-                <select class="form-select" id="edit-gender" name="gender" required>
-                  <option value="" disabled>Choose...</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
+                <label
+                  for="edit-gender"
+                  class="form-label"
+                >
+                  Gender *
+                </label>
+
+                <select
+                  class="form-select"
+                  id="edit-gender"
+                  name="gender"
+                  required
+                >
+                  <option value="" disabled>
+                    Choose...
+                  </option>
+
+                  <option value="male">
+                    Male
+                  </option>
+
+                  <option value="female">
+                    Female
+                  </option>
+
+                  <option value="other">
+                    Other
+                  </option>
                 </select>
-                <div class="invalid-feedback">Please select a gender.</div>
+
+                <div class="invalid-feedback">
+                  Please select a gender.
+                </div>
               </div>
 
               <div class="col-md-4">
-                <label for="edit-phone_number" class="form-label">Phone number *</label>
-                <input type="tel" class="form-control" id="edit-phone_number" name="phone_number" required
-                       placeholder="e.g. 012-3456789" pattern="^\+?\d[\d\s\-]{6,19}$">
-                <div class="invalid-feedback">Enter a valid phone number (7-20 digits).</div>
+                <label
+                  for="edit-phone_number"
+                  class="form-label"
+                >
+                  Phone number *
+                </label>
+
+                <input
+                  type="tel"
+                  class="form-control"
+                  id="edit-phone_number"
+                  name="phone_number"
+                  required
+                  placeholder="e.g. 012-3456789"
+                  pattern="^\+?\d[\d\s\-]{6,19}$"
+                >
+
+                <div class="invalid-feedback">
+                  Enter a valid phone number.
+                </div>
               </div>
 
               <div class="col-md-4">
-                <label for="edit-email" class="form-label">Email</label>
-                <input type="email" class="form-control" id="edit-email" name="email" placeholder="optional">
-                <div class="invalid-feedback">Enter a valid email address.</div>
+                <label
+                  for="edit-email"
+                  class="form-label"
+                >
+                  Email
+                </label>
+
+                <input
+                  type="email"
+                  class="form-control"
+                  id="edit-email"
+                  name="email"
+                  placeholder="optional"
+                >
+
+                <div class="invalid-feedback">
+                  Enter a valid email address.
+                </div>
               </div>
 
               <div class="col-md-6">
-                <label for="edit-ic_or_passport" class="form-label">IC / Passport number *</label>
-                <input type="text" class="form-control" id="edit-ic_or_passport" name="ic_or_passport" required minlength="5" maxlength="30">
-                <div class="invalid-feedback">IC / passport number is required.</div>
-              </div>
+                <label
+                  for="edit-address"
+                  class="form-label"
+                >
+                  Address
+                </label>
 
-              <div class="col-md-6">
-                <label for="edit-address" class="form-label">Address</label>
-                <input type="text" class="form-control" id="edit-address" name="address" placeholder="optional" maxlength="255">
+                <input
+                  type="text"
+                  class="form-control"
+                  id="edit-address"
+                  name="address"
+                  placeholder="optional"
+                  maxlength="255"
+                >
+
+                <div class="form-text">
+                  IC number is system-generated
+                  and cannot be edited.
+                </div>
               </div>
             </div>
 
             <div class="mt-4 d-flex gap-2">
-              <button type="submit" class="btn btn-primary" id="save-btn">Save Changes</button>
-              <button type="button" class="btn btn-outline-secondary" id="cancel-btn">Cancel</button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                id="save-btn"
+              >
+                Save Changes
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-outline-secondary"
+                id="cancel-btn"
+              >
+                Cancel
+              </button>
             </div>
           </form>
         </div>
 
-        <div class="tab-pane fade" id="history-tab" role="tabpanel">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <label for="history-search" class="visually-hidden">Search medical history</label>
-            <input type="search" id="history-search" class="form-control me-3"
-                   placeholder="Search by diagnosis or note keyword" autocomplete="off">
-            <a href="#" id="new-record-link" class="btn btn-primary text-nowrap">+ New Consultation Note</a>
+        <div
+          class="tab-pane fade"
+          id="history-tab"
+          role="tabpanel"
+        >
+          <div
+            class="d-flex justify-content-between
+              align-items-center mb-3"
+          >
+            <label
+              for="history-search"
+              class="visually-hidden"
+            >
+              Search medical history
+            </label>
+
+            <input
+              type="search"
+              id="history-search"
+              class="form-control me-3"
+              placeholder="Search by diagnosis or note keyword"
+              autocomplete="off"
+            >
+
+            <a
+              href="#"
+              id="new-record-link"
+              class="btn btn-primary text-nowrap"
+            >
+              + New Consultation Note
+            </a>
           </div>
 
-          <div id="history-alert" class="alert alert-danger d-none" role="alert"></div>
-          <div id="history-empty" class="text-muted text-center py-4 d-none">
+          <div
+            id="history-alert"
+            class="alert alert-danger d-none"
+            role="alert"
+          ></div>
+
+          <div
+            id="history-empty"
+            class="text-muted text-center
+              py-4 d-none"
+          >
             No consultation notes found.
           </div>
 
@@ -136,19 +391,40 @@
   </div>
 </div>
 
-<!-- Success dialog, shown after a successful save -->
-<div class="modal fade" id="success-modal" tabindex="-1" aria-labelledby="success-modal-label" aria-hidden="true">
+<div
+  class="modal fade"
+  id="success-modal"
+  tabindex="-1"
+  aria-hidden="true"
+>
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header bg-success text-white">
-        <h5 class="modal-title" id="success-modal-label">Patient Updated</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div
+        class="modal-header bg-success text-white"
+      >
+        <h2 class="modal-title h5">
+          Patient Updated
+        </h2>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+        ></button>
       </div>
+
       <div class="modal-body">
-        <p class="mb-0">The patient's details have been saved successfully.</p>
+        Patient details were updated successfully.
       </div>
+
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          data-bs-dismiss="modal"
+        >
+          OK
+        </button>
       </div>
     </div>
   </div>

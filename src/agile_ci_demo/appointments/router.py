@@ -105,6 +105,37 @@ def get_my_schedule(
     )
 
 
+@api_router.get("/schedule/by-doctor", response_model=DoctorSchedule)
+def get_schedule_for_doctor(
+    doctor_id: str = Query(..., description="Doctor's public staff_id, e.g. S00001"),
+    schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    db: Session = Depends(get_db),
+) -> DoctorSchedule:
+    """A specific doctor's appointments for a given date (defaults to today), for
+    front-desk staff looking up any doctor's schedule - unlike /schedule, which is
+    always the current doctor's own."""
+    doctor = get_staff_by_staff_id(db, doctor_id)
+    if doctor is None or doctor.role != Role.DOCTOR.value:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No doctor found with staff_id '{doctor_id}'",
+        )
+
+    try:
+        appointments = get_doctor_schedule(db, doctor.id, schedule_date)
+    except PastDateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    return DoctorSchedule(
+        doctor_id=doctor.staff_id or "",
+        doctor_name=doctor.full_name,
+        schedule_date=schedule_date,
+        appointments=[_serialize(a) for a in appointments],
+    )
+
+
 @api_router.get("/slots", response_model=DoctorSlots)
 def get_slots(
     doctor_id: str = Query(..., description="Doctor's public staff_id, e.g. S00001"),
@@ -188,6 +219,21 @@ def create_appointment_page(request: Request) -> HTMLResponse:
 @pages_router.get("/schedule", response_class=HTMLResponse)
 def schedule_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "appointments/doctor_viewSchedule.html", {})
+
+
+@pages_router.get("/consultations", response_class=HTMLResponse)
+def start_consultation_page(request: Request) -> HTMLResponse:
+    """Doctor's schedule with a "Start Consultation" action per appointment instead
+    of "Cancel" - links into records.new_note_page (ping's consultation-note flow)."""
+    return templates.TemplateResponse(request, "appointments/doctor_startConsultation.html", {})
+
+
+@pages_router.get("/doctor-schedule", response_class=HTMLResponse)
+def receptionist_doctor_schedule_page(request: Request) -> HTMLResponse:
+    """Front-desk view of any doctor's schedule for today, filterable by doctor."""
+    return templates.TemplateResponse(
+        request, "appointments/receptionist_viewDoctorSchedule.html", {}
+    )
 
 
 @pages_router.get("/book", response_class=HTMLResponse)
