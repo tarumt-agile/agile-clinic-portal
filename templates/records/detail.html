@@ -1,44 +1,306 @@
 {% extends "base.html" %}
 
-{% block title %}Consultation Note - Agile Clinic Portal{% endblock %}
+{% block title %}
+Consultation Record - Agile Clinic Portal
+{% endblock %}
 
 {% block content %}
-<div id="record-detail-root" data-record-id="{{ record_id }}">
+<div
+  id="record-detail-root"
+  data-record-id="{{ record_id }}"
+>
   <div class="row justify-content-center">
-    <div class="col-lg-8">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0">Consultation Note <span id="heading-record-id"></span></h1>
-        <a href="#" id="back-to-patient-link" class="btn btn-outline-secondary">Back to patient</a>
+    <div class="col-xl-9">
+      <header
+        class="d-flex justify-content-between
+          align-items-start gap-3 mb-4"
+      >
+        <div>
+          <p class="text-muted mb-1">
+            Medical Records / Consultation
+          </p>
+
+          <h1 class="h3 mb-1">
+            Consultation
+            <span id="heading-record-id"></span>
+          </h1>
+
+          <p class="text-muted mb-0">
+            Review diagnoses and prescribe
+            medication for each diagnosis.
+          </p>
+        </div>
+
+        <a
+          href="#"
+          id="back-to-patient-link"
+          class="btn btn-outline-secondary"
+        >
+          Back to Patient
+        </a>
+      </header>
+
+      <div
+        id="detail-alert"
+        class="alert alert-danger d-none"
+        role="alert"
+      ></div>
+
+      <div
+        id="not-found-alert"
+        class="alert alert-warning d-none"
+        role="alert"
+      >
+        No consultation record found.
       </div>
 
-      <div id="detail-alert" class="alert alert-danger d-none" role="alert"></div>
-      <div id="not-found-alert" class="alert alert-warning d-none" role="alert">
-        No consultation note found with this ID.
+      <div
+        id="record-content"
+        class="d-none"
+      >
+        <section class="card mb-4">
+          <div class="card-body">
+            <h2 class="h5 mb-3">
+              Consultation Information
+            </h2>
+
+            <dl class="row mb-0">
+              <dt class="col-sm-3">
+                Patient
+              </dt>
+
+              <dd
+                class="col-sm-9"
+                id="view-patient"
+              ></dd>
+
+              <dt class="col-sm-3">
+                Doctor
+              </dt>
+
+              <dd
+                class="col-sm-9"
+                id="view-doctor"
+              ></dd>
+
+              <dt class="col-sm-3">
+                Visit Date
+              </dt>
+
+              <dd
+                class="col-sm-9"
+                id="view-visit-date"
+              ></dd>
+            </dl>
+          </div>
+        </section>
+
+        <section class="card mb-4">
+          <div class="card-body">
+            <h2 class="h5">
+              Consultation Notes
+            </h2>
+
+            <p
+              id="view-notes"
+              class="mb-0"
+              style="white-space: pre-wrap;"
+            ></p>
+          </div>
+        </section>
+
+        <section>
+          <div
+            class="d-flex justify-content-between
+              align-items-center mb-3"
+          >
+            <div>
+              <h2 class="h4 mb-1">
+                Diagnoses and Prescriptions
+              </h2>
+
+              <p class="text-muted mb-0">
+                Add one or more medications
+                under each diagnosis.
+              </p>
+            </div>
+          </div>
+
+          <div
+            id="record-prescription-alert"
+            class="alert alert-danger d-none"
+          ></div>
+
+          <div id="diagnosis-list"></div>
+        </section>
       </div>
+    </div>
+  </div>
+</div>
 
-      <div id="record-content" class="d-none">
-        <dl class="row mb-4">
-          <dt class="col-sm-3">Patient</dt>
-          <dd class="col-sm-9" id="view-patient"></dd>
+<div
+  class="modal fade"
+  id="add-prescription-modal"
+  tabindex="-1"
+  aria-labelledby="add-prescription-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form
+        id="add-prescription-form"
+        novalidate
+      >
+        <div class="modal-header">
+          <div>
+            <h2
+              id="add-prescription-title"
+              class="modal-title fs-5"
+            >
+              Add Medication
+            </h2>
 
-          <dt class="col-sm-3">Doctor</dt>
-          <dd class="col-sm-9" id="view-doctor"></dd>
+            <p
+              id="selected-diagnosis-label"
+              class="text-muted small mb-0"
+            ></p>
+          </div>
 
-          <dt class="col-sm-3">Visit date</dt>
-          <dd class="col-sm-9" id="view-visit-date"></dd>
-        </dl>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
+        </div>
 
-        <h2 class="h5">Diagnoses</h2>
-        <div id="diagnosis-list" class="mb-4"></div>
+        <div class="modal-body">
+          <div
+            id="prescription-form-alert"
+            class="alert alert-danger d-none"
+          ></div>
 
-        <h2 class="h5">Notes</h2>
-        <p id="view-notes" class="border rounded p-3 bg-white" style="white-space: pre-wrap;"></p>
-      </div>
+          <input
+            type="hidden"
+            id="prescription-diagnosis-id"
+          >
+
+          <div class="mb-3">
+            <label
+              for="prescription-medication"
+              class="form-label"
+            >
+              Medication *
+            </label>
+
+            <select
+              id="prescription-medication"
+              class="form-select"
+              required
+            >
+              <option value="">
+                Loading medications...
+              </option>
+            </select>
+
+            <div class="invalid-feedback">
+              Please select a medication.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="prescription-dosage"
+              class="form-label"
+            >
+              Dosage *
+            </label>
+
+            <select
+              id="prescription-dosage"
+              class="form-select"
+              required
+            >
+              <option value="">
+                Loading dosages...
+              </option>
+            </select>
+
+            <div class="invalid-feedback">
+              Please select a dosage.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="prescription-frequency"
+              class="form-label"
+            >
+              Frequency *
+            </label>
+
+            <select
+              id="prescription-frequency"
+              class="form-select"
+              required
+            >
+              <option value="">
+                Loading frequencies...
+              </option>
+            </select>
+
+            <div class="invalid-feedback">
+              Please select a frequency.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label
+              for="prescription-duration"
+              class="form-label"
+            >
+              Duration *
+            </label>
+
+            <select
+              id="prescription-duration"
+              class="form-select"
+              required
+            >
+              <option value="">
+                Loading durations...
+              </option>
+            </select>
+
+            <div class="invalid-feedback">
+              Please select a duration.
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            id="save-prescription-button"
+            class="btn btn-primary"
+          >
+            Add Medication
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/record_detail.js"></script>
-{% endblock %}
+<script src="/static/js/record_detail.js?v=5"></script>
+{% endblock %}  

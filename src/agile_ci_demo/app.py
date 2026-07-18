@@ -18,6 +18,7 @@ from agile_ci_demo.records.router import api_router as records_api_router
 from agile_ci_demo.records.router import pages_router as records_pages_router
 from agile_ci_demo.staff.router import api_router as staff_api_router
 from agile_ci_demo.staff.router import pages_router as staff_pages_router
+from agile_ci_demo.prescription.router import (api_router as prescription_api_router,)
 
 
 @asynccontextmanager
@@ -41,6 +42,7 @@ app.include_router(appointments_api_router)
 app.include_router(appointments_pages_router)
 app.include_router(records_api_router)
 app.include_router(records_pages_router)
+app.include_router(prescription_api_router)
 
 
 class Item(BaseModel):
