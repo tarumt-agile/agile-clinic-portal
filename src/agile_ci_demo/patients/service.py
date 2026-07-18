@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import datetime as dt
+import random
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.patients.schemas import PatientCreate, PatientUpdate
+
+_IC_GENERATION_ATTEMPTS = 20
 
 
 class DuplicatePatientError(Exception):
@@ -16,23 +21,34 @@ class PatientNotFoundError(Exception):
     """Raised when a patient_id does not match any stored patient."""
 
 
+def generate_ic(db: Session, date_of_birth: dt.date) -> str:
+    """Generate a unique, Malaysia-style simulated IC number: YYMMDD-0X-XXXX.
+
+    YYMMDD is derived from the patient's date_of_birth, the two-digit group
+    always starts with 0 (second digit 1-9), and the last four digits are
+    random. Retries on the rare chance of a collision with an existing
+    patient's IC.
+    """
+    yymmdd = date_of_birth.strftime("%y%m%d")
+    for _ in range(_IC_GENERATION_ATTEMPTS):
+        candidate = f"{yymmdd}-0{random.randint(1, 9)}-{random.randint(0, 9999):04d}"
+        exists = db.execute(
+            select(Patient).where(Patient.ic_or_passport == candidate)
+        ).scalar_one_or_none()
+        if exists is None:
+            return candidate
+    raise RuntimeError("Could not generate a unique IC number - please try again")
+
+
 def create_patient(db: Session, data: PatientCreate) -> Patient:
     """Register a new patient and assign it a unique, sequential patient_id (e.g. P00001)."""
-    existing = db.execute(
-        select(Patient).where(Patient.ic_or_passport == data.ic_or_passport)
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise DuplicatePatientError(
-            f"A patient with IC/passport '{data.ic_or_passport}' is already registered"
-        )
-
     patient = Patient(
         full_name=data.full_name,
         date_of_birth=data.date_of_birth,
         gender=data.gender.value,
         phone_number=data.phone_number,
         email=data.email,
-        ic_or_passport=data.ic_or_passport,
+        ic_or_passport=generate_ic(db, data.date_of_birth),
         address=data.address,
     )
     db.add(patient)
@@ -51,6 +67,14 @@ def create_patient(db: Session, data: PatientCreate) -> Patient:
 
 def get_patient_by_patient_id(db: Session, patient_id: str) -> Patient | None:
     return db.execute(select(Patient).where(Patient.patient_id == patient_id)).scalar_one_or_none()
+
+
+def get_patient_by_ic(db: Session, ic_or_passport: str) -> Patient | None:
+    """Look up a patient by their exact IC/passport number - used when front-desk
+    staff identify a patient from the IC the patient hands over in person."""
+    return db.execute(
+        select(Patient).where(Patient.ic_or_passport == ic_or_passport)
+    ).scalar_one_or_none()
 
 
 def get_current_patient(db: Session) -> Patient | None:
@@ -85,35 +109,19 @@ def search_patients(
 
 
 def update_patient(db: Session, patient_id: str, data: PatientUpdate) -> Patient:
-    """Update every field of an existing patient. Re-validates uniqueness of IC/passport."""
+    """Update a patient's editable details. IC/passport is system-generated at
+    registration and is not editable."""
     patient = get_patient_by_patient_id(db, patient_id)
     if patient is None:
         raise PatientNotFoundError(f"No patient found with patient_id '{patient_id}'")
-
-    conflict = db.execute(
-        select(Patient).where(
-            Patient.ic_or_passport == data.ic_or_passport,
-            Patient.id != patient.id,
-        )
-    ).scalar_one_or_none()
-    if conflict is not None:
-        raise DuplicatePatientError(
-            f"A patient with IC/passport '{data.ic_or_passport}' is already registered"
-        )
 
     patient.full_name = data.full_name
     patient.date_of_birth = data.date_of_birth
     patient.gender = data.gender.value
     patient.phone_number = data.phone_number
     patient.email = data.email
-    patient.ic_or_passport = data.ic_or_passport
     patient.address = data.address
 
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise DuplicatePatientError("Patient could not be updated due to a conflict") from exc
-
+    db.commit()
     db.refresh(patient)
     return patient

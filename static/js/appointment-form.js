@@ -8,6 +8,7 @@
   const submitBtn = document.getElementById("submit-btn");
   const dateInput = document.getElementById("appointment_date");
   const patientIdInput = document.getElementById("patient_id");
+  const patientIcInput = document.getElementById("patient_ic");
   const patientFeedback = document.getElementById("patient-lookup-feedback");
   const patientDisplay = document.getElementById("patient-display");
   const specialtySelect = document.getElementById("specialty");
@@ -18,10 +19,12 @@
   const confirmationModalEl = document.getElementById("confirmation-modal");
   const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
 
-  // The receptionist form has a free-text Patient ID field (type="text") the
-  // receptionist looks up. The patient self-booking form locks it (type="hidden")
-  // and auto-fills it from "the current patient" - see loadCurrentPatient().
-  const isSelfBooking = patientIdInput.type === "hidden";
+  // The receptionist/nurse form has a Patient IC field the staff member looks up
+  // (the patient hands over their IC in person) - a hidden patient_id field is
+  // resolved from that lookup and is what actually gets submitted. The patient
+  // self-booking form has no IC field at all: it auto-fills patient_id from "the
+  // current patient" - see loadCurrentPatient().
+  const isSelfBooking = !patientIcInput;
   let allDoctors = [];
   let currentPatientId = "";
 
@@ -85,10 +88,10 @@
   async function loadDoctors() {
     doctorSelect.innerHTML = '<option value="" selected disabled>Loading doctors...</option>';
     try {
-      const response = await fetch("/api/staff");
+      const response = await fetch("/api/staff/doctor");
       if (!response.ok) throw new Error("Request failed");
-      const staff = await response.json();
-      allDoctors = staff.filter((s) => s.role === "doctor" && s.is_active);
+      const doctors = await response.json();
+      allDoctors = doctors.filter((d) => d.status === "active");
 
       const specialties = [...new Set(allDoctors.map((d) => d.specialty))].sort();
       specialtySelect.innerHTML =
@@ -193,24 +196,27 @@
   }
 
   async function lookupPatient() {
-    const patientId = patientIdInput.value.trim();
+    const ic = patientIcInput.value.trim();
     patientFeedback.textContent = "";
     patientFeedback.classList.remove("text-danger", "text-success");
-    if (!patientId) return;
+    patientIcInput.classList.remove("is-invalid");
+    patientIdInput.value = "";
+    if (!ic) return;
 
     try {
-      const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`);
+      const response = await fetch(`/api/patients/by-ic/${encodeURIComponent(ic)}`);
       if (response.status === 404) {
-        patientFeedback.textContent = "No patient found with this ID.";
+        patientFeedback.textContent = "No patient found with this IC.";
         patientFeedback.classList.add("text-danger");
         return;
       }
       if (!response.ok) throw new Error("Request failed");
       const patient = await response.json();
-      patientFeedback.textContent = `✓ ${patient.full_name}`;
+      patientIdInput.value = patient.patient_id;
+      patientFeedback.textContent = `✓ ${patient.full_name} (${patient.patient_id})`;
       patientFeedback.classList.add("text-success");
     } catch (err) {
-      patientFeedback.textContent = "Unable to verify patient ID right now.";
+      patientFeedback.textContent = "Unable to verify this IC right now.";
       patientFeedback.classList.add("text-danger");
     }
   }
@@ -235,9 +241,11 @@
     clearFieldErrors();
 
     const slotMissing = !startTimeInput.value;
-    if (!form.checkValidity() || slotMissing) {
+    const patientUnresolved = !isSelfBooking && !patientIdInput.value;
+    if (!form.checkValidity() || slotMissing || patientUnresolved) {
       form.classList.add("was-validated");
       if (slotMissing) slotError.classList.add("d-block");
+      if (patientUnresolved) patientIcInput.classList.add("is-invalid");
       return;
     }
 
@@ -321,7 +329,7 @@
   if (isSelfBooking) {
     loadCurrentPatient();
   } else {
-    patientIdInput.addEventListener("blur", lookupPatient);
+    patientIcInput.addEventListener("blur", lookupPatient);
   }
   form.addEventListener("submit", handleSubmit);
   loadDoctors();

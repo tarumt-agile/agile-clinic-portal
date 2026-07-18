@@ -52,7 +52,6 @@ window.PatientForm = (function () {
       date_of_birth: data.get("date_of_birth"),
       gender: data.get("gender"),
       phone_number: data.get("phone_number")?.trim(),
-      ic_or_passport: data.get("ic_or_passport")?.trim(),
     };
     const email = data.get("email")?.trim();
     const address = data.get("address")?.trim();
@@ -68,7 +67,6 @@ window.PatientForm = (function () {
     form.elements.namedItem("gender").value = patient.gender || "";
     form.elements.namedItem("phone_number").value = patient.phone_number || "";
     form.elements.namedItem("email").value = patient.email || "";
-    form.elements.namedItem("ic_or_passport").value = patient.ic_or_passport || "";
     form.elements.namedItem("address").value = patient.address || "";
   }
 

@@ -104,16 +104,15 @@ def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
 
     assert ids == ["S00001", "S00002", "S00003"]
 
-   
-
 
 @pytest.mark.parametrize("role", ["admin", "doctor", "nurse"])
-def test_create_staff_allows_multiple_roles(client: TestClient,role: str) -> None:
-    payload = valid_staff_payload(email=f"{role}@example.com",role=role,)
+def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> None:
+    payload = valid_staff_payload(email=f"{role}@example.com", role=role)
 
-    if role == "doctor":payload.update(
-            {"license_number": "MMC-12345","specialty": "General Medicine","status": "active",}
-    )
+    if role == "doctor":
+        payload.update(
+            {"license_number": "MMC-12345", "specialty": "General Medicine", "status": "active"}
+        )
     response = client.post("/api/staff", json=payload)
     assert response.status_code == 201, response.json()
     assert response.json()["role"] == role
@@ -127,8 +126,19 @@ def test_create_staff_invalid_role_returns_422(client: TestClient) -> None:
 # --- 1a. Specialty validation --------------------------------------------------
 
 
-def test_create_doctor_with_specialty_succeeds(client: TestClient,) -> None:
-    response = client.post("/api/staff", json=valid_staff_payload(full_name="Dr. Alice Wong",role="doctor",license_number="MMC-12345",specialty="Cardiology",status="active",),)
+def test_create_doctor_with_specialty_succeeds(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            full_name="Dr. Alice Wong",
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="Cardiology",
+            status="active",
+        ),
+    )
     assert response.status_code == 201, response.json()
     assert response.json()["specialty"] == "Cardiology"
 
@@ -146,6 +156,7 @@ def test_create_doctor_without_specialty_returns_422(
     response = client.post("/api/staff", json=payload)
     assert response.status_code == 422
 
+
 def test_create_doctor_without_license_returns_422(
     client: TestClient,
 ) -> None:
@@ -160,6 +171,7 @@ def test_create_doctor_without_license_returns_422(
     response = client.post("/api/staff", json=payload)
 
     assert response.status_code == 422
+
 
 def test_create_non_doctor_with_specialty_returns_422(client: TestClient) -> None:
     """A specialty only makes sense for doctors - rejecting it elsewhere prevents
