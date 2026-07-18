@@ -280,7 +280,7 @@ def test_different_doctor_same_slot_succeeds(client: TestClient) -> None:
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
     doctor_a = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
-    doctor_b = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com",license_number="MMC-67980")
+    doctor_b = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67980")
 
     r1 = client.post("/api/appointments", json=valid_appointment_payload(patient_a, doctor_a))
     assert r1.status_code == 201
