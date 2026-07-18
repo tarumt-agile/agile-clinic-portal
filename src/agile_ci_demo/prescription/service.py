@@ -20,7 +20,7 @@ from agile_ci_demo.prescription.models import (
 )
 from agile_ci_demo.prescription.schemas import (
     PrescriptionCreate,
-    PrescriptionDosageUpdate,
+    PrescriptionInstructionUpdate,
 )
 from agile_ci_demo.records.models import Diagnosis
 from agile_ci_demo.records.service import (
@@ -141,7 +141,7 @@ class PrescriptionNotFoundError(Exception):
 
 
 class ConsultationRecordNotFoundError(Exception):
-    """Raised when a consultation is not found."""
+    """Raised when a consultation record is not found."""
 
 
 class DiagnosisNotFoundError(Exception):
@@ -149,7 +149,7 @@ class DiagnosisNotFoundError(Exception):
 
 
 class CurrentDoctorNotFoundError(Exception):
-    """Raised when no current doctor is available."""
+    """Raised when a current doctor is not found."""
 
 
 class PrescriptionPermissionError(Exception):
@@ -161,6 +161,8 @@ class PrescriptionConflictError(Exception):
 
 
 def get_prescription_options() -> dict[str, object]:
+    """Return selectable prescription form options."""
+
     return {
         "medications": MEDICATION_OPTIONS,
         "dosages": DOSAGE_OPTIONS,
@@ -170,6 +172,8 @@ def get_prescription_options() -> dict[str, object]:
 
 
 def _prescription_load_options():
+    """Return relationship-loading options."""
+
     return (
         selectinload(
             Prescription.consultation_note
@@ -195,6 +199,8 @@ def create_prescription(
     db: Session,
     data: PrescriptionCreate,
 ) -> Prescription:
+    """Create a prescription for one diagnosis."""
+
     consultation = (
         get_consultation_note_by_record_id(
             db,
@@ -285,6 +291,8 @@ def get_prescription_by_public_id(
     db: Session,
     prescription_id: str,
 ) -> Prescription | None:
+    """Return one prescription by public ID."""
+
     statement = (
         select(Prescription)
         .options(
@@ -305,6 +313,8 @@ def get_patient_prescriptions(
     db: Session,
     patient_id: str,
 ) -> list[Prescription]:
+    """Return a patient's prescriptions newest first."""
+
     patient = get_patient_by_patient_id(
         db,
         patient_id,
@@ -341,6 +351,8 @@ def get_consultation_prescriptions(
     db: Session,
     record_id: str,
 ) -> list[Prescription]:
+    """Return prescriptions for one consultation."""
+
     consultation = (
         get_consultation_note_by_record_id(
             db,
@@ -376,11 +388,13 @@ def get_consultation_prescriptions(
     )
 
 
-def update_prescription_dosage(
+def update_prescription_instructions(
     db: Session,
     prescription_id: str,
-    data: PrescriptionDosageUpdate,
+    data: PrescriptionInstructionUpdate,
 ) -> Prescription:
+    """Update prescription instructions and save history."""
+
     prescription = (
         get_prescription_by_public_id(
             db,
@@ -409,16 +423,30 @@ def update_prescription_dosage(
             "update this prescription."
         )
 
-    if data.dosage == prescription.dosage:
+    if prescription.status != "active":
         raise PrescriptionConflictError(
-            "The new dosage is the same as "
-            "the current dosage."
+            "Only an active prescription can be updated."
+        )
+
+    no_change = (
+        data.dosage == prescription.dosage
+        and data.frequency == prescription.frequency
+        and data.duration == prescription.duration
+    )
+
+    if no_change:
+        raise PrescriptionConflictError(
+            "No prescription instruction was changed."
         )
 
     revision = PrescriptionHistory(
         prescription_id=prescription.id,
         previous_dosage=prescription.dosage,
         new_dosage=data.dosage,
+        previous_frequency=prescription.frequency,
+        new_frequency=data.frequency,
+        previous_duration=prescription.duration,
+        new_duration=data.duration,
         change_reason=data.change_reason,
         changed_by_doctor_id=current_doctor.id,
     )
@@ -426,6 +454,8 @@ def update_prescription_dosage(
     db.add(revision)
 
     prescription.dosage = data.dosage
+    prescription.frequency = data.frequency
+    prescription.duration = data.duration
 
     try:
         db.commit()
@@ -434,7 +464,7 @@ def update_prescription_dosage(
         db.rollback()
 
         raise PrescriptionConflictError(
-            "The dosage update could not be saved."
+            "The prescription update could not be saved."
         ) from exc
 
     return (

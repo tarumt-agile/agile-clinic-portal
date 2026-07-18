@@ -36,62 +36,160 @@ class Base(DeclarativeBase):
     """Shared declarative base for all ORM models."""
 
 
-def migrate_sqlite_prescriptions() -> None:
-    """Add the diagnosis link to an older SQLite database."""
+def migrate_sqlite_database() -> None:
+    """Update older SQLite tables to match the current models."""
 
-    if not settings.database_url.startswith(
-        "sqlite"
-    ):
+    if not settings.database_url.startswith("sqlite"):
         return
 
     inspector = inspect(engine)
-
-    if "prescriptions" not in inspector.get_table_names():
-        return
-
-    existing_columns = {
-        column["name"]
-        for column in inspector.get_columns(
-            "prescriptions"
-        )
-    }
+    table_names = set(inspector.get_table_names())
 
     with engine.begin() as connection:
-        if "diagnosis_id" not in existing_columns:
+        # Add diagnosis_id to old prescriptions table.
+        if "prescriptions" in table_names:
+            prescription_columns = {
+                column["name"]
+                for column in inspector.get_columns(
+                    "prescriptions"
+                )
+            }
+
+            if "diagnosis_id" not in prescription_columns:
+                connection.execute(
+                    text(
+                        """
+                        ALTER TABLE prescriptions
+                        ADD COLUMN diagnosis_id INTEGER
+                        REFERENCES diagnoses(id)
+                        """
+                    )
+                )
+
+            # Link old prescriptions to the first diagnosis
+            # belonging to the same consultation.
             connection.execute(
                 text(
                     """
-                    ALTER TABLE prescriptions
-                    ADD COLUMN diagnosis_id INTEGER
-                    REFERENCES diagnoses(id)
+                    UPDATE prescriptions
+                    SET diagnosis_id = (
+                        SELECT diagnoses.id
+                        FROM diagnoses
+                        WHERE
+                            diagnoses.consultation_note_id
+                            =
+                            prescriptions.consultation_note_id
+                        ORDER BY diagnoses.id ASC
+                        LIMIT 1
+                    )
+                    WHERE diagnosis_id IS NULL
                     """
                 )
             )
 
-        # Assign older prescriptions to the first diagnosis
-        # belonging to their consultation.
-        connection.execute(
-            text(
-                """
-                UPDATE prescriptions
-                SET diagnosis_id = (
-                    SELECT diagnoses.id
-                    FROM diagnoses
-                    WHERE
-                        diagnoses.consultation_note_id
-                        =
-                        prescriptions.consultation_note_id
-                    ORDER BY diagnoses.id ASC
-                    LIMIT 1
+        # Add instruction history columns to old history table.
+        if "prescription_history" in table_names:
+            history_columns = {
+                column["name"]
+                for column in inspector.get_columns(
+                    "prescription_history"
                 )
-                WHERE diagnosis_id IS NULL
-                """
+            }
+
+            if (
+                "previous_frequency"
+                not in history_columns
+            ):
+                connection.execute(
+                    text(
+                        """
+                        ALTER TABLE prescription_history
+                        ADD COLUMN previous_frequency
+                        VARCHAR(120)
+                        """
+                    )
+                )
+
+            if "new_frequency" not in history_columns:
+                connection.execute(
+                    text(
+                        """
+                        ALTER TABLE prescription_history
+                        ADD COLUMN new_frequency
+                        VARCHAR(120)
+                        """
+                    )
+                )
+
+            if (
+                "previous_duration"
+                not in history_columns
+            ):
+                connection.execute(
+                    text(
+                        """
+                        ALTER TABLE prescription_history
+                        ADD COLUMN previous_duration
+                        VARCHAR(120)
+                        """
+                    )
+                )
+
+            if "new_duration" not in history_columns:
+                connection.execute(
+                    text(
+                        """
+                        ALTER TABLE prescription_history
+                        ADD COLUMN new_duration
+                        VARCHAR(120)
+                        """
+                    )
+                )
+
+            # Give older history rows safe values.
+            connection.execute(
+                text(
+                    """
+                    UPDATE prescription_history
+                    SET previous_frequency = ''
+                    WHERE previous_frequency IS NULL
+                    """
+                )
             )
-        )
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE prescription_history
+                    SET new_frequency = ''
+                    WHERE new_frequency IS NULL
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE prescription_history
+                    SET previous_duration = ''
+                    WHERE previous_duration IS NULL
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    UPDATE prescription_history
+                    SET new_duration = ''
+                    WHERE new_duration IS NULL
+                    """
+                )
+            )
 
 
 def init_db() -> None:
-    """Create tables and apply small SQLite migrations."""
+    """Create all tables and update older SQLite tables."""
 
     from agile_ci_demo.appointments import (
         models as _appointments_models,
@@ -111,7 +209,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
 
-    migrate_sqlite_prescriptions()
+    migrate_sqlite_database()
 
 
 def get_db() -> Generator[
@@ -119,7 +217,7 @@ def get_db() -> Generator[
     None,
     None,
 ]:
-    """Provide one database session per request."""
+    """Provide one database session for each request."""
 
     db = SessionLocal()
 

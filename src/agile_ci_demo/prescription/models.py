@@ -135,6 +135,22 @@ class PrescriptionHistory(Base):
         String(120),
     )
 
+    previous_frequency: Mapped[str] = mapped_column(
+        String(120),
+    )
+
+    new_frequency: Mapped[str] = mapped_column(
+        String(120),
+    )
+
+    previous_duration: Mapped[str] = mapped_column(
+        String(120),
+    )
+
+    new_duration: Mapped[str] = mapped_column(
+        String(120),
+    )
+
     change_reason: Mapped[str] = mapped_column(
         Text,
     )

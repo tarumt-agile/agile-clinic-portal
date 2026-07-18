@@ -66,7 +66,7 @@ class PrescriptionCreate(BaseModel):
         "duration",
     )
     @classmethod
-    def fields_must_not_be_blank(
+    def validate_required_text(
         cls,
         value: str,
     ) -> str:
@@ -82,8 +82,18 @@ class PrescriptionCreate(BaseModel):
         return value
 
 
-class PrescriptionDosageUpdate(BaseModel):
+class PrescriptionInstructionUpdate(BaseModel):
     dosage: str = Field(
+        min_length=1,
+        max_length=120,
+    )
+
+    frequency: str = Field(
+        min_length=1,
+        max_length=120,
+    )
+
+    duration: str = Field(
         min_length=1,
         max_length=120,
     )
@@ -95,10 +105,12 @@ class PrescriptionDosageUpdate(BaseModel):
 
     @field_validator(
         "dosage",
+        "frequency",
+        "duration",
         "change_reason",
     )
     @classmethod
-    def fields_must_not_be_blank(
+    def validate_required_text(
         cls,
         value: str,
     ) -> str:
@@ -117,6 +129,13 @@ class PrescriptionDosageUpdate(BaseModel):
 class PrescriptionHistoryOut(BaseModel):
     previous_dosage: str
     new_dosage: str
+
+    previous_frequency: str
+    new_frequency: str
+
+    previous_duration: str
+    new_duration: str
+
     change_reason: str
 
     changed_by_doctor_id: str

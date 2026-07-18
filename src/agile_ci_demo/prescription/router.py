@@ -16,8 +16,8 @@ from agile_ci_demo.prescription.models import (
 from agile_ci_demo.prescription.schemas import (
     MedicationOption,
     PrescriptionCreate,
-    PrescriptionDosageUpdate,
     PrescriptionHistoryOut,
+    PrescriptionInstructionUpdate,
     PrescriptionList,
     PrescriptionOptionsOut,
     PrescriptionOut,
@@ -34,7 +34,7 @@ from agile_ci_demo.prescription.service import (
     get_patient_prescriptions,
     get_prescription_by_public_id,
     get_prescription_options,
-    update_prescription_dosage,
+    update_prescription_instructions,
 )
 
 
@@ -54,6 +54,18 @@ def serialize_prescription(
                 item.previous_dosage
             ),
             new_dosage=item.new_dosage,
+            previous_frequency=(
+                item.previous_frequency
+            ),
+            new_frequency=(
+                item.new_frequency
+            ),
+            previous_duration=(
+                item.previous_duration
+            ),
+            new_duration=(
+                item.new_duration
+            ),
             change_reason=item.change_reason,
             changed_by_doctor_id=(
                 item.changed_by_doctor.staff_id
@@ -112,9 +124,9 @@ def serialize_prescription(
         updated_at=prescription.updated_at,
         can_edit=(
             current_doctor_id is not None
+            and prescription.status == "active"
             and (
-                prescription
-                .prescribing_doctor_id
+                prescription.prescribing_doctor_id
                 == current_doctor_id
             )
         ),
@@ -122,7 +134,7 @@ def serialize_prescription(
     )
 
 
-# This route returns the available prescription form options.
+# This route returns prescription form options.
 @api_router.get(
     "/options",
     response_model=PrescriptionOptionsOut,
@@ -142,7 +154,7 @@ def get_available_prescription_options(
     )
 
 
-# This route creates medication for one diagnosis.
+# This route creates a prescription for one diagnosis.
 @api_router.post(
     "",
     response_model=PrescriptionOut,
@@ -195,7 +207,7 @@ def create_prescription_endpoint(
     )
 
 
-# This route returns a patient's prescription history.
+# This route returns a patient's prescriptions.
 @api_router.get(
     "/patient/{patient_id}",
     response_model=PrescriptionList,
@@ -234,7 +246,7 @@ def get_patient_prescription_history(
     )
 
 
-# This route returns all medication for one consultation.
+# This route returns prescriptions for one consultation.
 @api_router.get(
     "/consultation/{record_id}",
     response_model=PrescriptionList,
@@ -307,19 +319,23 @@ def get_prescription_details(
     )
 
 
-# This route updates one prescription dosage.
+# This route updates prescription instructions.
+@api_router.patch(
+    "/{prescription_id}/instructions",
+    response_model=PrescriptionOut,
+)
 @api_router.patch(
     "/{prescription_id}/dosage",
     response_model=PrescriptionOut,
 )
-def update_prescription_dosage_endpoint(
+def update_prescription_instructions_endpoint(
     prescription_id: str,
-    payload: PrescriptionDosageUpdate,
+    payload: PrescriptionInstructionUpdate,
     db: Session = Depends(get_db),
 ) -> PrescriptionOut:
     try:
         prescription = (
-            update_prescription_dosage(
+            update_prescription_instructions(
                 db,
                 prescription_id,
                 payload,

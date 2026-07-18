@@ -36,13 +36,30 @@
       "edit-prescription-modal"
     );
 
-  const editModal = window.bootstrap
-    ? new bootstrap.Modal(
-        editModalElement
-      )
-    : null;
+  const editModal =
+    window.bootstrap && editModalElement
+      ? new bootstrap.Modal(
+          editModalElement
+        )
+      : null;
+
+  const dosageSelect =
+    document.getElementById(
+      "edit-prescription-dosage"
+    );
+
+  const frequencySelect =
+    document.getElementById(
+      "edit-prescription-frequency"
+    );
+
+  const durationSelect =
+    document.getElementById(
+      "edit-prescription-duration"
+    );
 
   let prescriptions = [];
+  let prescriptionOptions = null;
   let hasLoaded = false;
 
   function escapeHtml(value) {
@@ -65,45 +82,143 @@
       );
   }
 
+  function getStatusClass(status) {
+    if (status === "active") {
+      return "text-bg-success";
+    }
+
+    if (status === "completed") {
+      return "text-bg-primary";
+    }
+
+    return "text-bg-secondary";
+  }
+
   function formatDate(value) {
     return new Date(value).toLocaleString();
   }
 
+  async function readResponse(response) {
+    const contentType =
+      response.headers.get(
+        "content-type"
+      ) || "";
+
+    if (
+      contentType.includes(
+        "application/json"
+      )
+    ) {
+      return await response.json();
+    }
+
+    return {
+      detail:
+        await response.text()
+    };
+  }
+
+  function createSelectOptions(
+    values,
+    selectedValue
+  ) {
+    return values
+      .map(function (value) {
+        const selected =
+          value === selectedValue
+            ? "selected"
+            : "";
+
+        return `
+          <option
+            value="${escapeHtml(value)}"
+            ${selected}
+          >
+            ${escapeHtml(value)}
+          </option>
+        `;
+      })
+      .join("");
+  }
+
+  async function loadPrescriptionOptions() {
+    if (prescriptionOptions) {
+      return prescriptionOptions;
+    }
+
+    const response = await fetch(
+      "/api/prescriptions/options"
+    );
+
+    const data = await readResponse(response);
+
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+        "Prescription options could not be loaded."
+      );
+    }
+
+    prescriptionOptions = data;
+
+    return data;
+  }
+
   function renderHistory(history) {
-    if (!history || history.length === 0) {
+    if (
+      !history ||
+      history.length === 0
+    ) {
       return "";
     }
 
     return `
       <details class="mt-3">
         <summary class="fw-semibold">
-          Dosage Change History
+          Instruction Change History
         </summary>
 
-        <div class="mt-2">
+        <div class="mt-3">
           ${history.map(function (item) {
             return `
               <div
                 class="border-start border-3
-                  ps-3 py-2 mb-2"
+                  ps-3 py-2 mb-3"
               >
                 <p class="mb-1">
-                  <strong>
-                    ${escapeHtml(
-                      item.previous_dosage
-                    )}
-                  </strong>
-
+                  <strong>Dosage:</strong>
+                  ${escapeHtml(
+                    item.previous_dosage
+                  )}
                   →
-
-                  <strong>
-                    ${escapeHtml(
-                      item.new_dosage
-                    )}
-                  </strong>
+                  ${escapeHtml(
+                    item.new_dosage
+                  )}
                 </p>
 
-                <p class="mb-1 small">
+                <p class="mb-1">
+                  <strong>Frequency:</strong>
+                  ${escapeHtml(
+                    item.previous_frequency
+                  )}
+                  →
+                  ${escapeHtml(
+                    item.new_frequency
+                  )}
+                </p>
+
+                <p class="mb-1">
+                  <strong>Duration:</strong>
+                  ${escapeHtml(
+                    item.previous_duration
+                  )}
+                  →
+                  ${escapeHtml(
+                    item.new_duration
+                  )}
+                </p>
+
+                <p class="mb-1">
                   <strong>Reason:</strong>
                   ${escapeHtml(
                     item.change_reason
@@ -117,7 +232,9 @@
                   )}
                   on
                   ${escapeHtml(
-                    formatDate(item.changed_at)
+                    formatDate(
+                      item.changed_at
+                    )
                   )}
                 </p>
               </div>
@@ -130,7 +247,10 @@
 
   function renderPrescriptions() {
     if (prescriptions.length === 0) {
-      emptyBox.classList.remove("d-none");
+      emptyBox.classList.remove(
+        "d-none"
+      );
+
       list.innerHTML = "";
       return;
     }
@@ -145,14 +265,14 @@
               type="button"
               class="btn btn-sm
                 btn-outline-primary
-                edit-dosage-button"
+                edit-prescription-button"
               data-prescription-id="${
                 escapeHtml(
                   item.prescription_id
                 )
               }"
             >
-              Edit Dosage
+              Edit Instructions
             </button>
           `
           : "";
@@ -167,7 +287,7 @@
                 <div>
                   <div
                     class="d-flex align-items-center
-                      gap-2 mb-2"
+                      flex-wrap gap-2 mb-2"
                   >
                     <h3 class="h5 mb-0">
                       ${escapeHtml(
@@ -176,13 +296,36 @@
                     </h3>
 
                     <span
-                      class="badge text-bg-success"
+                      class="badge
+                        ${getStatusClass(
+                          item.status
+                        )}"
                     >
                       ${escapeHtml(
-                        formatStatus(item.status)
+                        formatStatus(
+                          item.status
+                        )
                       )}
                     </span>
                   </div>
+
+                  <p class="mb-2">
+                    <strong>Disease:</strong>
+
+                    <span
+                      class="badge
+                        bg-danger-subtle
+                        text-danger-emphasis"
+                    >
+                      ${escapeHtml(
+                        item.diagnosis_code
+                      )}
+                    </span>
+
+                    ${escapeHtml(
+                      item.diagnosis_description
+                    )}
+                  </p>
 
                   <p class="mb-1">
                     <strong>Dosage:</strong>
@@ -243,7 +386,7 @@
       .join("");
 
     list.querySelectorAll(
-      ".edit-dosage-button"
+      ".edit-prescription-button"
     ).forEach(function (button) {
       button.addEventListener(
         "click",
@@ -265,7 +408,8 @@
         encodeURIComponent(patientId)
       );
 
-      const data = await response.json();
+      const data =
+        await readResponse(response);
 
       if (!response.ok) {
         throw new Error(
@@ -274,58 +418,117 @@
         );
       }
 
-      prescriptions = Array.isArray(data.items)
+      prescriptions = Array.isArray(
+        data.items
+      )
         ? data.items
         : [];
 
       renderPrescriptions();
 
     } catch (error) {
-      alertBox.textContent = error.message;
-      alertBox.classList.remove("d-none");
+      alertBox.textContent =
+        error.message;
+
+      alertBox.classList.remove(
+        "d-none"
+      );
     }
   }
 
-  function openEditModal(prescriptionId) {
-    const prescription = prescriptions.find(
-      function (item) {
-        return (
-          item.prescription_id
-          === prescriptionId
-        );
-      }
-    );
+  async function openEditModal(
+    prescriptionId
+  ) {
+    const prescription =
+      prescriptions.find(
+        function (item) {
+          return (
+            item.prescription_id
+            === prescriptionId
+          );
+        }
+      );
 
-    if (!prescription || !prescription.can_edit) {
+    if (
+      !prescription ||
+      !prescription.can_edit
+    ) {
       return;
     }
 
-    document.getElementById(
-      "edit-prescription-id"
-    ).value = prescription.prescription_id;
+    const updateAlert =
+      document.getElementById(
+        "edit-prescription-alert"
+      );
 
-    document.getElementById(
-      "edit-prescription-medication"
-    ).value = prescription.medication;
-
-    document.getElementById(
-      "edit-prescription-dosage"
-    ).value = prescription.dosage;
-
-    document.getElementById(
-      "edit-prescription-reason"
-    ).value = "";
-
-    document.getElementById(
-      "edit-prescription-alert"
-    ).classList.add("d-none");
+    updateAlert.classList.add(
+      "d-none"
+    );
 
     editForm.classList.remove(
       "was-validated"
     );
 
-    if (editModal) {
-      editModal.show();
+    try {
+      const options =
+        await loadPrescriptionOptions();
+
+      document.getElementById(
+        "edit-prescription-id"
+      ).value =
+        prescription.prescription_id;
+
+      document.getElementById(
+        "edit-prescription-medication"
+      ).value =
+        prescription.medication;
+
+      document.getElementById(
+        "edit-prescription-diagnosis"
+      ).textContent =
+        `${prescription.diagnosis_code} - ` +
+        prescription.diagnosis_description;
+
+      dosageSelect.innerHTML =
+        createSelectOptions(
+          options.dosages,
+          prescription.dosage
+        );
+
+      frequencySelect.innerHTML =
+        createSelectOptions(
+          options.frequencies,
+          prescription.frequency
+        );
+
+      durationSelect.innerHTML =
+        createSelectOptions(
+          options.durations,
+          prescription.duration
+        );
+
+      document.getElementById(
+        "edit-prescription-reason"
+      ).value = "";
+
+      if (editModal) {
+        editModal.show();
+      }
+
+      window.setTimeout(
+        function () {
+          dosageSelect.focus();
+        },
+        300
+      );
+
+    } catch (error) {
+      alertBox.textContent =
+        error.message;
+
+      alertBox.classList.remove(
+        "d-none"
+      );
     }
   }
 
@@ -339,7 +542,9 @@
           "edit-prescription-alert"
         );
 
-      updateAlert.classList.add("d-none");
+      updateAlert.classList.add(
+        "d-none"
+      );
 
       if (!editForm.checkValidity()) {
         editForm.classList.add(
@@ -354,13 +559,6 @@
           "edit-prescription-id"
         ).value;
 
-      const dosage =
-        document.getElementById(
-          "edit-prescription-dosage"
-        ).value
-          .trim()
-          .replace(/\s+/g, " ");
-
       const changeReason =
         document.getElementById(
           "edit-prescription-reason"
@@ -370,11 +568,12 @@
 
       const saveButton =
         document.getElementById(
-          "save-dosage-button"
+          "save-prescription-instructions-button"
         );
 
       saveButton.disabled = true;
-      saveButton.textContent = "Saving...";
+      saveButton.textContent =
+        "Saving...";
 
       try {
         const response = await fetch(
@@ -382,7 +581,7 @@
           encodeURIComponent(
             prescriptionId
           ) +
-          "/dosage",
+          "/instructions",
           {
             method: "PATCH",
 
@@ -392,19 +591,25 @@
             },
 
             body: JSON.stringify({
-              dosage: dosage,
-              change_reason: changeReason
+              dosage:
+                dosageSelect.value,
+              frequency:
+                frequencySelect.value,
+              duration:
+                durationSelect.value,
+              change_reason:
+                changeReason
             })
           }
         );
 
-        const data = await response.json();
+        const data =
+          await readResponse(response);
 
         if (!response.ok) {
           throw new Error(
-            typeof data.detail === "string"
-              ? data.detail
-              : "Dosage could not be updated."
+            data.detail ||
+            "Prescription instructions could not be updated."
           );
         }
 
@@ -425,7 +630,7 @@
       } finally {
         saveButton.disabled = false;
         saveButton.textContent =
-          "Save Dosage";
+          "Save Changes";
       }
     }
   );
