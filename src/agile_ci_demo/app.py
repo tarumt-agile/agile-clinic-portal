@@ -6,9 +6,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import RedirectResponse
 
 from agile_ci_demo.appointments.router import api_router as appointments_api_router
 from agile_ci_demo.appointments.router import pages_router as appointments_pages_router
+from agile_ci_demo.auth.deps import NotAuthenticatedError
 from agile_ci_demo.auth.router import api_router as auth_api_router
 from agile_ci_demo.auth.router import pages_router as auth_pages_router
 from agile_ci_demo.core.config import settings
@@ -32,6 +34,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Agile Clinic Portal", version="0.1.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+
+
+@app.exception_handler(NotAuthenticatedError)
+def handle_not_authenticated(request, exc: NotAuthenticatedError) -> RedirectResponse:
+    return RedirectResponse("/auth/login", status_code=303)
+
 
 if settings.static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")

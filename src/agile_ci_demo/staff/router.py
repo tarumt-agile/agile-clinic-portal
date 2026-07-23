@@ -8,7 +8,9 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
 from agile_ci_demo.staff.schemas import (
     DoctorOut,
@@ -237,6 +239,7 @@ def update_staff_details(
 )
 def staff_list_page(
     request: Request,
+    _staff=Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,

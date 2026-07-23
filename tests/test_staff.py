@@ -257,9 +257,47 @@ def test_create_staff_page_renders(client: TestClient) -> None:
 
 
 def test_staff_list_page_renders(client: TestClient) -> None:
+    """The HTML staff list page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
     r = client.get("/staff")
     assert r.status_code == 200
     assert "Staff" in r.text
+
+
+def test_staff_list_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_staff_list_page_loads_when_logged_in_as_admin(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+    r = client.get("/staff")
+    assert r.status_code == 200
+
+
+def test_staff_list_page_redirects_for_wrong_role(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse@example.com", "password": temp_password})
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
 
 
 def test_list_staff_returns_created_accounts(client: TestClient) -> None:

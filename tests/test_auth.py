@@ -46,13 +46,15 @@ def client() -> Generator[TestClient, None, None]:
 
 
 def _create_staff_and_get_temp_password(
-    client: TestClient, email: str = "alice.wong@example.com"
+    client: TestClient, email: str = "alice.wong@example.com", role: str = "nurse"
 ) -> str:
     """Create a staff account via the API and pull the temp password out of the welcome email."""
-    r = client.post(
-        "/api/staff",
-        json={"full_name": "Alice Wong", "email": email, "role": "nurse"},
-    )
+    payload: dict[str, object] = {"full_name": "Alice Wong", "email": email, "role": role}
+    if role == "doctor":
+        payload.update(
+            {"license_number": "MMC-12345", "specialty": "General Medicine", "status": "active"}
+        )
+    r = client.post("/api/staff", json=payload)
     assert r.status_code == 201
 
     body = get_outbox()[-1].body
@@ -144,3 +146,27 @@ def test_login_wrong_password_on_deactivated_account_still_returns_401(
         "/api/auth/login", json={"email": "alice.wong@example.com", "password": "wrong-password"}
     )
     assert r.status_code == 401
+
+
+# --- 3. Session login/logout -------------------------------------------------
+
+
+def test_login_sets_a_session(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.get("/staff/create")
+    assert r.status_code == 200
+
+
+def test_logout_clears_the_session(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    client.post("/api/auth/logout")
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
