@@ -763,7 +763,7 @@ def test_doctor_schedule_page_loads_when_logged_in_as_receptionist(client: TestC
 
     r = client.get("/appointments/doctor-schedule")
     assert r.status_code == 200
-    assert "Doctor Schedule" in r.text or "doctor" in r.text.lower()
+    assert "Doctor Schedule" in r.text
 
 
 # --- 9. BDD-style tests with pytest-bdd --------------------------------------
