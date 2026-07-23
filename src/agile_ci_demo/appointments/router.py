@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.appointments.models import Appointment
+from agile_ci_demo.auth.deps import require_patient, require_role
 from agile_ci_demo.appointments.schemas import (
     AppointmentCancel,
     AppointmentCreate,
@@ -210,26 +211,36 @@ def cancel_appointment_endpoint(
 
 
 @pages_router.get("/create", response_class=HTMLResponse)
-def create_appointment_page(request: Request) -> HTMLResponse:
+def create_appointment_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "appointments/receptionist_createAppointment.html", {}
     )
 
 
 @pages_router.get("/schedule", response_class=HTMLResponse)
-def doctor_schedule_page(request: Request) -> HTMLResponse:
+def doctor_schedule_page(
+    request: Request, _staff=Depends(require_role(Role.DOCTOR))
+) -> HTMLResponse:
     return templates.TemplateResponse(request, "appointments/doctor_viewSchedule.html", {})
 
 
 @pages_router.get("/consultations", response_class=HTMLResponse)
-def start_consultation_page(request: Request) -> HTMLResponse:
+def start_consultation_page(
+    request: Request, _staff=Depends(require_role(Role.DOCTOR))
+) -> HTMLResponse:
     """Doctor's schedule with a "Start Consultation" action per appointment instead
     of "Cancel" - links into records.new_note_page (ping's consultation-note flow)."""
     return templates.TemplateResponse(request, "appointments/doctor_startConsultation.html", {})
 
 
 @pages_router.get("/doctor-schedule", response_class=HTMLResponse)
-def receptionist_doctor_schedule_page(request: Request) -> HTMLResponse:
+def receptionist_doctor_schedule_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
+) -> HTMLResponse:
     """Front-desk view of any doctor's schedule for today, filterable by doctor."""
     return templates.TemplateResponse(
         request, "appointments/receptionist_viewDoctorSchedule.html", {}
@@ -237,7 +248,7 @@ def receptionist_doctor_schedule_page(request: Request) -> HTMLResponse:
 
 
 @pages_router.get("/book", response_class=HTMLResponse)
-def self_book_appointment_page(request: Request) -> HTMLResponse:
+def self_book_appointment_page(request: Request, _patient=Depends(require_patient)) -> HTMLResponse:
     """Patient self-service booking. Patient identity is a placeholder (see
     patients.service.get_current_patient) - the form auto-fills and locks the
     Patient ID field instead of asking the patient to type their own ID."""
@@ -245,5 +256,5 @@ def self_book_appointment_page(request: Request) -> HTMLResponse:
 
 
 @pages_router.get("/mine", response_class=HTMLResponse)
-def my_appointments_page(request: Request) -> HTMLResponse:
+def my_appointments_page(request: Request, _patient=Depends(require_patient)) -> HTMLResponse:
     return templates.TemplateResponse(request, "appointments/patient_appointment.html", {})

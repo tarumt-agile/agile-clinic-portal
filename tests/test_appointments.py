@@ -152,6 +152,15 @@ def test_get_unknown_appointment_returns_404(client: TestClient) -> None:
 
 def test_create_appointment_page_renders(client: TestClient) -> None:
     """The HTML appointment booking form page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
+    )
+
     r = client.get("/appointments/create")
     assert r.status_code == 200
     assert "Book Appointment" in r.text
@@ -159,6 +168,12 @@ def test_create_appointment_page_renders(client: TestClient) -> None:
 
 def test_self_book_appointment_page_renders(client: TestClient) -> None:
     """The HTML patient self-service booking page loads successfully."""
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+    )
+
     r = client.get("/appointments/book")
     assert r.status_code == 200
     assert "Book My Appointment" in r.text
@@ -387,6 +402,13 @@ def test_get_schedule_no_doctor_returns_404(client: TestClient) -> None:
 
 def test_schedule_page_renders(client: TestClient) -> None:
     """The HTML doctor schedule page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
     r = client.get("/appointments/schedule")
     assert r.status_code == 200
     assert "My Schedule" in r.text
@@ -673,9 +695,35 @@ def test_patient_can_cancel_their_own_appointment(client: TestClient) -> None:
 
 def test_my_appointments_page_renders(client: TestClient) -> None:
     """The HTML "My Appointments" page loads successfully."""
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+    )
+
     r = client.get("/appointments/mine")
     assert r.status_code == 200
     assert "My Appointments" in r.text
+
+
+def test_create_appointment_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/create", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_schedule_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/schedule", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_book_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/book", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_mine_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/mine", follow_redirects=False)
+    assert r.status_code == 303
 
 
 # --- 9. BDD-style tests with pytest-bdd --------------------------------------
