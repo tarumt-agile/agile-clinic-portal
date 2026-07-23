@@ -73,55 +73,85 @@ jobs:
               root = ET.parse(path).getroot()
               suite = root if root.tag == "testsuite" else root.find("testsuite")
 
-              total = int(suite.get("tests", 0))
-              failures = int(suite.get("failures", 0))
-              errors = int(suite.get("errors", 0))
-              skipped = int(suite.get("skipped", 0))
-              passed = total - failures - errors - skipped
+              def classify(testcase):
+                  if testcase.find("failure") is not None or testcase.find("error") is not None:
+                      return "failed"
+                  skipped_el = testcase.find("skipped")
+                  if skipped_el is not None:
+                      if skipped_el.get("type") == "pytest.xfail":
+                          return "xfail"
+                      return "skipped"
+                  return "passed"
 
-              print("| Result | Count |")
-              print("|---|---|")
-              print(f"| Passed | {passed} |")
-              print(f"| Failed | {failures + errors} |")
-              print(f"| Skipped | {skipped} |")
-              print(f"| **Total** | **{total}** |")
-              print()
+              def new_counts():
+                  return {"passed": 0, "failed": 0, "xfail": 0, "skipped": 0}
 
-              # Tests are auto-classified into "acceptance" (BDD/Gherkin scenarios)
-              # or "io" (hits TestClient/a DB session) by tests/conftest.py, via a
-              # "category" property recorded on each testcase. Anything the
-              # conftest didn't classify shows up here as "other" - this stays
-              # accurate as new tests are added without needing to be updated.
-              by_category = defaultdict(lambda: {"passed": 0, "failed": 0, "skipped": 0})
-              for testcase in suite.findall("testcase"):
+              testcases = suite.findall("testcase")
+              overall = new_counts()
+              by_category = defaultdict(new_counts)
+              by_file = defaultdict(new_counts)
+
+              for testcase in testcases:
+                  outcome = classify(testcase)
+                  overall[outcome] += 1
+
+                  # Tests are auto-classified into "acceptance" (BDD/Gherkin
+                  # scenarios) or "io" (hits TestClient/a DB session) by
+                  # tests/conftest.py, via a "category" property recorded on
+                  # each testcase. Anything the conftest didn't classify shows
+                  # up as "other" - this stays accurate as new tests are added
+                  # without needing to be updated.
                   category = "other"
                   for prop in testcase.findall("./properties/property"):
                       if prop.get("name") == "category":
                           category = prop.get("value")
+                  by_category[category][outcome] += 1
 
-                  if testcase.find("failure") is not None or testcase.find("error") is not None:
-                      by_category[category]["failed"] += 1
-                  elif testcase.find("skipped") is not None:
-                      by_category[category]["skipped"] += 1
-                  else:
-                      by_category[category]["passed"] += 1
+                  # junit's classname is a dotted module path (e.g.
+                  # "tests.test_patients") - turn it back into a file path.
+                  classname = testcase.get("classname", "unknown")
+                  file_path = classname.replace(".", "/") + ".py"
+                  by_file[file_path][outcome] += 1
+
+              total = len(testcases)
+              print("| Result | Count |")
+              print("|---|---|")
+              print(f"| Passed | {overall['passed']} |")
+              print(f"| Failed | {overall['failed']} |")
+              print(f"| Known Failing (xfail) | {overall['xfail']} |")
+              print(f"| Skipped | {overall['skipped']} |")
+              print(f"| **Total** | **{total}** |")
+              print()
 
               labels = {"acceptance": "Acceptance", "io": "I/O", "other": "Other"}
               order = ["acceptance", "io", "other"]
-              categories = [c for c in order if c in by_category]
-              categories += [c for c in by_category if c not in categories]
 
               print("### By test type")
               print()
-              print("| Type | Passed | Failed | Skipped | Total |")
-              print("|---|---|---|---|---|")
+              print("| Type | Passed | Failed | Known Failing | Skipped | Total |")
+              print("|---|---|---|---|---|---|")
+              categories = [c for c in order if c in by_category]
+              categories += sorted(c for c in by_category if c not in categories)
               for category in categories:
                   counts = by_category[category]
-                  cat_total = counts["passed"] + counts["failed"] + counts["skipped"]
+                  cat_total = sum(counts.values())
                   label = labels.get(category, category.title())
                   print(
                       f"| {label} | {counts['passed']} | {counts['failed']} | "
-                      f"{counts['skipped']} | {cat_total} |"
+                      f"{counts['xfail']} | {counts['skipped']} | {cat_total} |"
+                  )
+              print()
+
+              print("### By test file")
+              print()
+              print("| File | Passed | Failed | Known Failing | Skipped | Total |")
+              print("|---|---|---|---|---|---|")
+              for file_path in sorted(by_file):
+                  counts = by_file[file_path]
+                  file_total = sum(counts.values())
+                  print(
+                      f"| `{file_path}` | {counts['passed']} | {counts['failed']} | "
+                      f"{counts['xfail']} | {counts['skipped']} | {file_total} |"
                   )
           else:
               print("_No test results found (the Python 3.13 job may not have completed)._")
