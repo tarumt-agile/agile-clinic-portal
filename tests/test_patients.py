@@ -223,8 +223,32 @@ def test_register_generates_unique_ic_for_same_date_of_birth(client: TestClient)
     assert r1.json()["ic_or_passport"] != r2.json()["ic_or_passport"]
 
 
+def _login_as_receptionist(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
+    )
+
+
+def test_register_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients/register", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_register_page_loads_when_logged_in_as_receptionist(client: TestClient) -> None:
+    _login_as_receptionist(client)
+    r = client.get("/patients/register")
+    assert r.status_code == 200
+
+
 def test_register_page_renders(client: TestClient) -> None:
     """The HTML registration form page loads successfully."""
+    _login_as_receptionist(client)
+
     r = client.get("/patients/register")
     assert r.status_code == 200
     assert "Register New Patient" in r.text
@@ -317,8 +341,15 @@ def test_list_patients_pagination(client: TestClient) -> None:
     assert len(r2.json()["items"]) == 2
 
 
+def test_list_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_list_page_renders(client: TestClient) -> None:
     """The HTML patient list page loads successfully."""
+    _login_as_receptionist(client)
+
     r = client.get("/patients")
     assert r.status_code == 200
     assert "Patients" in r.text
@@ -389,8 +420,15 @@ def test_update_patient_does_not_change_ic(client: TestClient) -> None:
     assert r.json()["ic_or_passport"] == original_ic
 
 
+def test_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients/P00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_detail_page_renders(client: TestClient) -> None:
     """The HTML patient detail page loads successfully for any patient_id (client fetches data)."""
+    _login_as_receptionist(client)
+
     r = client.get("/patients/P00001")
     assert r.status_code == 200
     assert "Edit" in r.text

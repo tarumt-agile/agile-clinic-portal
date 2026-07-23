@@ -5,7 +5,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.auth.deps import require_patient
+from agile_ci_demo.auth.deps import require_patient, require_role
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.patients.schemas import (
@@ -111,12 +112,18 @@ def edit_patient(
 
 
 @pages_router.get("/register", response_class=HTMLResponse)
-def register_patient_page(request: Request) -> HTMLResponse:
+def register_patient_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.DOCTOR, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/receptionist_registerPatients.html", {})
 
 
 @pages_router.get("", response_class=HTMLResponse)
-def list_patients_page(request: Request) -> HTMLResponse:
+def list_patients_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.DOCTOR, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/receptionist_viewPatients.html", {})
 
 
@@ -127,7 +134,11 @@ def patient_dashboard_page(request: Request, _patient=Depends(require_patient)) 
 
 
 @pages_router.get("/{patient_id}", response_class=HTMLResponse)
-def patient_detail_page(request: Request, patient_id: str) -> HTMLResponse:
+def patient_detail_page(
+    request: Request,
+    patient_id: str,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.DOCTOR, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "patients/patients_details.html", {"patient_id": patient_id}
     )

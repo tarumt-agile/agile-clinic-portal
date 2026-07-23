@@ -180,6 +180,17 @@ def register_doctor(
     return str(response.json()["staff_id"])
 
 
+def _login_as_receptionist(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
+    )
+
+
 def create_consultation(
     client: TestClient,
     patient_id: str,
@@ -876,6 +887,8 @@ def test_prescription_creation_page_renders(
 def test_patient_page_contains_prescriptions_tab(
     client: TestClient,
 ) -> None:
+    _login_as_receptionist(client)
+
     patient_id = register_patient(client)
 
     response = client.get(f"/patients/{patient_id}")
