@@ -105,7 +105,7 @@ def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
     assert ids == ["S00001", "S00002", "S00003"]
 
 
-@pytest.mark.parametrize("role", ["admin", "doctor", "nurse"])
+@pytest.mark.parametrize("role", ["admin", "doctor", "nurse", "receptionist"])
 def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> None:
     payload = valid_staff_payload(email=f"{role}@example.com", role=role)
 

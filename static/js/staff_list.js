@@ -36,7 +36,8 @@
   const roleLabels = {
     admin: "Administration",
     doctor: "Doctor",
-    nurse: "Nurse (Receptionist)"
+    nurse: "Nurse",
+    receptionist: "Receptionist"
   };
 
   let staffAccounts = [];
@@ -62,7 +63,8 @@
     const validRoles = [
       "admin",
       "doctor",
-      "nurse"
+      "nurse",
+      "receptionist"
     ];
 
     if (!validRoles.includes(role)) {
