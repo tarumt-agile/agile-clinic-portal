@@ -256,6 +256,7 @@ def staff_list_page(
 )
 def create_staff_page(
     request: Request,
+    _staff=Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -272,6 +273,7 @@ def create_staff_page(
 def staff_detail_page(
     request: Request,
     staff_id: str,
+    _staff=Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,

@@ -251,9 +251,26 @@ def test_create_staff_sends_welcome_email_with_temp_password(client: TestClient)
 
 
 def test_create_staff_page_renders(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
     r = client.get("/staff/create")
     assert r.status_code == 200
     assert "Create Staff Account" in r.text
+
+
+def test_create_staff_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/create", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_staff_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/S00001", follow_redirects=False)
+    assert r.status_code == 303
 
 
 def test_staff_list_page_renders(client: TestClient) -> None:
