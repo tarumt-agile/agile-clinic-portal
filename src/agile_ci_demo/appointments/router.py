@@ -217,7 +217,7 @@ def create_appointment_page(request: Request) -> HTMLResponse:
 
 
 @pages_router.get("/schedule", response_class=HTMLResponse)
-def schedule_page(request: Request) -> HTMLResponse:
+def doctor_schedule_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "appointments/doctor_viewSchedule.html", {})
 
 
