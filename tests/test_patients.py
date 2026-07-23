@@ -396,6 +396,23 @@ def test_detail_page_renders(client: TestClient) -> None:
     assert "Edit" in r.text
 
 
+def test_dashboard_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients/dashboard", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_dashboard_page_loads_when_logged_in_as_patient(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+    )
+
+    r = client.get("/patients/dashboard")
+    assert r.status_code == 200
+
+
 # --- 5. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/patients.feature
 

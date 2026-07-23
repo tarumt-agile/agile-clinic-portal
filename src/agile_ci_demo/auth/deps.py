@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
+from agile_ci_demo.patients.models import Patient
+from agile_ci_demo.patients.service import get_patient_by_patient_id
 from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.service import get_staff_by_staff_id
 
@@ -19,6 +21,11 @@ def login_staff(request: Request, staff: Staff) -> None:
     request.session["user_type"] = "staff"
     request.session["staff_id"] = staff.staff_id
     request.session["role"] = staff.role
+
+
+def login_patient(request: Request, patient: Patient) -> None:
+    request.session["user_type"] = "patient"
+    request.session["patient_id"] = patient.patient_id
 
 
 def logout(request: Request) -> None:
@@ -37,3 +44,11 @@ def require_role(*roles: Role) -> Callable[..., Staff]:
         return staff
 
     return dependency
+
+
+def require_patient(request: Request, db: Session = Depends(get_db)) -> Patient:
+    patient_id = request.session.get("patient_id")
+    patient = get_patient_by_patient_id(db, patient_id) if patient_id else None
+    if patient is None:
+        raise NotAuthenticatedError()
+    return patient

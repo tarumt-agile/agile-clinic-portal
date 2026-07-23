@@ -17,3 +17,15 @@ class LoginResponse(BaseModel):
     full_name: str
     role: Role
     must_change_password: bool
+
+
+class PatientLoginRequest(BaseModel):
+    patient_id: str
+    ic_or_passport: str
+
+
+class PatientLoginResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    patient_id: str
+    full_name: str

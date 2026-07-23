@@ -4,6 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.core.security import verify_password
+from agile_ci_demo.patients.models import Patient
+from agile_ci_demo.patients.service import get_patient_by_patient_id
 from agile_ci_demo.staff.models import Staff
 
 
@@ -29,3 +31,11 @@ def authenticate_staff(db: Session, email: str, password: str) -> Staff:
         raise AccountInactiveError("This account has been deactivated")
 
     return staff
+
+
+def authenticate_patient(db: Session, patient_id: str, ic_or_passport: str) -> Patient:
+    """Verify a patient's ID and IC/passport number match a registered patient."""
+    patient = get_patient_by_patient_id(db, patient_id)
+    if patient is None or patient.ic_or_passport != ic_or_passport:
+        raise InvalidCredentialsError("Invalid patient ID or IC/passport number")
+    return patient

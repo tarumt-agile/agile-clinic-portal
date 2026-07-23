@@ -2,11 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.auth.deps import login_staff, logout
-from agile_ci_demo.auth.schemas import LoginRequest, LoginResponse
+from agile_ci_demo.auth.deps import login_patient, login_staff, logout
+from agile_ci_demo.auth.schemas import (
+    LoginRequest,
+    LoginResponse,
+    PatientLoginRequest,
+    PatientLoginResponse,
+)
 from agile_ci_demo.auth.service import (
     AccountInactiveError,
     InvalidCredentialsError,
+    authenticate_patient,
     authenticate_staff,
 )
 from agile_ci_demo.core.database import get_db
@@ -30,6 +36,19 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
     login_staff(request, staff)
     return LoginResponse.model_validate(staff)
+
+
+@api_router.post("/patient-login", response_model=PatientLoginResponse)
+def patient_login(
+    payload: PatientLoginRequest, request: Request, db: Session = Depends(get_db)
+) -> PatientLoginResponse:
+    try:
+        patient = authenticate_patient(db, payload.patient_id, payload.ic_or_passport)
+    except InvalidCredentialsError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+    login_patient(request, patient)
+    return PatientLoginResponse.model_validate(patient)
 
 
 @api_router.post("/logout")

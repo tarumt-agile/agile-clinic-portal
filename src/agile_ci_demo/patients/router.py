@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_patient
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.patients.schemas import (
@@ -120,9 +121,8 @@ def list_patients_page(request: Request) -> HTMLResponse:
 
 
 @pages_router.get("/dashboard", response_class=HTMLResponse)
-def patient_dashboard_page(request: Request) -> HTMLResponse:
-    """Patient self-service home page. Patient identity is a placeholder (see
-    get_current_patient) until real login sessions exist."""
+def patient_dashboard_page(request: Request, _patient=Depends(require_patient)) -> HTMLResponse:
+    """Patient self-service home page."""
     return templates.TemplateResponse(request, "patients/patient_dashboard.html", {})
 
 
