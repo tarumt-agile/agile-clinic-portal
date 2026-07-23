@@ -4,26 +4,56 @@
 
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-md-5">
-    <h1 class="h3 mb-4">Log In</h1>
+  <div class="col-md-6">
+    <h1 class="h3 mb-4">Login</h1>
+
+    <ul class="nav nav-tabs mb-3" id="login-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="staff-tab-btn" data-bs-toggle="tab"
+                data-bs-target="#staff-tab" type="button" role="tab">Staff</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="patient-tab-btn" data-bs-toggle="tab"
+                data-bs-target="#patient-tab" type="button" role="tab">Patient</button>
+      </li>
+    </ul>
 
     <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
 
-    <form id="login-form" novalidate>
-      <div class="mb-3">
-        <label for="email" class="form-label">Email</label>
-        <input type="email" class="form-control" id="email" name="email" required>
-        <div class="invalid-feedback">Enter a valid email address.</div>
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="staff-tab" role="tabpanel">
+        <form id="staff-login-form" novalidate>
+          <div class="mb-3">
+            <label for="staff-email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="staff-email" name="email" required>
+            <div class="invalid-feedback">Email is required.</div>
+          </div>
+          <div class="mb-3">
+            <label for="staff-password" class="form-label">Password</label>
+            <input type="password" class="form-control" id="staff-password" name="password" required>
+            <div class="invalid-feedback">Password is required.</div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="staff-submit-btn">Log In</button>
+        </form>
       </div>
 
-      <div class="mb-3">
-        <label for="password" class="form-label">Password</label>
-        <input type="password" class="form-control" id="password" name="password" required>
-        <div class="invalid-feedback">Password is required.</div>
+      <div class="tab-pane fade" id="patient-tab" role="tabpanel">
+        <form id="patient-login-form" novalidate>
+          <div class="mb-3">
+            <label for="patient-id" class="form-label">Patient ID</label>
+            <input type="text" class="form-control" id="patient-id" name="patient_id" required
+                   placeholder="e.g. P00001">
+            <div class="invalid-feedback">Patient ID is required.</div>
+          </div>
+          <div class="mb-3">
+            <label for="patient-ic" class="form-label">IC / Passport number</label>
+            <input type="text" class="form-control" id="patient-ic" name="ic_or_passport" required>
+            <div class="invalid-feedback">IC / passport number is required.</div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="patient-submit-btn">Log In</button>
+        </form>
       </div>
-
-      <button type="submit" class="btn btn-primary" id="submit-btn">Log In</button>
-    </form>
+    </div>
   </div>
 </div>
 {% endblock %}
