@@ -79,3 +79,27 @@ def test_mark_done():
     r = client.patch("/items/3/done")
     assert r.status_code == 200
     assert r.json()["done"] is True
+
+
+def test_session_cookie_round_trips() -> None:
+    """A FastAPI app with SessionMiddleware can set and read back a signed session value."""
+    from fastapi import FastAPI, Request
+    from fastapi.testclient import TestClient as FastAPITestClient
+    from starlette.middleware.sessions import SessionMiddleware
+
+    probe_app = FastAPI()
+    probe_app.add_middleware(SessionMiddleware, secret_key="test-secret")
+
+    @probe_app.get("/write")
+    def _write(request: Request) -> dict:
+        request.session["probe"] = "hello"
+        return {"ok": True}
+
+    @probe_app.get("/read")
+    def _read(request: Request) -> dict:
+        return {"probe": request.session.get("probe")}
+
+    probe_client = FastAPITestClient(probe_app)
+    probe_client.get("/write")
+    r = probe_client.get("/read")
+    assert r.json() == {"probe": "hello"}

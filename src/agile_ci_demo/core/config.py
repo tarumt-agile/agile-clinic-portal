@@ -28,5 +28,10 @@ class Settings:
     smtp_from: str | None = os.getenv("SMTP_FROM")
     smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
 
+    # Signs the login session cookie. Falls back to a fixed dev value so local
+    # runs and tests work with no .env entry - set a real SECRET_KEY in
+    # production.
+    secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+
 
 settings = Settings()

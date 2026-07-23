@@ -5,6 +5,7 @@ from typing import Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
 from agile_ci_demo.appointments.router import api_router as appointments_api_router
 from agile_ci_demo.appointments.router import pages_router as appointments_pages_router
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Agile Clinic Portal", version="0.1.0", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
 
 if settings.static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
