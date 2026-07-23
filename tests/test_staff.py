@@ -300,6 +300,25 @@ def test_staff_list_page_redirects_for_wrong_role(client: TestClient) -> None:
     assert r.headers["location"] == "/auth/login"
 
 
+def test_staff_list_page_redirects_after_session_holder_is_deactivated(
+    client: TestClient,
+) -> None:
+    """If an admin who is currently logged in gets deactivated, their existing
+    session should stop working immediately, not just at their next login."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+    client.patch("/api/staff/S00001/status", json={"is_active": False})
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
 def test_list_staff_returns_created_accounts(client: TestClient) -> None:
     client.post("/api/staff", json=valid_staff_payload())
     client.post(

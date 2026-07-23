@@ -12,6 +12,7 @@ from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
+from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.schemas import (
     DoctorOut,
     StaffCreate,
@@ -239,7 +240,7 @@ def update_staff_details(
 )
 def staff_list_page(
     request: Request,
-    _staff=Depends(require_role(Role.ADMIN)),
+    _staff: Staff = Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,

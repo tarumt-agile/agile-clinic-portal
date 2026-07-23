@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
@@ -23,14 +25,14 @@ def logout(request: Request) -> None:
     request.session.clear()
 
 
-def require_role(*roles: Role):
+def require_role(*roles: Role) -> Callable[..., Staff]:
     """Dependency factory: only lets the given staff roles through, otherwise redirects to login."""
     allowed = {role.value for role in roles}
 
     def dependency(request: Request, db: Session = Depends(get_db)) -> Staff:
         staff_id = request.session.get("staff_id")
         staff = get_staff_by_staff_id(db, staff_id) if staff_id else None
-        if staff is None or staff.role not in allowed:
+        if staff is None or staff.role not in allowed or not staff.is_active:
             raise NotAuthenticatedError()
         return staff
 
