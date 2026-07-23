@@ -210,12 +210,21 @@ def get_staff_by_staff_id(db: Session, staff_id: str) -> Staff | None:
 
 
 def set_staff_active_status(db: Session, staff_id: str, is_active: bool) -> Staff:
-    """Activate or deactivate a staff account."""
+    """Activate or deactivate a staff account.
+
+    For a doctor, also syncs DoctorProfile.status so the change is reflected
+    everywhere doctor availability is read from (e.g. booking dropdowns),
+    not just the staff account's own is_active flag.
+    """
     staff = get_staff_by_staff_id(db, staff_id)
     if staff is None:
         raise StaffNotFoundError(f"No staff account found with staff_id '{staff_id}'")
 
     staff.is_active = is_active
+    if staff.doctor_profile is not None:
+        staff.doctor_profile.status = (
+            DoctorStatus.ACTIVE.value if is_active else DoctorStatus.INACTIVE.value
+        )
     db.commit()
     db.refresh(staff)
     return staff

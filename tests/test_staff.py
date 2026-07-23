@@ -300,6 +300,52 @@ def test_reactivate_staff_success(client: TestClient) -> None:
     assert r.json()["is_active"] is True
 
 
+def test_deactivate_doctor_excludes_from_doctor_list(client: TestClient) -> None:
+    """
+    Scenario: Deactivating a doctor removes them from doctor-facing lists
+      Given a doctor account exists and is active
+      When I PATCH /api/staff/{staff_id}/status with is_active=false
+      Then GET /api/staff/doctor reports that doctor's status as inactive
+    """
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+    assert r.status_code == 200
+
+    doctors = client.get("/api/staff/doctor").json()
+    doctor = next(d for d in doctors if d["staff_id"] == created["staff_id"])
+    assert doctor["status"] == "inactive"
+
+
+def test_reactivate_doctor_restores_doctor_list_status(client: TestClient) -> None:
+    """Reactivating a doctor also restores DoctorProfile.status, not just is_active."""
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+    client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": True})
+    assert r.status_code == 200
+
+    doctors = client.get("/api/staff/doctor").json()
+    doctor = next(d for d in doctors if d["staff_id"] == created["staff_id"])
+    assert doctor["status"] == "active"
+
+
 def test_deactivate_unknown_staff_returns_404(client: TestClient) -> None:
     r = client.patch("/api/staff/S99999/status", json={"is_active": False})
     assert r.status_code == 404
