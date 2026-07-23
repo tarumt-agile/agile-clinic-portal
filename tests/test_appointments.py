@@ -726,6 +726,46 @@ def test_mine_page_redirects_when_not_logged_in(client: TestClient) -> None:
     assert r.status_code == 303
 
 
+def test_consultations_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/consultations", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_consultations_page_loads_when_logged_in_as_doctor(client: TestClient) -> None:
+    """The HTML doctor consultation start page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    r = client.get("/appointments/consultations")
+    assert r.status_code == 200
+    assert "Start Consultation" in r.text
+
+
+def test_doctor_schedule_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/doctor-schedule", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_doctor_schedule_page_loads_when_logged_in_as_receptionist(client: TestClient) -> None:
+    """The HTML receptionist doctor schedule view page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
+    )
+
+    r = client.get("/appointments/doctor-schedule")
+    assert r.status_code == 200
+    assert "Doctor Schedule" in r.text or "doctor" in r.text.lower()
+
+
 # --- 9. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/appointments.feature
 
