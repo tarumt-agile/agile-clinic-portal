@@ -6,7 +6,9 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.prescription.models import (
     Prescription,
 )
@@ -22,19 +24,18 @@ from agile_ci_demo.prescription.schemas import (
 )
 from agile_ci_demo.prescription.service import (
     ConsultationRecordNotFoundError,
-    CurrentDoctorNotFoundError,
     DiagnosisNotFoundError,
     PrescriptionConflictError,
     PrescriptionNotFoundError,
     PrescriptionPermissionError,
     create_prescription,
     get_consultation_prescriptions,
-    get_current_doctor,
     get_patient_prescriptions,
     get_prescription_by_public_id,
     get_prescription_options,
     update_prescription_instructions,
 )
+from agile_ci_demo.staff.models import Staff
 
 api_router = APIRouter(
     prefix="/api/prescriptions",
@@ -113,23 +114,19 @@ def get_available_prescription_options() -> PrescriptionOptionsOut:
 def create_prescription_endpoint(
     payload: PrescriptionCreate,
     db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
 ) -> PrescriptionOut:
     try:
         prescription = create_prescription(
             db,
             payload,
+            doctor,
         )
 
     except (
         ConsultationRecordNotFoundError,
         DiagnosisNotFoundError,
     ) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-
-    except CurrentDoctorNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
@@ -147,11 +144,9 @@ def create_prescription_endpoint(
             detail=str(exc),
         ) from exc
 
-    current_doctor = get_current_doctor(db)
-
     return serialize_prescription(
         prescription,
-        current_doctor.id if current_doctor else None,
+        doctor.id,
     )
 
 
@@ -163,6 +158,7 @@ def create_prescription_endpoint(
 def get_patient_prescription_history(
     patient_id: str,
     db: Session = Depends(get_db),
+    staff: Staff = Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> PrescriptionList:
     try:
         prescriptions = get_patient_prescriptions(
@@ -176,12 +172,12 @@ def get_patient_prescription_history(
             detail=str(exc),
         ) from exc
 
-    current_doctor = get_current_doctor(db)
+    current_doctor_id = staff.id if staff.role == Role.DOCTOR.value else None
 
     items = [
         serialize_prescription(
             item,
-            current_doctor.id if current_doctor else None,
+            current_doctor_id,
         )
         for item in prescriptions
     ]
@@ -200,6 +196,7 @@ def get_patient_prescription_history(
 def get_prescriptions_for_consultation(
     record_id: str,
     db: Session = Depends(get_db),
+    staff: Staff = Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> PrescriptionList:
     try:
         prescriptions = get_consultation_prescriptions(
@@ -213,12 +210,12 @@ def get_prescriptions_for_consultation(
             detail=str(exc),
         ) from exc
 
-    current_doctor = get_current_doctor(db)
+    current_doctor_id = staff.id if staff.role == Role.DOCTOR.value else None
 
     items = [
         serialize_prescription(
             item,
-            current_doctor.id if current_doctor else None,
+            current_doctor_id,
         )
         for item in prescriptions
     ]
@@ -237,6 +234,7 @@ def get_prescriptions_for_consultation(
 def get_prescription_details(
     prescription_id: str,
     db: Session = Depends(get_db),
+    staff: Staff = Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> PrescriptionOut:
     prescription = get_prescription_by_public_id(
         db,
@@ -249,11 +247,11 @@ def get_prescription_details(
             detail="Prescription not found.",
         )
 
-    current_doctor = get_current_doctor(db)
+    current_doctor_id = staff.id if staff.role == Role.DOCTOR.value else None
 
     return serialize_prescription(
         prescription,
-        current_doctor.id if current_doctor else None,
+        current_doctor_id,
     )
 
 
@@ -270,21 +268,17 @@ def update_prescription_instructions_endpoint(
     prescription_id: str,
     payload: PrescriptionInstructionUpdate,
     db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
 ) -> PrescriptionOut:
     try:
         prescription = update_prescription_instructions(
             db,
             prescription_id,
             payload,
+            doctor,
         )
 
     except PrescriptionNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-
-    except CurrentDoctorNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
@@ -302,9 +296,7 @@ def update_prescription_instructions_endpoint(
             detail=str(exc),
         ) from exc
 
-    current_doctor = get_current_doctor(db)
-
     return serialize_prescription(
         prescription,
-        current_doctor.id if current_doctor else None,
+        doctor.id,
     )

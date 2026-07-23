@@ -9,7 +9,6 @@ from sqlalchemy.orm import (
     selectinload,
 )
 
-from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import (
     get_patient_by_patient_id,
 )
@@ -147,10 +146,6 @@ class DiagnosisNotFoundError(Exception):
     """Raised when a diagnosis is not found."""
 
 
-class CurrentDoctorNotFoundError(Exception):
-    """Raised when a current doctor is not found."""
-
-
 class PrescriptionPermissionError(Exception):
     """Raised when a doctor lacks permission."""
 
@@ -164,24 +159,6 @@ class PrescriptionOptions(TypedDict):
     dosages: list[str]
     frequencies: list[str]
     durations: list[str]
-
-
-def get_current_doctor(db: Session) -> Staff | None:
-    """Stand-in for real authentication: returns the first doctor on record as "the
-    logged-in doctor". There is no session/token yet.
-
-    This used to live in appointments.service and be shared with the appointments
-    and patients modules; those now use the real session (see auth.deps). The
-    prescription module is a separate, still-unfinished feature (see PR
-    discussion) that hasn't been wired up to real sessions yet, so it keeps its
-    own copy of the placeholder for now rather than being silently broken by
-    that unrelated cleanup.
-    """
-    return (
-        db.execute(select(Staff).where(Staff.role == Role.DOCTOR.value).order_by(Staff.id))
-        .scalars()
-        .first()
-    )
 
 
 def get_prescription_options() -> PrescriptionOptions:
@@ -210,6 +187,7 @@ def _prescription_load_options():
 def create_prescription(
     db: Session,
     data: PrescriptionCreate,
+    doctor: Staff,
 ) -> Prescription:
     """Create a prescription for one diagnosis."""
 
@@ -232,15 +210,7 @@ def create_prescription(
             "The selected diagnosis does not belong " "to this consultation."
         )
 
-    current_doctor = get_current_doctor(db)
-
-    if current_doctor is None:
-        raise CurrentDoctorNotFoundError("No current doctor account was found.")
-
-    if current_doctor.role != Role.DOCTOR.value:
-        raise PrescriptionPermissionError("Only a doctor can create a prescription.")
-
-    if consultation.doctor_id != current_doctor.id:
+    if consultation.doctor_id != doctor.id:
         raise PrescriptionPermissionError(
             "Only the doctor who created this " "consultation can add medication."
         )
@@ -249,7 +219,7 @@ def create_prescription(
         consultation_note_id=consultation.id,
         diagnosis_id=diagnosis.id,
         patient_id=consultation.patient_id,
-        prescribing_doctor_id=current_doctor.id,
+        prescribing_doctor_id=doctor.id,
         medication=data.medication,
         dosage=data.dosage,
         frequency=data.frequency,
@@ -354,6 +324,7 @@ def update_prescription_instructions(
     db: Session,
     prescription_id: str,
     data: PrescriptionInstructionUpdate,
+    doctor: Staff,
 ) -> Prescription:
     """Update prescription instructions and save history."""
 
@@ -365,12 +336,7 @@ def update_prescription_instructions(
     if prescription is None:
         raise PrescriptionNotFoundError("Prescription not found.")
 
-    current_doctor = get_current_doctor(db)
-
-    if current_doctor is None:
-        raise CurrentDoctorNotFoundError("No current doctor account was found.")
-
-    if prescription.prescribing_doctor_id != current_doctor.id:
+    if prescription.prescribing_doctor_id != doctor.id:
         raise PrescriptionPermissionError(
             "Only the prescribing doctor can " "update this prescription."
         )
@@ -396,7 +362,7 @@ def update_prescription_instructions(
         previous_duration=prescription.duration,
         new_duration=data.duration,
         change_reason=data.change_reason,
-        changed_by_doctor_id=current_doctor.id,
+        changed_by_doctor_id=doctor.id,
     )
 
     db.add(revision)

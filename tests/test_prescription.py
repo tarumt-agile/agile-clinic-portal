@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Generator
 
 import pytest
@@ -191,6 +192,18 @@ def _login_as_receptionist(client: TestClient) -> None:
     )
 
 
+def _login_as_doctor(client: TestClient, email: str) -> None:
+    """Log in as a doctor using the temp password from their most recent welcome
+    email - the prescription endpoints now require a real doctor session rather
+    than just a registered account."""
+    from agile_ci_demo.core.email import get_outbox
+
+    body = get_outbox()[-1].body
+    match = re.search(r"temporary password is: (\S+)", body)
+    assert match is not None
+    client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
+
+
 def create_consultation(
     client: TestClient,
     patient_id: str,
@@ -310,6 +323,8 @@ def test_create_prescription_requires_all_fields(
 ) -> None:
     _, _, record_id = prepare_consultation(client)
 
+    _login_as_doctor(client, str(valid_doctor_payload()["email"]))
+
     payload = valid_prescription_payload(record_id)
 
     del payload[missing_field]
@@ -336,6 +351,8 @@ def test_create_prescription_rejects_blank_fields(
     field_name: str,
 ) -> None:
     _, _, record_id = prepare_consultation(client)
+
+    _login_as_doctor(client, str(valid_doctor_payload()["email"]))
 
     payload = valid_prescription_payload(record_id)
 
@@ -551,6 +568,8 @@ def test_patient_history_excludes_other_patients(
 def test_unknown_patient_prescription_history_returns_404(
     client: TestClient,
 ) -> None:
+    _login_as_receptionist(client)
+
     response = client.get("/api/prescriptions/patient/P99999")
 
     assert response.status_code == 404
