@@ -113,24 +113,47 @@ def test_get_unknown_patient_returns_404(client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_get_current_patient_returns_first_patient_on_record(client: TestClient) -> None:
-    """
-    Scenario: Self-service booking resolves "the current patient"
-      Given two patients are registered
-      When I GET /api/patients/me
-      Then I receive the first-registered patient (a placeholder for real login)
-    """
-    client.post("/api/patients", json=valid_patient_payload())
-    client.post("/api/patients", json=valid_patient_payload(full_name="John Lee"))
+def test_me_endpoint_does_not_show_a_different_patient(client: TestClient) -> None:
+    """The old placeholder picked the first-registered patient regardless of who
+    was actually logged in - this replaces the old placeholder-era
+    test_get_current_patient_returns_first_patient_on_record and proves /me
+    returns the logged-in patient's own record, not whichever patient happens to
+    be first in the database."""
+    client.post("/api/patients", json=valid_patient_payload())  # first-registered
+    second = client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="John Lee", ic_or_passport="880311-14-5678"),
+    ).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"patient_id": second["patient_id"], "ic_or_passport": second["ic_or_passport"]},
+    )
 
     r = client.get("/api/patients/me")
     assert r.status_code == 200
-    assert r.json()["full_name"] == "Jane Tan"
+    assert r.json()["patient_id"] == second["patient_id"]
 
 
-def test_get_current_patient_no_patients_returns_404(client: TestClient) -> None:
+def test_me_endpoint_requires_a_logged_in_patient(client: TestClient) -> None:
+    """Anonymous requests must be sent to log in rather than falling back to "the
+    first patient on record" - this replaces the old placeholder-era
+    test_get_current_patient_no_patients_returns_404, whose premise (a 404 for a
+    missing "current patient") no longer applies now that identity comes from the
+    session, not from whichever patient happens to be first in the database."""
+    r = client.get("/api/patients/me", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_me_endpoint_shows_the_logged_in_patient(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+    )
+
     r = client.get("/api/patients/me")
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["patient_id"] == created["patient_id"]
 
 
 # --- 2. Required field / validation tests ------------------------------------

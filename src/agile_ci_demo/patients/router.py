@@ -19,12 +19,12 @@ from agile_ci_demo.patients.service import (
     DuplicatePatientError,
     PatientNotFoundError,
     create_patient,
-    get_current_patient,
     get_patient_by_ic,
     get_patient_by_patient_id,
     search_patients,
     update_patient,
 )
+from agile_ci_demo.patients.models import Patient
 
 templates = Jinja2Templates(directory=str(settings.templates_dir))
 
@@ -64,17 +64,8 @@ def list_patients(
 
 
 @api_router.get("/me", response_model=PatientOut)
-def get_my_patient_record(db: Session = Depends(get_db)) -> PatientOut:
-    """The current patient's own record, for self-service booking.
-
-    "Current patient" is a placeholder - see get_current_patient() - until real
-    patient login sessions exist.
-    """
-    patient = get_current_patient(db)
-    if patient is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No patient account found"
-        )
+def get_my_patient_record(patient: Patient = Depends(require_patient)) -> PatientOut:
+    """The logged-in patient's own record, for self-service booking."""
     return PatientOut.model_validate(patient)
 
 

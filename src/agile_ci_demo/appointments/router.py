@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.appointments.models import Appointment
-from agile_ci_demo.auth.deps import require_patient, require_role
 from agile_ci_demo.appointments.schemas import (
     AppointmentCancel,
     AppointmentCreate,
@@ -27,14 +26,15 @@ from agile_ci_demo.appointments.service import (
     create_appointment,
     get_appointment_by_reference,
     get_available_slots,
-    get_current_doctor,
     get_doctor_schedule,
     get_patient_appointments,
 )
-from agile_ci_demo.core.database import get_db
+from agile_ci_demo.auth.deps import require_patient, require_role
 from agile_ci_demo.core.rbac import Role
+from agile_ci_demo.staff.models import Staff
+from agile_ci_demo.patients.models import Patient
+from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.templates import templates
-from agile_ci_demo.patients.service import get_current_patient
 from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # JSON API used by the frontend's JavaScript.
@@ -80,17 +80,10 @@ def book_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)) 
 @api_router.get("/schedule", response_model=DoctorSchedule)
 def get_my_schedule(
     schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
     db: Session = Depends(get_db),
 ) -> DoctorSchedule:
-    """The current doctor's appointments for a given date (defaults to today).
-
-    "Current doctor" is a placeholder - see get_current_doctor() - until real
-    login sessions exist.
-    """
-    doctor = get_current_doctor(db)
-    if doctor is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No doctor account found")
-
+    """The logged-in doctor's appointments for a given date (defaults to today)."""
     try:
         appointments = get_doctor_schedule(db, doctor.id, schedule_date)
     except PastDateError as exc:
@@ -168,18 +161,10 @@ def get_slots(
 
 
 @api_router.get("/mine", response_model=PatientAppointments)
-def get_my_appointments(db: Session = Depends(get_db)) -> PatientAppointments:
-    """The current patient's own upcoming appointments (today or later).
-
-    "Current patient" is a placeholder - see patients.service.get_current_patient()
-    - until real login sessions exist.
-    """
-    patient = get_current_patient(db)
-    if patient is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No patient account found"
-        )
-
+def get_my_appointments(
+    patient: Patient = Depends(require_patient), db: Session = Depends(get_db)
+) -> PatientAppointments:
+    """The logged-in patient's own upcoming appointments (today or later)."""
     appointments = get_patient_appointments(db, patient.id)
     return PatientAppointments(
         patient_id=patient.patient_id or "",
@@ -249,9 +234,9 @@ def receptionist_doctor_schedule_page(
 
 @pages_router.get("/book", response_class=HTMLResponse)
 def self_book_appointment_page(request: Request, _patient=Depends(require_patient)) -> HTMLResponse:
-    """Patient self-service booking. Patient identity is a placeholder (see
-    patients.service.get_current_patient) - the form auto-fills and locks the
-    Patient ID field instead of asking the patient to type their own ID."""
+    """Patient self-service booking. The form auto-fills and locks the Patient ID
+    field from the logged-in patient's own record instead of asking the patient
+    to type their own ID."""
     return templates.TemplateResponse(request, "appointments/patient_bookAppointment.html", {})
 
 

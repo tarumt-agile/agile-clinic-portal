@@ -10,7 +10,6 @@ from agile_ci_demo.appointments.models import Appointment
 from agile_ci_demo.appointments.schemas import AppointmentCreate
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import get_patient_by_patient_id
-from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # Clinic working hours and slot size. A teaching-app constant rather than a DB-backed
@@ -150,17 +149,6 @@ def cancel_appointment(db: Session, reference_number: str, cancellation_reason: 
     db.commit()
     db.refresh(appointment)
     return appointment
-
-
-def get_current_doctor(db: Session) -> Staff | None:
-    """Stand-in for real authentication: returns the first doctor on record as "the
-    logged-in doctor". There is no session/token yet - swap this for a real
-    Depends(get_current_user) once login sessions are wired up."""
-    return (
-        db.execute(select(Staff).where(Staff.role == Role.DOCTOR.value).order_by(Staff.id))
-        .scalars()
-        .first()
-    )
 
 
 def get_doctor_schedule(db: Session, doctor_id: int, schedule_date: dt.date) -> list[Appointment]:

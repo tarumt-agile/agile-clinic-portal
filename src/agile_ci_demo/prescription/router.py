@@ -6,9 +6,6 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.appointments.service import (
-    get_current_doctor,
-)
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.prescription.models import (
     Prescription,
@@ -32,6 +29,7 @@ from agile_ci_demo.prescription.service import (
     PrescriptionPermissionError,
     create_prescription,
     get_consultation_prescriptions,
+    get_current_doctor,
     get_patient_prescriptions,
     get_prescription_by_public_id,
     get_prescription_options,

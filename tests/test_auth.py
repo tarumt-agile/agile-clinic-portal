@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import re
 from collections.abc import Generator
 
@@ -45,14 +46,24 @@ def client() -> Generator[TestClient, None, None]:
         clear_outbox()
 
 
+_next_license_number = itertools.count(10000)
+
+
 def _create_staff_and_get_temp_password(
     client: TestClient, email: str = "alice.wong@example.com", role: str = "nurse"
 ) -> str:
     """Create a staff account via the API and pull the temp password out of the welcome email."""
     payload: dict[str, object] = {"full_name": "Alice Wong", "email": email, "role": role}
     if role == "doctor":
+        # Each doctor needs a unique license_number (the field is unique in the
+        # DB) - a counter keeps every call collision-free even within the same
+        # test, e.g. when a test registers two doctors to log in as each in turn.
         payload.update(
-            {"license_number": "MMC-12345", "specialty": "General Medicine", "status": "active"}
+            {
+                "license_number": f"MMC-{next(_next_license_number)}",
+                "specialty": "General Medicine",
+                "status": "active",
+            }
         )
     r = client.post("/api/staff", json=payload)
     assert r.status_code == 201
