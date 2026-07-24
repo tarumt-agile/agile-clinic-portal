@@ -18,12 +18,14 @@ class NotAuthenticatedError(Exception):
 
 
 def login_staff(request: Request, staff: Staff) -> None:
+    request.session.clear()
     request.session["user_type"] = "staff"
     request.session["staff_id"] = staff.staff_id
     request.session["role"] = staff.role
 
 
 def login_patient(request: Request, patient: Patient) -> None:
+    request.session.clear()
     request.session["user_type"] = "patient"
     request.session["patient_id"] = patient.patient_id
 

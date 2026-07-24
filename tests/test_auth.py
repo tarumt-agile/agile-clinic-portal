@@ -238,3 +238,72 @@ def test_patient_login_unknown_patient_id_returns_401(client: TestClient) -> Non
         json={"patient_id": "P99999", "ic_or_passport": "000000-00-0000"},
     )
     assert r.status_code == 401
+
+
+# --- 5. Logging into a second identity resets the first one ------------------
+
+
+def test_patient_login_after_staff_login_clears_the_staff_session(client: TestClient) -> None:
+    """
+    Scenario: A staff member logs in, then logs into a patient account too (without
+    logging out first)
+      Given a doctor is logged in
+      When the same session logs in as a patient too, without logging out
+      Then the doctor's own protected page no longer accepts the session
+    """
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "email": "jane.tan@example.com",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+    )
+
+    r = client.get("/appointments/schedule", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_staff_login_after_patient_login_clears_the_patient_session(client: TestClient) -> None:
+    """
+    Scenario: A patient logs in, then a staff member logs in too on the same
+    session (without logging out first)
+      Given a patient is logged in
+      When the same session logs in as staff too, without logging out
+      Then the patient's own protected page no longer accepts the session
+    """
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "email": "jane.tan@example.com",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+    )
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    r = client.get("/patients/dashboard", follow_redirects=False)
+    assert r.status_code == 303
