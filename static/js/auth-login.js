@@ -19,6 +19,25 @@
     return typeof body.detail === "string" ? body.detail : fallback;
   }
 
+  // Reformats digits-only input into dash-separated groups as the user types,
+  // e.g. groupSizes [6, 2, 4] turns "900520101234" into "900520-10-1234". Skips
+  // reformatting if the field has any letters in it - the IC field also accepts
+  // passport numbers, which aren't digits-only and shouldn't be touched.
+  function autoDash(input, groupSizes) {
+    input.addEventListener("input", () => {
+      if (/[a-zA-Z]/.test(input.value)) return;
+      const digits = input.value.replace(/\D/g, "");
+      const groups = [];
+      let start = 0;
+      for (const size of groupSizes) {
+        if (start >= digits.length) break;
+        groups.push(digits.slice(start, start + size));
+        start += size;
+      }
+      input.value = groups.join("-");
+    });
+  }
+
   function hideAlert() {
     alertBox.classList.add("d-none");
     alertBox.textContent = "";
@@ -107,4 +126,9 @@
   const patientForm = document.getElementById("patient-login-form");
   if (staffForm) staffForm.addEventListener("submit", handleStaffSubmit);
   if (patientForm) patientForm.addEventListener("submit", handlePatientSubmit);
+
+  const icInput = document.getElementById("patient-ic");
+  const phoneInput = document.getElementById("patient-phone");
+  if (icInput) autoDash(icInput, [6, 2, 4]);
+  if (phoneInput) autoDash(phoneInput, [3, 7]);
 })();
