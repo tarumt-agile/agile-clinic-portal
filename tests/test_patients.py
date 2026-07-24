@@ -260,6 +260,15 @@ def _login_as_receptionist(client: TestClient) -> None:
     )
 
 
+def _login_as_doctor(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+
 def test_register_page_redirects_when_not_logged_in(client: TestClient) -> None:
     r = client.get("/patients/register", follow_redirects=False)
     assert r.status_code == 303
@@ -269,6 +278,14 @@ def test_register_page_loads_when_logged_in_as_receptionist(client: TestClient) 
     _login_as_receptionist(client)
     r = client.get("/patients/register")
     assert r.status_code == 200
+
+
+def test_register_page_redirects_for_doctor(client: TestClient) -> None:
+    """Doctors only handle their own schedule and consultations - registering
+    patients is front-desk work, so a doctor session should not reach this page."""
+    _login_as_doctor(client)
+    r = client.get("/patients/register", follow_redirects=False)
+    assert r.status_code == 303
 
 
 def test_register_page_renders(client: TestClient) -> None:
@@ -379,6 +396,15 @@ def test_list_page_renders(client: TestClient) -> None:
     r = client.get("/patients")
     assert r.status_code == 200
     assert "Patients" in r.text
+
+
+def test_list_page_redirects_for_doctor(client: TestClient) -> None:
+    """Doctors only handle their own schedule and consultations - browsing the
+    full patient list is front-desk work, so a doctor session should not reach
+    this page."""
+    _login_as_doctor(client)
+    r = client.get("/patients", follow_redirects=False)
+    assert r.status_code == 303
 
 
 # --- 4. Update patient tests ---------------------------------------------------

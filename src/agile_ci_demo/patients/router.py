@@ -105,7 +105,7 @@ def edit_patient(
 @pages_router.get("/register", response_class=HTMLResponse)
 def register_patient_page(
     request: Request,
-    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.DOCTOR, Role.ADMIN)),
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/receptionist_registerPatients.html", {})
 
@@ -113,7 +113,7 @@ def register_patient_page(
 @pages_router.get("", response_class=HTMLResponse)
 def list_patients_page(
     request: Request,
-    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.DOCTOR, Role.ADMIN)),
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/receptionist_viewPatients.html", {})
 
