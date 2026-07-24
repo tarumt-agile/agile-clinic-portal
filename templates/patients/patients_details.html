@@ -21,12 +21,22 @@ Patient Details - Agile Clinic Portal
         </h1>
 
         <div>
+          {% set role = request.session.get("role") %}
+          {% if role == "doctor" %}
+          <a
+            href="/appointments/schedule"
+            class="btn btn-outline-secondary"
+          >
+            Back to Schedule
+          </a>
+          {% else %}
           <a
             href="/patients"
             class="btn btn-outline-secondary"
           >
             Back to List
           </a>
+          {% endif %}
 
           <button
             type="button"
