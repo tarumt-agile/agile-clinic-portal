@@ -113,24 +113,50 @@ def test_get_unknown_patient_returns_404(client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_get_current_patient_returns_first_patient_on_record(client: TestClient) -> None:
-    """
-    Scenario: Self-service booking resolves "the current patient"
-      Given two patients are registered
-      When I GET /api/patients/me
-      Then I receive the first-registered patient (a placeholder for real login)
-    """
-    client.post("/api/patients", json=valid_patient_payload())
-    client.post("/api/patients", json=valid_patient_payload(full_name="John Lee"))
+def test_me_endpoint_does_not_show_a_different_patient(client: TestClient) -> None:
+    """The old placeholder picked the first-registered patient regardless of who
+    was actually logged in - this replaces the old placeholder-era
+    test_get_current_patient_returns_first_patient_on_record and proves /me
+    returns the logged-in patient's own record, not whichever patient happens to
+    be first in the database."""
+    client.post("/api/patients", json=valid_patient_payload())  # first-registered
+    second = client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="John Lee", ic_or_passport="880311-14-5678"),
+    ).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": second["ic_or_passport"], "phone_number": second["phone_number"]},
+    )
 
     r = client.get("/api/patients/me")
     assert r.status_code == 200
-    assert r.json()["full_name"] == "Jane Tan"
+    assert r.json()["patient_id"] == second["patient_id"]
 
 
-def test_get_current_patient_no_patients_returns_404(client: TestClient) -> None:
+def test_me_endpoint_requires_a_logged_in_patient(client: TestClient) -> None:
+    """Anonymous requests must be sent to log in rather than falling back to "the
+    first patient on record" - this replaces the old placeholder-era
+    test_get_current_patient_no_patients_returns_404, whose premise (a 404 for a
+    missing "current patient") no longer applies now that identity comes from the
+    session, not from whichever patient happens to be first in the database."""
+    r = client.get("/api/patients/me", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_me_endpoint_shows_the_logged_in_patient(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+
     r = client.get("/api/patients/me")
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["patient_id"] == created["patient_id"]
 
 
 # --- 2. Required field / validation tests ------------------------------------
@@ -223,8 +249,49 @@ def test_register_generates_unique_ic_for_same_date_of_birth(client: TestClient)
     assert r1.json()["ic_or_passport"] != r2.json()["ic_or_passport"]
 
 
+def _login_as_receptionist(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
+    )
+
+
+def _login_as_doctor(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+
+def test_register_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients/register", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_register_page_loads_when_logged_in_as_receptionist(client: TestClient) -> None:
+    _login_as_receptionist(client)
+    r = client.get("/patients/register")
+    assert r.status_code == 200
+
+
+def test_register_page_redirects_for_doctor(client: TestClient) -> None:
+    """Doctors only handle their own schedule and consultations - registering
+    patients is front-desk work, so a doctor session should not reach this page."""
+    _login_as_doctor(client)
+    r = client.get("/patients/register", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_register_page_renders(client: TestClient) -> None:
     """The HTML registration form page loads successfully."""
+    _login_as_receptionist(client)
+
     r = client.get("/patients/register")
     assert r.status_code == 200
     assert "Register New Patient" in r.text
@@ -317,11 +384,27 @@ def test_list_patients_pagination(client: TestClient) -> None:
     assert len(r2.json()["items"]) == 2
 
 
+def test_list_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_list_page_renders(client: TestClient) -> None:
     """The HTML patient list page loads successfully."""
+    _login_as_receptionist(client)
+
     r = client.get("/patients")
     assert r.status_code == 200
     assert "Patients" in r.text
+
+
+def test_list_page_redirects_for_doctor(client: TestClient) -> None:
+    """Doctors only handle their own schedule and consultations - browsing the
+    full patient list is front-desk work, so a doctor session should not reach
+    this page."""
+    _login_as_doctor(client)
+    r = client.get("/patients", follow_redirects=False)
+    assert r.status_code == 303
 
 
 # --- 4. Update patient tests ---------------------------------------------------
@@ -389,11 +472,38 @@ def test_update_patient_does_not_change_ic(client: TestClient) -> None:
     assert r.json()["ic_or_passport"] == original_ic
 
 
+def test_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients/P00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_detail_page_renders(client: TestClient) -> None:
     """The HTML patient detail page loads successfully for any patient_id (client fetches data)."""
+    _login_as_receptionist(client)
+
     r = client.get("/patients/P00001")
     assert r.status_code == 200
     assert "Edit" in r.text
+
+
+def test_dashboard_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/patients/dashboard", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_dashboard_page_loads_when_logged_in_as_patient(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+
+    r = client.get("/patients/dashboard")
+    assert r.status_code == 200
 
 
 # --- 5. BDD-style tests with pytest-bdd --------------------------------------

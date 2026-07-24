@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TypedDict
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import (
@@ -7,10 +9,6 @@ from sqlalchemy.orm import (
     selectinload,
 )
 
-from agile_ci_demo.appointments.service import (
-    get_current_doctor,
-)
-from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import (
     get_patient_by_patient_id,
 )
@@ -26,7 +24,7 @@ from agile_ci_demo.records.models import Diagnosis
 from agile_ci_demo.records.service import (
     get_consultation_note_by_record_id,
 )
-
+from agile_ci_demo.staff.models import Staff
 
 MEDICATION_OPTIONS = [
     {
@@ -148,10 +146,6 @@ class DiagnosisNotFoundError(Exception):
     """Raised when a diagnosis is not found."""
 
 
-class CurrentDoctorNotFoundError(Exception):
-    """Raised when a current doctor is not found."""
-
-
 class PrescriptionPermissionError(Exception):
     """Raised when a doctor lacks permission."""
 
@@ -160,7 +154,14 @@ class PrescriptionConflictError(Exception):
     """Raised when prescription data conflicts."""
 
 
-def get_prescription_options() -> dict[str, object]:
+class PrescriptionOptions(TypedDict):
+    medications: list[dict[str, str]]
+    dosages: list[str]
+    frequencies: list[str]
+    durations: list[str]
+
+
+def get_prescription_options() -> PrescriptionOptions:
     """Return selectable prescription form options."""
 
     return {
@@ -175,84 +176,50 @@ def _prescription_load_options():
     """Return relationship-loading options."""
 
     return (
-        selectinload(
-            Prescription.consultation_note
-        ),
-        selectinload(
-            Prescription.diagnosis
-        ),
-        selectinload(
-            Prescription.patient
-        ),
-        selectinload(
-            Prescription.prescribing_doctor
-        ),
-        selectinload(
-            Prescription.history
-        ).selectinload(
-            PrescriptionHistory.changed_by_doctor
-        ),
+        selectinload(Prescription.consultation_note),
+        selectinload(Prescription.diagnosis),
+        selectinload(Prescription.patient),
+        selectinload(Prescription.prescribing_doctor),
+        selectinload(Prescription.history).selectinload(PrescriptionHistory.changed_by_doctor),
     )
 
 
 def create_prescription(
     db: Session,
     data: PrescriptionCreate,
+    doctor: Staff,
 ) -> Prescription:
     """Create a prescription for one diagnosis."""
 
-    consultation = (
-        get_consultation_note_by_record_id(
-            db,
-            data.consultation_record_id,
-        )
+    consultation = get_consultation_note_by_record_id(
+        db,
+        data.consultation_record_id,
     )
 
     if consultation is None:
-        raise ConsultationRecordNotFoundError(
-            "Consultation record not found."
-        )
+        raise ConsultationRecordNotFoundError("Consultation record not found.")
 
     diagnosis = db.execute(
         select(Diagnosis)
-        .where(
-            Diagnosis.id == data.diagnosis_id
-        )
-        .where(
-            Diagnosis.consultation_note_id
-            == consultation.id
-        )
+        .where(Diagnosis.id == data.diagnosis_id)
+        .where(Diagnosis.consultation_note_id == consultation.id)
     ).scalar_one_or_none()
 
     if diagnosis is None:
         raise DiagnosisNotFoundError(
-            "The selected diagnosis does not belong "
-            "to this consultation."
+            "The selected diagnosis does not belong " "to this consultation."
         )
 
-    current_doctor = get_current_doctor(db)
-
-    if current_doctor is None:
-        raise CurrentDoctorNotFoundError(
-            "No current doctor account was found."
-        )
-
-    if current_doctor.role != Role.DOCTOR.value:
+    if consultation.doctor_id != doctor.id:
         raise PrescriptionPermissionError(
-            "Only a doctor can create a prescription."
-        )
-
-    if consultation.doctor_id != current_doctor.id:
-        raise PrescriptionPermissionError(
-            "Only the doctor who created this "
-            "consultation can add medication."
+            "Only the doctor who created this " "consultation can add medication."
         )
 
     prescription = Prescription(
         consultation_note_id=consultation.id,
         diagnosis_id=diagnosis.id,
         patient_id=consultation.patient_id,
-        prescribing_doctor_id=current_doctor.id,
+        prescribing_doctor_id=doctor.id,
         medication=data.medication,
         dosage=data.dosage,
         frequency=data.frequency,
@@ -265,18 +232,14 @@ def create_prescription(
     try:
         db.flush()
 
-        prescription.prescription_id = (
-            f"RX{prescription.id:05d}"
-        )
+        prescription.prescription_id = f"RX{prescription.id:05d}"
 
         db.commit()
 
     except IntegrityError as exc:
         db.rollback()
 
-        raise PrescriptionConflictError(
-            "The prescription could not be created."
-        ) from exc
+        raise PrescriptionConflictError("The prescription could not be created.") from exc
 
     return (
         get_prescription_by_public_id(
@@ -295,18 +258,11 @@ def get_prescription_by_public_id(
 
     statement = (
         select(Prescription)
-        .options(
-            *_prescription_load_options()
-        )
-        .where(
-            Prescription.prescription_id
-            == prescription_id
-        )
+        .options(*_prescription_load_options())
+        .where(Prescription.prescription_id == prescription_id)
     )
 
-    return db.execute(
-        statement
-    ).scalar_one_or_none()
+    return db.execute(statement).scalar_one_or_none()
 
 
 def get_patient_prescriptions(
@@ -321,30 +277,19 @@ def get_patient_prescriptions(
     )
 
     if patient is None:
-        raise PrescriptionNotFoundError(
-            f"No patient found with patient_id "
-            f"'{patient_id}'."
-        )
+        raise PrescriptionNotFoundError(f"No patient found with patient_id " f"'{patient_id}'.")
 
     statement = (
         select(Prescription)
-        .options(
-            *_prescription_load_options()
-        )
-        .where(
-            Prescription.patient_id == patient.id
-        )
+        .options(*_prescription_load_options())
+        .where(Prescription.patient_id == patient.id)
         .order_by(
             Prescription.issued_at.desc(),
             Prescription.id.desc(),
         )
     )
 
-    return list(
-        db.execute(statement)
-        .scalars()
-        .all()
-    )
+    return list(db.execute(statement).scalars().all())
 
 
 def get_consultation_prescriptions(
@@ -353,27 +298,18 @@ def get_consultation_prescriptions(
 ) -> list[Prescription]:
     """Return prescriptions for one consultation."""
 
-    consultation = (
-        get_consultation_note_by_record_id(
-            db,
-            record_id,
-        )
+    consultation = get_consultation_note_by_record_id(
+        db,
+        record_id,
     )
 
     if consultation is None:
-        raise ConsultationRecordNotFoundError(
-            "Consultation record not found."
-        )
+        raise ConsultationRecordNotFoundError("Consultation record not found.")
 
     statement = (
         select(Prescription)
-        .options(
-            *_prescription_load_options()
-        )
-        .where(
-            Prescription.consultation_note_id
-            == consultation.id
-        )
+        .options(*_prescription_load_options())
+        .where(Prescription.consultation_note_id == consultation.id)
         .order_by(
             Prescription.diagnosis_id.asc(),
             Prescription.issued_at.asc(),
@@ -381,52 +317,32 @@ def get_consultation_prescriptions(
         )
     )
 
-    return list(
-        db.execute(statement)
-        .scalars()
-        .all()
-    )
+    return list(db.execute(statement).scalars().all())
 
 
 def update_prescription_instructions(
     db: Session,
     prescription_id: str,
     data: PrescriptionInstructionUpdate,
+    doctor: Staff,
 ) -> Prescription:
     """Update prescription instructions and save history."""
 
-    prescription = (
-        get_prescription_by_public_id(
-            db,
-            prescription_id,
-        )
+    prescription = get_prescription_by_public_id(
+        db,
+        prescription_id,
     )
 
     if prescription is None:
-        raise PrescriptionNotFoundError(
-            "Prescription not found."
-        )
+        raise PrescriptionNotFoundError("Prescription not found.")
 
-    current_doctor = get_current_doctor(db)
-
-    if current_doctor is None:
-        raise CurrentDoctorNotFoundError(
-            "No current doctor account was found."
-        )
-
-    if (
-        prescription.prescribing_doctor_id
-        != current_doctor.id
-    ):
+    if prescription.prescribing_doctor_id != doctor.id:
         raise PrescriptionPermissionError(
-            "Only the prescribing doctor can "
-            "update this prescription."
+            "Only the prescribing doctor can " "update this prescription."
         )
 
     if prescription.status != "active":
-        raise PrescriptionConflictError(
-            "Only an active prescription can be updated."
-        )
+        raise PrescriptionConflictError("Only an active prescription can be updated.")
 
     no_change = (
         data.dosage == prescription.dosage
@@ -435,9 +351,7 @@ def update_prescription_instructions(
     )
 
     if no_change:
-        raise PrescriptionConflictError(
-            "No prescription instruction was changed."
-        )
+        raise PrescriptionConflictError("No prescription instruction was changed.")
 
     revision = PrescriptionHistory(
         prescription_id=prescription.id,
@@ -448,7 +362,7 @@ def update_prescription_instructions(
         previous_duration=prescription.duration,
         new_duration=data.duration,
         change_reason=data.change_reason,
-        changed_by_doctor_id=current_doctor.id,
+        changed_by_doctor_id=doctor.id,
     )
 
     db.add(revision)
@@ -463,9 +377,7 @@ def update_prescription_instructions(
     except IntegrityError as exc:
         db.rollback()
 
-        raise PrescriptionConflictError(
-            "The prescription update could not be saved."
-        ) from exc
+        raise PrescriptionConflictError("The prescription update could not be saved.") from exc
 
     return (
         get_prescription_by_public_id(

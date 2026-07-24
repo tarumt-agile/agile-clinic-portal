@@ -21,12 +21,22 @@ Patient Details - Agile Clinic Portal
         </h1>
 
         <div>
+          {% set role = request.session.get("role") %}
+          {% if role == "doctor" %}
+          <a
+            href="/appointments/schedule"
+            class="btn btn-outline-secondary"
+          >
+            Back to Schedule
+          </a>
+          {% else %}
           <a
             href="/patients"
             class="btn btn-outline-secondary"
           >
             Back to List
           </a>
+          {% endif %}
 
           <button
             type="button"
@@ -311,29 +321,6 @@ Patient Details - Agile Clinic Portal
 
               <div class="col-md-6">
                 <label
-                  for="edit-ic_or_passport"
-                  class="form-label"
-                >
-                  IC / Passport number *
-                </label>
-
-                <input
-                  type="text"
-                  class="form-control"
-                  id="edit-ic_or_passport"
-                  name="ic_or_passport"
-                  required
-                  minlength="5"
-                  maxlength="30"
-                >
-
-                <div class="invalid-feedback">
-                  IC or passport number is required.
-                </div>
-              </div>
-
-              <div class="col-md-6">
-                <label
                   for="edit-address"
                   class="form-label"
                 >
@@ -348,6 +335,11 @@ Patient Details - Agile Clinic Portal
                   placeholder="optional"
                   maxlength="255"
                 >
+
+                <div class="form-text">
+                  IC number is system-generated
+                  and cannot be edited.
+                </div>
               </div>
             </div>
 

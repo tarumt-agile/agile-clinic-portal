@@ -70,14 +70,10 @@ class PrescriptionCreate(BaseModel):
         cls,
         value: str,
     ) -> str:
-        value = " ".join(
-            value.strip().split()
-        )
+        value = " ".join(value.strip().split())
 
         if not value:
-            raise ValueError(
-                "This field is required."
-            )
+            raise ValueError("This field is required.")
 
         return value
 
@@ -114,14 +110,10 @@ class PrescriptionInstructionUpdate(BaseModel):
         cls,
         value: str,
     ) -> str:
-        value = " ".join(
-            value.strip().split()
-        )
+        value = " ".join(value.strip().split())
 
         if not value:
-            raise ValueError(
-                "This field is required."
-            )
+            raise ValueError("This field is required.")
 
         return value
 
@@ -171,9 +163,7 @@ class PrescriptionOut(BaseModel):
 
     can_edit: bool
 
-    history: list[
-        PrescriptionHistoryOut
-    ] = []
+    history: list[PrescriptionHistoryOut] = []
 
 
 class PrescriptionList(BaseModel):

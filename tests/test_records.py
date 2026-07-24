@@ -17,6 +17,7 @@ from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
+
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
     """FastAPI test client backed by a fresh in-memory SQLite DB for every test."""
@@ -121,7 +122,7 @@ def test_create_consultation_note_success(client: TestClient) -> None:
     assert body["doctor_name"] == "Dr. Alan Chua"
     assert body["notes"] == "Patient presented with fever and cough for 3 days."
     assert body["diagnoses"] == [
-        {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+        {"id": 1, "icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
     ]
 
 
@@ -142,15 +143,39 @@ def test_get_unknown_record_returns_404(client: TestClient) -> None:
 
 def test_new_record_page_renders(client: TestClient) -> None:
     """The HTML consultation note form page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
     r = client.get("/records/new?patient_id=P00001")
     assert r.status_code == 200
     assert "New Consultation Note" in r.text
 
 
 def test_record_detail_page_renders(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
     r = client.get("/records/R00001")
     assert r.status_code == 200
     assert "Consultation Note" in r.text
+
+
+def test_new_record_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/records/new?patient_id=P00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_record_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/records/R00001", follow_redirects=False)
+    assert r.status_code == 303
 
 
 # --- 2. Required field / validation tests -------------------------------------

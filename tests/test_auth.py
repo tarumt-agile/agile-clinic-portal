@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import re
 from collections.abc import Generator
 
@@ -45,14 +46,26 @@ def client() -> Generator[TestClient, None, None]:
         clear_outbox()
 
 
+_next_license_number = itertools.count(10000)
+
+
 def _create_staff_and_get_temp_password(
-    client: TestClient, email: str = "alice.wong@example.com"
+    client: TestClient, email: str = "alice.wong@example.com", role: str = "nurse"
 ) -> str:
     """Create a staff account via the API and pull the temp password out of the welcome email."""
-    r = client.post(
-        "/api/staff",
-        json={"full_name": "Alice Wong", "email": email, "role": "nurse"},
-    )
+    payload: dict[str, object] = {"full_name": "Alice Wong", "email": email, "role": role}
+    if role == "doctor":
+        # Each doctor needs a unique license_number (the field is unique in the
+        # DB) - a counter keeps every call collision-free even within the same
+        # test, e.g. when a test registers two doctors to log in as each in turn.
+        payload.update(
+            {
+                "license_number": f"MMC-{next(_next_license_number)}",
+                "specialty": "General Medicine",
+                "status": "active",
+            }
+        )
+    r = client.post("/api/staff", json=payload)
     assert r.status_code == 201
 
     body = get_outbox()[-1].body
@@ -144,3 +157,181 @@ def test_login_wrong_password_on_deactivated_account_still_returns_401(
         "/api/auth/login", json={"email": "alice.wong@example.com", "password": "wrong-password"}
     )
     assert r.status_code == 401
+
+
+# --- 3. Session login/logout -------------------------------------------------
+
+
+def test_login_sets_a_session(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.get("/staff/create")
+    assert r.status_code == 200
+
+
+def test_logout_clears_the_session(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    client.post("/api/auth/logout")
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+
+
+# --- 4. Patient login ---------------------------------------------------------
+
+
+def test_patient_login_success(client: TestClient) -> None:
+    """
+    Scenario: A patient logs in with their IC number and phone number
+      Given a patient is registered
+      When I POST /api/auth/patient-login with their IC number and phone number
+      Then I receive 200 and the patient's details
+    """
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "email": "jane.tan@example.com",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+
+    r = client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["patient_id"] == created["patient_id"]
+
+
+def test_patient_login_wrong_ic_returns_401(client: TestClient) -> None:
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+
+    r = client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": "000000-00-0000", "phone_number": created["phone_number"]},
+    )
+    assert r.status_code == 401
+
+
+def test_patient_login_wrong_phone_returns_401(client: TestClient) -> None:
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+
+    r = client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": created["ic_or_passport"], "phone_number": "000-0000000"},
+    )
+    assert r.status_code == 401
+
+
+def test_patient_login_unknown_ic_returns_401(client: TestClient) -> None:
+    r = client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": "000000-00-0000", "phone_number": "012-3456789"},
+    )
+    assert r.status_code == 401
+
+
+# --- 5. Logging into a second identity resets the first one ------------------
+
+
+def test_patient_login_after_staff_login_clears_the_staff_session(client: TestClient) -> None:
+    """
+    Scenario: A staff member logs in, then logs into a patient account too (without
+    logging out first)
+      Given a doctor is logged in
+      When the same session logs in as a patient too, without logging out
+      Then the doctor's own protected page no longer accepts the session
+    """
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "email": "jane.tan@example.com",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+
+    r = client.get("/appointments/schedule", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_staff_login_after_patient_login_clears_the_patient_session(client: TestClient) -> None:
+    """
+    Scenario: A patient logs in, then a staff member logs in too on the same
+    session (without logging out first)
+      Given a patient is logged in
+      When the same session logs in as staff too, without logging out
+      Then the patient's own protected page no longer accepts the session
+    """
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "email": "jane.tan@example.com",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    r = client.get("/patients/dashboard", follow_redirects=False)
+    assert r.status_code == 303

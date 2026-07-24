@@ -13,7 +13,7 @@
       <a href="/staff" class="admin-back-link"><span>← Back to Staff List</span></a>
       <p class="admin-label">Staff Management</p>
       <h1>Create Staff Account</h1>
-      <p class="admin-subtitle">Create an account for a doctor, nurse (receptionist), or administrator.</p>
+      <p class="admin-subtitle">Create an account for a doctor, nurse, receptionist, or administrator.</p>
     </div>
   </header>
 
@@ -45,6 +45,7 @@
             <option value="">Choose a staff role...</option>
             <option value="doctor">Doctor</option>
             <option value="nurse">Nurse</option>
+            <option value="receptionist">Receptionist</option>
             <option value="admin">Administration</option>
           </select>
           <div id="role_error" class="invalid-feedback" aria-live="polite"></div>
@@ -111,5 +112,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/staff_create.js?v=3"></script>
+<script src="/static/js/staff_create.js?v=4"></script>
 {% endblock %}

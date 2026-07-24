@@ -5,6 +5,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_patient, require_role
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.patients.schemas import (
@@ -17,12 +19,12 @@ from agile_ci_demo.patients.service import (
     DuplicatePatientError,
     PatientNotFoundError,
     create_patient,
-    get_current_patient,
     get_patient_by_ic,
     get_patient_by_patient_id,
     search_patients,
     update_patient,
 )
+from agile_ci_demo.patients.models import Patient
 
 templates = Jinja2Templates(directory=str(settings.templates_dir))
 
@@ -62,17 +64,8 @@ def list_patients(
 
 
 @api_router.get("/me", response_model=PatientOut)
-def get_my_patient_record(db: Session = Depends(get_db)) -> PatientOut:
-    """The current patient's own record, for self-service booking.
-
-    "Current patient" is a placeholder - see get_current_patient() - until real
-    patient login sessions exist.
-    """
-    patient = get_current_patient(db)
-    if patient is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No patient account found"
-        )
+def get_my_patient_record(patient: Patient = Depends(require_patient)) -> PatientOut:
+    """The logged-in patient's own record, for self-service booking."""
     return PatientOut.model_validate(patient)
 
 
@@ -110,24 +103,33 @@ def edit_patient(
 
 
 @pages_router.get("/register", response_class=HTMLResponse)
-def register_page(request: Request) -> HTMLResponse:
+def register_patient_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/receptionist_registerPatients.html", {})
 
 
 @pages_router.get("", response_class=HTMLResponse)
-def list_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "patients/list.html", {})
+def list_patients_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
+) -> HTMLResponse:
+    return templates.TemplateResponse(request, "patients/receptionist_viewPatients.html", {})
 
 
 @pages_router.get("/dashboard", response_class=HTMLResponse)
-def dashboard_page(request: Request) -> HTMLResponse:
-    """Patient self-service home page. Patient identity is a placeholder (see
-    get_current_patient) until real login sessions exist."""
+def patient_dashboard_page(request: Request, _patient=Depends(require_patient)) -> HTMLResponse:
+    """Patient self-service home page."""
     return templates.TemplateResponse(request, "patients/patient_dashboard.html", {})
 
 
 @pages_router.get("/{patient_id}", response_class=HTMLResponse)
-def detail_page(request: Request, patient_id: str) -> HTMLResponse:
+def patient_detail_page(
+    request: Request,
+    patient_id: str,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.DOCTOR, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "patients/patients_details.html", {"patient_id": patient_id}
     )

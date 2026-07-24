@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections.abc import Generator
 
 import pytest
@@ -90,6 +91,44 @@ def _register_doctor(client: TestClient, **overrides: object) -> str:
     return str(body["staff_id"])
 
 
+def _login_as_doctor(client: TestClient, email: str) -> None:
+    """Log in as a doctor using the temp password from their most recent welcome
+    email - /api/appointments/schedule is now the logged-in doctor's own, so tests
+    that exercise it need a real session rather than just a registered account."""
+    from agile_ci_demo.core.email import get_outbox
+
+    body = get_outbox()[-1].body
+    match = re.search(r"temporary password is: (\S+)", body)
+    assert match is not None
+    client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
+
+
+def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
+    """Register a doctor and log in as them, returning their public staff_id."""
+    doctor_id = _register_doctor(client, **overrides)
+    payload = valid_staff_payload(**overrides)
+    _login_as_doctor(client, str(payload["email"]))
+    return doctor_id
+
+
+def _register_and_login_patient(client: TestClient, **overrides: object) -> str:
+    """Register a patient and log in as them, returning their public patient_id -
+    /api/appointments/mine is now the logged-in patient's own, so tests that
+    exercise it need a real session rather than just a registered account.
+
+    ic_or_passport is server-generated (PatientCreate doesn't accept it as
+    input), so the login IC has to come from the registration response, not
+    from the input payload. phone_number is patient-supplied, but is pulled
+    from the same response for consistency.
+    """
+    body = client.post("/api/patients", json=valid_patient_payload(**overrides)).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": body["ic_or_passport"], "phone_number": body["phone_number"]},
+    )
+    return str(body["patient_id"])
+
+
 TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
 
@@ -152,6 +191,15 @@ def test_get_unknown_appointment_returns_404(client: TestClient) -> None:
 
 def test_create_appointment_page_renders(client: TestClient) -> None:
     """The HTML appointment booking form page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
+    )
+
     r = client.get("/appointments/create")
     assert r.status_code == 200
     assert "Book Appointment" in r.text
@@ -159,6 +207,15 @@ def test_create_appointment_page_renders(client: TestClient) -> None:
 
 def test_self_book_appointment_page_renders(client: TestClient) -> None:
     """The HTML patient self-service booking page loads successfully."""
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+
     r = client.get("/appointments/book")
     assert r.status_code == 200
     assert "Book My Appointment" in r.text
@@ -280,7 +337,9 @@ def test_different_doctor_same_slot_succeeds(client: TestClient) -> None:
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
     doctor_a = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
-    doctor_b = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com",license_number="MMC-67980")
+    doctor_b = _register_doctor(
+        client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67980"
+    )
 
     r1 = client.post("/api/appointments", json=valid_appointment_payload(patient_a, doctor_a))
     assert r1.status_code == 201
@@ -315,7 +374,7 @@ def test_get_schedule_returns_current_doctors_appointments(client: TestClient) -
       When I GET /api/appointments/schedule for that date
       Then I receive both appointments ordered by start time ascending
     """
-    doctor_id = _register_doctor(client)
+    doctor_id = _register_and_login_doctor(client)
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
 
@@ -340,8 +399,12 @@ def test_get_schedule_returns_current_doctors_appointments(client: TestClient) -
 def test_get_schedule_excludes_other_doctors_appointments(client: TestClient) -> None:
     """The schedule for the current (first) doctor must not include another doctor's
     appointments, even on the same date and time."""
-    first_doctor = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
-    other_doctor = _register_doctor(client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67954")
+    first_doctor = _register_and_login_doctor(
+        client, full_name="Dr. Alan Chua", email="alan@example.com"
+    )
+    other_doctor = _register_doctor(
+        client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67954"
+    )
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
 
@@ -358,7 +421,7 @@ def test_get_schedule_excludes_other_doctors_appointments(client: TestClient) ->
 
 def test_get_schedule_defaults_to_today_with_no_appointments(client: TestClient) -> None:
     """With no date param, the schedule defaults to today's date."""
-    _register_doctor(client)
+    _register_and_login_doctor(client)
 
     r = client.get("/api/appointments/schedule")
     assert r.status_code == 200
@@ -368,21 +431,59 @@ def test_get_schedule_defaults_to_today_with_no_appointments(client: TestClient)
 
 
 def test_get_schedule_past_date_returns_422(client: TestClient) -> None:
-    _register_doctor(client)
+    _register_and_login_doctor(client)
     yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
 
     r = client.get("/api/appointments/schedule", params={"date": yesterday})
     assert r.status_code == 422
 
 
-def test_get_schedule_no_doctor_returns_404(client: TestClient) -> None:
-    """If no doctor account exists at all, there is no "current doctor" to show."""
-    r = client.get("/api/appointments/schedule", params={"date": TOMORROW})
-    assert r.status_code == 404
+def test_get_schedule_requires_a_logged_in_doctor(client: TestClient) -> None:
+    """Anonymous requests must be sent to log in rather than falling back to
+    "the first doctor on record" - this replaces the old placeholder-era
+    test_get_schedule_no_doctor_returns_404, whose premise (a 404 for a missing
+    "current doctor") no longer applies now that identity comes from the
+    session, not from whichever doctor happens to be first in the database."""
+    r = client.get("/api/appointments/schedule", params={"date": TOMORROW}, follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_my_schedule_shows_the_logged_in_doctor(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    r = client.get("/api/appointments/schedule")
+    assert r.status_code == 200
+    assert r.json()["doctor_id"] == "S00001"
+
+
+def test_my_schedule_does_not_show_a_different_doctor(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    # First doctor created - the old placeholder logic would have picked this one.
+    _create_staff_and_get_temp_password(client, email="first@example.com", role="doctor")
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="second@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "second@example.com", "password": temp_password})
+
+    r = client.get("/api/appointments/schedule")
+    assert r.json()["doctor_id"] == "S00002"
 
 
 def test_schedule_page_renders(client: TestClient) -> None:
     """The HTML doctor schedule page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
     r = client.get("/appointments/schedule")
     assert r.status_code == 200
     assert "My Schedule" in r.text
@@ -568,7 +669,7 @@ def test_cancelled_appointment_shows_in_schedule_with_cancelled_status(
     """The schedule view must keep showing a cancelled appointment (with its status)
     rather than removing it from the list."""
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    doctor_id = _register_and_login_doctor(client)
     created = client.post(
         "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
     ).json()
@@ -596,7 +697,7 @@ def test_get_my_appointments_returns_current_patients_upcoming_appointments(
       When I GET /api/appointments/mine
       Then I receive that appointment
     """
-    patient_id = _register_patient(client)
+    patient_id = _register_and_login_patient(client)
     doctor_id = _register_doctor(client)
     created = client.post(
         "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
@@ -611,9 +712,10 @@ def test_get_my_appointments_returns_current_patients_upcoming_appointments(
 
 
 def test_get_my_appointments_excludes_other_patients(client: TestClient) -> None:
-    """The current (first-registered) patient's list must not include another
-    patient's appointment."""
-    patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
+    """The logged-in patient's list must not include another patient's appointment."""
+    patient_a = _register_and_login_patient(
+        client, full_name="Jane Tan", ic_or_passport="900520-10-1234"
+    )
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
     doctor_id = _register_doctor(client)
     client.post("/api/appointments", json=valid_appointment_payload(patient_b, doctor_id))
@@ -625,14 +727,18 @@ def test_get_my_appointments_excludes_other_patients(client: TestClient) -> None
     assert body["appointments"] == []
 
 
-def test_get_my_appointments_no_patient_returns_404(client: TestClient) -> None:
-    """If no patient account exists at all, there is no "current patient" to show."""
-    r = client.get("/api/appointments/mine")
-    assert r.status_code == 404
+def test_get_my_appointments_requires_a_logged_in_patient(client: TestClient) -> None:
+    """Anonymous requests must be sent to log in rather than falling back to
+    "the first patient on record" - this replaces the old placeholder-era
+    test_get_my_appointments_no_patient_returns_404, whose premise (a 404 for a
+    missing "current patient") no longer applies now that identity comes from
+    the session, not from whichever patient happens to be first in the database."""
+    r = client.get("/api/appointments/mine", follow_redirects=False)
+    assert r.status_code == 303
 
 
 def test_get_my_appointments_includes_cancelled_status(client: TestClient) -> None:
-    patient_id = _register_patient(client)
+    patient_id = _register_and_login_patient(client)
     doctor_id = _register_doctor(client)
     created = client.post(
         "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
@@ -651,7 +757,7 @@ def test_get_my_appointments_includes_cancelled_status(client: TestClient) -> No
 def test_patient_can_cancel_their_own_appointment(client: TestClient) -> None:
     """The same cancel endpoint used by the schedule view works for a patient
     cancelling their own booking - no separate cancel logic needed."""
-    patient_id = _register_patient(client)
+    patient_id = _register_and_login_patient(client)
     doctor_id = _register_doctor(client)
     created = client.post(
         "/api/appointments", json=valid_appointment_payload(patient_id, doctor_id)
@@ -667,11 +773,95 @@ def test_patient_can_cancel_their_own_appointment(client: TestClient) -> None:
     assert mine["appointments"][0]["status"] == "cancelled"
 
 
+def test_my_appointments_shows_the_logged_in_patient(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+
+    r = client.get("/api/appointments/mine")
+    assert r.status_code == 200
+    assert r.json()["patient_id"] == created["patient_id"]
+
+
 def test_my_appointments_page_renders(client: TestClient) -> None:
     """The HTML "My Appointments" page loads successfully."""
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
+    )
+
     r = client.get("/appointments/mine")
     assert r.status_code == 200
     assert "My Appointments" in r.text
+
+
+def test_create_appointment_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/create", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_schedule_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/schedule", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_book_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/book", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_mine_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/mine", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_consultations_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/consultations", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_consultations_page_loads_when_logged_in_as_doctor(client: TestClient) -> None:
+    """The HTML doctor consultation start page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    r = client.get("/appointments/consultations")
+    assert r.status_code == 200
+    assert "Start Consultation" in r.text
+
+
+def test_doctor_schedule_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/appointments/doctor-schedule", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_doctor_schedule_page_loads_when_logged_in_as_receptionist(client: TestClient) -> None:
+    """The HTML receptionist doctor schedule view page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
+    )
+
+    r = client.get("/appointments/doctor-schedule")
+    assert r.status_code == 200
+    assert "Doctor Schedule" in r.text
 
 
 # --- 9. BDD-style tests with pytest-bdd --------------------------------------
@@ -685,6 +875,7 @@ class Context:
         self.last_response = None  # type: ignore[assignment]
         self.patient_id: str = ""
         self.doctor_id: str = ""
+        self.doctor_email: str = ""
         self.reference_number: str = ""
 
 
@@ -703,6 +894,7 @@ def a_patient_and_doctor_exist(api_is_running: dict, context: Context) -> None:
     client: TestClient = api_is_running["client"]
     context.patient_id = _register_patient(client)
     context.doctor_id = _register_doctor(client)
+    context.doctor_email = str(valid_staff_payload()["email"])
 
 
 @bdd_when("I book an appointment for that patient and doctor at a valid slot")
@@ -746,6 +938,7 @@ def doctor_has_tomorrow_appointment_step(api_is_running: dict, context: Context)
 @bdd_when("I view that doctor's schedule for tomorrow")
 def view_schedule_step(api_is_running: dict, context: Context) -> None:
     client: TestClient = api_is_running["client"]
+    _login_as_doctor(client, context.doctor_email)
     context.last_response = client.get("/api/appointments/schedule", params={"date": TOMORROW})
 
 

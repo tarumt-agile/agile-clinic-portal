@@ -91,9 +91,7 @@ class Prescription(Base):
         onupdate=dt.datetime.utcnow,
     )
 
-    consultation_note: Mapped[
-        ConsultationNote
-    ] = relationship()
+    consultation_note: Mapped[ConsultationNote] = relationship()
 
     diagnosis: Mapped[Diagnosis] = relationship()
 
@@ -103,14 +101,10 @@ class Prescription(Base):
         foreign_keys=[prescribing_doctor_id],
     )
 
-    history: Mapped[
-        list["PrescriptionHistory"]
-    ] = relationship(
+    history: Mapped[list["PrescriptionHistory"]] = relationship(
         back_populates="prescription",
         cascade="all, delete-orphan",
-        order_by=(
-            "PrescriptionHistory.changed_at.desc()"
-        ),
+        order_by=("PrescriptionHistory.changed_at.desc()"),
     )
 
 
@@ -166,14 +160,10 @@ class PrescriptionHistory(Base):
         index=True,
     )
 
-    prescription: Mapped[
-        Prescription
-    ] = relationship(
+    prescription: Mapped[Prescription] = relationship(
         back_populates="history",
     )
 
-    changed_by_doctor: Mapped[
-        Staff
-    ] = relationship(
+    changed_by_doctor: Mapped[Staff] = relationship(
         foreign_keys=[changed_by_doctor_id],
     )

@@ -37,7 +37,8 @@
 
   const roleLabels = {
     doctor: "Doctor",
-    nurse: "Nurse (Receptionist)",
+    nurse: "Nurse",
+    receptionist: "Receptionist",
     admin: "Administration"
   };
 

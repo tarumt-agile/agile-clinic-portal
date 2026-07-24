@@ -9,6 +9,7 @@ class Role(str, Enum):
     ADMIN = "admin"
     DOCTOR = "doctor"
     NURSE = "nurse"
+    RECEPTIONIST = "receptionist"
 
 
 class Specialty(str, Enum):

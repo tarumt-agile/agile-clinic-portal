@@ -105,7 +105,7 @@ def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
     assert ids == ["S00001", "S00002", "S00003"]
 
 
-@pytest.mark.parametrize("role", ["admin", "doctor", "nurse"])
+@pytest.mark.parametrize("role", ["admin", "doctor", "nurse", "receptionist"])
 def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> None:
     payload = valid_staff_payload(email=f"{role}@example.com", role=role)
 
@@ -251,15 +251,89 @@ def test_create_staff_sends_welcome_email_with_temp_password(client: TestClient)
 
 
 def test_create_staff_page_renders(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
     r = client.get("/staff/create")
     assert r.status_code == 200
     assert "Create Staff Account" in r.text
 
 
+def test_create_staff_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/create", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_staff_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/S00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_staff_list_page_renders(client: TestClient) -> None:
+    """The HTML staff list page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
     r = client.get("/staff")
     assert r.status_code == 200
     assert "Staff" in r.text
+
+
+def test_staff_list_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_staff_list_page_loads_when_logged_in_as_admin(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+    r = client.get("/staff")
+    assert r.status_code == 200
+
+
+def test_staff_list_page_redirects_for_wrong_role(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse@example.com", "password": temp_password})
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_staff_list_page_redirects_after_session_holder_is_deactivated(
+    client: TestClient,
+) -> None:
+    """If an admin who is currently logged in gets deactivated, their existing
+    session should stop working immediately, not just at their next login."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+    client.patch("/api/staff/S00001/status", json={"is_active": False})
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
 
 
 def test_list_staff_returns_created_accounts(client: TestClient) -> None:
@@ -300,6 +374,95 @@ def test_reactivate_staff_success(client: TestClient) -> None:
     assert r.json()["is_active"] is True
 
 
+def test_deactivate_doctor_excludes_from_doctor_list(client: TestClient) -> None:
+    """
+    Scenario: Deactivating a doctor removes them from doctor-facing lists
+      Given a doctor account exists and is active
+      When I PATCH /api/staff/{staff_id}/status with is_active=false
+      Then GET /api/staff/doctor reports that doctor's status as inactive
+    """
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+    assert r.status_code == 200
+
+    doctors = client.get("/api/staff/doctor").json()
+    doctor = next(d for d in doctors if d["staff_id"] == created["staff_id"])
+    assert doctor["status"] == "inactive"
+
+
+def test_reactivate_doctor_restores_doctor_list_status(client: TestClient) -> None:
+    """Reactivating a doctor also restores DoctorProfile.status, not just is_active."""
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+    client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": True})
+    assert r.status_code == 200
+
+    doctors = client.get("/api/staff/doctor").json()
+    doctor = next(d for d in doctors if d["staff_id"] == created["staff_id"])
+    assert doctor["status"] == "active"
+
+
 def test_deactivate_unknown_staff_returns_404(client: TestClient) -> None:
     r = client.patch("/api/staff/S99999/status", json={"is_active": False})
     assert r.status_code == 404
+
+
+# --- 3. Doctor working hours ---------------------------------------------------
+
+
+def test_get_doctor_hours_uses_current_pair_when_no_change_queued() -> None:
+    import datetime as dt
+
+    from agile_ci_demo.staff.models import DoctorProfile, get_doctor_hours
+
+    profile = DoctorProfile(
+        license_number="MMC-11111",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+    )
+
+    assert get_doctor_hours(profile, dt.date(2026, 1, 1)) == (dt.time(9, 0), dt.time(17, 0))
+
+
+def test_get_doctor_hours_uses_queued_pair_once_effective_date_reached() -> None:
+    import datetime as dt
+
+    from agile_ci_demo.staff.models import DoctorProfile, get_doctor_hours
+
+    profile = DoctorProfile(
+        license_number="MMC-11111",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+        next_start_time=dt.time(10, 0),
+        next_end_time=dt.time(16, 0),
+        next_effective_date=dt.date(2026, 1, 2),
+    )
+
+    # The day before the queued change - still the current pair.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 1)) == (dt.time(9, 0), dt.time(17, 0))
+    # Exactly the effective date - the queued pair now applies.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 2)) == (dt.time(10, 0), dt.time(16, 0))
+    # Any later date - the queued pair still applies.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 5)) == (dt.time(10, 0), dt.time(16, 0))

@@ -93,7 +93,7 @@
   }
 
   function validateRole() {
-    if (!["doctor", "nurse", "admin"].includes(roleInput.value)) {
+    if (!["doctor", "nurse", "receptionist", "admin"].includes(roleInput.value)) {
       showError(roleInput, "Please select a staff role."); return false;
     }
     showValid(roleInput); return true;
