@@ -25,7 +25,11 @@
   // passport numbers, which aren't digits-only and shouldn't be touched.
   function autoDash(input, groupSizes) {
     input.addEventListener("input", () => {
-      if (/[a-zA-Z]/.test(input.value)) return;
+      if (/[a-zA-Z]/.test(input.value)) {
+        // Passport number - undo any dash inserted before the first letter showed up.
+        input.value = input.value.replace(/-/g, "");
+        return;
+      }
       const digits = input.value.replace(/\D/g, "");
       const groups = [];
       let start = 0;
