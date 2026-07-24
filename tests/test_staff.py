@@ -423,3 +423,46 @@ def test_reactivate_doctor_restores_doctor_list_status(client: TestClient) -> No
 def test_deactivate_unknown_staff_returns_404(client: TestClient) -> None:
     r = client.patch("/api/staff/S99999/status", json={"is_active": False})
     assert r.status_code == 404
+
+
+# --- 3. Doctor working hours ---------------------------------------------------
+
+
+def test_get_doctor_hours_uses_current_pair_when_no_change_queued() -> None:
+    import datetime as dt
+
+    from agile_ci_demo.staff.models import DoctorProfile, get_doctor_hours
+
+    profile = DoctorProfile(
+        license_number="MMC-11111",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+    )
+
+    assert get_doctor_hours(profile, dt.date(2026, 1, 1)) == (dt.time(9, 0), dt.time(17, 0))
+
+
+def test_get_doctor_hours_uses_queued_pair_once_effective_date_reached() -> None:
+    import datetime as dt
+
+    from agile_ci_demo.staff.models import DoctorProfile, get_doctor_hours
+
+    profile = DoctorProfile(
+        license_number="MMC-11111",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+        next_start_time=dt.time(10, 0),
+        next_end_time=dt.time(16, 0),
+        next_effective_date=dt.date(2026, 1, 2),
+    )
+
+    # The day before the queued change - still the current pair.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 1)) == (dt.time(9, 0), dt.time(17, 0))
+    # Exactly the effective date - the queued pair now applies.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 2)) == (dt.time(10, 0), dt.time(16, 0))
+    # Any later date - the queued pair still applies.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 5)) == (dt.time(10, 0), dt.time(16, 0))

@@ -130,6 +130,53 @@ def migrate_sqlite_database() -> None:
                     WHERE new_duration IS NULL
                     """))
 
+        # Add working-hours columns to old doctor_profiles table.
+        if "doctor_profiles" in table_names:
+            doctor_columns = {column["name"] for column in inspector.get_columns("doctor_profiles")}
+
+            if "start_time" not in doctor_columns:
+                connection.execute(text("""
+                        ALTER TABLE doctor_profiles
+                        ADD COLUMN start_time TIME
+                        """))
+
+            if "end_time" not in doctor_columns:
+                connection.execute(text("""
+                        ALTER TABLE doctor_profiles
+                        ADD COLUMN end_time TIME
+                        """))
+
+            if "next_start_time" not in doctor_columns:
+                connection.execute(text("""
+                        ALTER TABLE doctor_profiles
+                        ADD COLUMN next_start_time TIME
+                        """))
+
+            if "next_end_time" not in doctor_columns:
+                connection.execute(text("""
+                        ALTER TABLE doctor_profiles
+                        ADD COLUMN next_end_time TIME
+                        """))
+
+            if "next_effective_date" not in doctor_columns:
+                connection.execute(text("""
+                        ALTER TABLE doctor_profiles
+                        ADD COLUMN next_effective_date DATE
+                        """))
+
+            # Give existing doctors the clinic's old default hours.
+            connection.execute(text("""
+                    UPDATE doctor_profiles
+                    SET start_time = '09:00:00'
+                    WHERE start_time IS NULL
+                    """))
+
+            connection.execute(text("""
+                    UPDATE doctor_profiles
+                    SET end_time = '17:00:00'
+                    WHERE end_time IS NULL
+                    """))
+
 
 def init_db() -> None:
     """Create all tables and update older SQLite tables."""
