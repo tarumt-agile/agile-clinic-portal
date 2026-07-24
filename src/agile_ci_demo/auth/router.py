@@ -43,7 +43,7 @@ def patient_login(
     payload: PatientLoginRequest, request: Request, db: Session = Depends(get_db)
 ) -> PatientLoginResponse:
     try:
-        patient = authenticate_patient(db, payload.patient_id, payload.ic_or_passport)
+        patient = authenticate_patient(db, payload.ic_or_passport, payload.phone_number)
     except InvalidCredentialsError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 

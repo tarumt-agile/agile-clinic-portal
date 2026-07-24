@@ -20,8 +20,8 @@ class LoginResponse(BaseModel):
 
 
 class PatientLoginRequest(BaseModel):
-    patient_id: str
     ic_or_passport: str
+    phone_number: str
 
 
 class PatientLoginResponse(BaseModel):

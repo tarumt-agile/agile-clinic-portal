@@ -126,7 +126,7 @@ def test_me_endpoint_does_not_show_a_different_patient(client: TestClient) -> No
     ).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": second["patient_id"], "ic_or_passport": second["ic_or_passport"]},
+        json={"ic_or_passport": second["ic_or_passport"], "phone_number": second["phone_number"]},
     )
 
     r = client.get("/api/patients/me")
@@ -148,7 +148,10 @@ def test_me_endpoint_shows_the_logged_in_patient(client: TestClient) -> None:
     created = client.post("/api/patients", json=valid_patient_payload()).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
 
     r = client.get("/api/patients/me")
@@ -467,7 +470,10 @@ def test_dashboard_page_loads_when_logged_in_as_patient(client: TestClient) -> N
     created = client.post("/api/patients", json=valid_patient_payload()).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
 
     r = client.get("/patients/dashboard")

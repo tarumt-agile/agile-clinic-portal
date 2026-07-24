@@ -80,8 +80,8 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patient_id: data.get("patient_id")?.trim(),
           ic_or_passport: data.get("ic_or_passport")?.trim(),
+          phone_number: data.get("phone_number")?.trim(),
         }),
       });
 
@@ -91,7 +91,7 @@
       }
 
       const body = await response.json().catch(() => ({}));
-      showAlert(body.detail || "Invalid patient ID or IC/passport number.");
+      showAlert(body.detail || "Invalid IC/passport number or phone number.");
     } catch (err) {
       showAlert("Unable to reach the server. Please check your connection and try again.");
     } finally {

@@ -118,12 +118,13 @@ def _register_and_login_patient(client: TestClient, **overrides: object) -> str:
 
     ic_or_passport is server-generated (PatientCreate doesn't accept it as
     input), so the login IC has to come from the registration response, not
-    from the input payload.
+    from the input payload. phone_number is patient-supplied, but is pulled
+    from the same response for consistency.
     """
     body = client.post("/api/patients", json=valid_patient_payload(**overrides)).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": body["patient_id"], "ic_or_passport": body["ic_or_passport"]},
+        json={"ic_or_passport": body["ic_or_passport"], "phone_number": body["phone_number"]},
     )
     return str(body["patient_id"])
 
@@ -209,7 +210,10 @@ def test_self_book_appointment_page_renders(client: TestClient) -> None:
     created = client.post("/api/patients", json=valid_patient_payload()).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
 
     r = client.get("/appointments/book")
@@ -773,7 +777,10 @@ def test_my_appointments_shows_the_logged_in_patient(client: TestClient) -> None
     created = client.post("/api/patients", json=valid_patient_payload()).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
 
     r = client.get("/api/appointments/mine")
@@ -786,7 +793,10 @@ def test_my_appointments_page_renders(client: TestClient) -> None:
     created = client.post("/api/patients", json=valid_patient_payload()).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
 
     r = client.get("/appointments/mine")

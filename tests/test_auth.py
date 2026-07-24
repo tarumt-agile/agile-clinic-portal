@@ -188,9 +188,9 @@ def test_logout_clears_the_session(client: TestClient) -> None:
 
 def test_patient_login_success(client: TestClient) -> None:
     """
-    Scenario: A patient logs in with their patient ID and IC number
+    Scenario: A patient logs in with their IC number and phone number
       Given a patient is registered
-      When I POST /api/auth/patient-login with their patient ID and IC number
+      When I POST /api/auth/patient-login with their IC number and phone number
       Then I receive 200 and the patient's details
     """
     created = client.post(
@@ -207,7 +207,10 @@ def test_patient_login_success(client: TestClient) -> None:
 
     r = client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
     assert r.status_code == 200
     assert r.json()["patient_id"] == created["patient_id"]
@@ -227,15 +230,34 @@ def test_patient_login_wrong_ic_returns_401(client: TestClient) -> None:
 
     r = client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": "000000-00-0000"},
+        json={"ic_or_passport": "000000-00-0000", "phone_number": created["phone_number"]},
     )
     assert r.status_code == 401
 
 
-def test_patient_login_unknown_patient_id_returns_401(client: TestClient) -> None:
+def test_patient_login_wrong_phone_returns_401(client: TestClient) -> None:
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+
     r = client.post(
         "/api/auth/patient-login",
-        json={"patient_id": "P99999", "ic_or_passport": "000000-00-0000"},
+        json={"ic_or_passport": created["ic_or_passport"], "phone_number": "000-0000000"},
+    )
+    assert r.status_code == 401
+
+
+def test_patient_login_unknown_ic_returns_401(client: TestClient) -> None:
+    r = client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": "000000-00-0000", "phone_number": "012-3456789"},
     )
     assert r.status_code == 401
 
@@ -269,7 +291,10 @@ def test_patient_login_after_staff_login_clears_the_staff_session(client: TestCl
     ).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
 
     r = client.get("/appointments/schedule", follow_redirects=False)
@@ -297,7 +322,10 @@ def test_staff_login_after_patient_login_clears_the_patient_session(client: Test
     ).json()
     client.post(
         "/api/auth/patient-login",
-        json={"patient_id": created["patient_id"], "ic_or_passport": created["ic_or_passport"]},
+        json={
+            "ic_or_passport": created["ic_or_passport"],
+            "phone_number": created["phone_number"],
+        },
     )
 
     temp_password = _create_staff_and_get_temp_password(

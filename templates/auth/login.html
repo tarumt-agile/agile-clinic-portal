@@ -40,15 +40,14 @@
       <div class="tab-pane fade" id="patient-tab" role="tabpanel">
         <form id="patient-login-form" novalidate>
           <div class="mb-3">
-            <label for="patient-id" class="form-label">Patient ID</label>
-            <input type="text" class="form-control" id="patient-id" name="patient_id" required
-                   placeholder="e.g. P00001">
-            <div class="invalid-feedback">Patient ID is required.</div>
-          </div>
-          <div class="mb-3">
             <label for="patient-ic" class="form-label">IC / Passport number</label>
             <input type="text" class="form-control" id="patient-ic" name="ic_or_passport" required>
             <div class="invalid-feedback">IC / passport number is required.</div>
+          </div>
+          <div class="mb-3">
+            <label for="patient-phone" class="form-label">Phone number</label>
+            <input type="text" class="form-control" id="patient-phone" name="phone_number" required>
+            <div class="invalid-feedback">Phone number is required.</div>
           </div>
           <button type="submit" class="btn btn-primary" id="patient-submit-btn">Log In</button>
         </form>
