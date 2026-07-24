@@ -15,6 +15,10 @@
     alertBox.classList.remove("d-none");
   }
 
+  function detailMessage(body, fallback) {
+    return typeof body.detail === "string" ? body.detail : fallback;
+  }
+
   function hideAlert() {
     alertBox.classList.add("d-none");
     alertBox.textContent = "";
@@ -50,9 +54,9 @@
 
       const body = await response.json().catch(() => ({}));
       if (response.status === 403) {
-        showAlert(body.detail || "This account has been deactivated.");
+        showAlert(detailMessage(body, "This account has been deactivated."));
       } else if (response.status === 401) {
-        showAlert(body.detail || "Invalid email or password.");
+        showAlert(detailMessage(body, "Invalid email or password."));
       } else {
         showAlert("Something went wrong while logging in. Please try again.");
       }
@@ -91,7 +95,7 @@
       }
 
       const body = await response.json().catch(() => ({}));
-      showAlert(body.detail || "Invalid IC/passport number or phone number.");
+      showAlert(detailMessage(body, "Invalid IC/passport number or phone number."));
     } catch (err) {
       showAlert("Unable to reach the server. Please check your connection and try again.");
     } finally {
