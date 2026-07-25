@@ -54,6 +54,15 @@ def valid_staff_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _login_as_admin(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+
 # --- 1. Create staff account ---------------------------------------------------
 
 
@@ -466,3 +475,160 @@ def test_get_doctor_hours_uses_queued_pair_once_effective_date_reached() -> None
     assert get_doctor_hours(profile, dt.date(2026, 1, 2)) == (dt.time(10, 0), dt.time(16, 0))
     # Any later date - the queued pair still applies.
     assert get_doctor_hours(profile, dt.date(2026, 1, 5)) == (dt.time(10, 0), dt.time(16, 0))
+
+
+def _register_doctor_for_hours_test(client: TestClient) -> str:
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            email="doctor@example.com",
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="Cardiology",
+            status="active",
+        ),
+    ).json()
+    return str(created["staff_id"])
+
+
+def _doctor_update_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "full_name": "Dr. Alan Chua",
+        "email": "doctor@example.com",
+        "is_active": True,
+        "license_number": "MMC-12345",
+        "specialty": "Cardiology",
+        "doctor_status": "active",
+        "start_time": "10:00",
+        "end_time": "16:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_update_staff_new_hours_do_not_apply_today(client: TestClient) -> None:
+    """
+    Scenario: Admin changes a doctor's working hours
+      Given a doctor with the default 09:00-17:00 hours
+      When admin PATCHes new hours for that doctor
+      Then today's effective hours in the response are unchanged
+    """
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["start_time"] == "09:00:00"
+    assert body["end_time"] == "17:00:00"
+
+
+def test_update_staff_requires_start_before_end(client: TestClient) -> None:
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(
+        f"/api/staff/{staff_id}",
+        json=_doctor_update_payload(start_time="16:00", end_time="10:00"),
+    )
+    assert r.status_code == 422
+
+
+def test_update_staff_requires_30_minute_alignment(client: TestClient) -> None:
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(
+        f"/api/staff/{staff_id}",
+        json=_doctor_update_payload(start_time="09:15", end_time="16:00"),
+    )
+    assert r.status_code == 422
+
+
+def test_update_staff_second_edit_collapses_the_first_queued_change() -> None:
+    """
+    Scenario: Admin edits a doctor's hours twice
+      Given a doctor's hours were already queued to change, and that change's
+        effective date has already arrived (simulated directly, without waiting
+        a real day)
+      When admin edits the hours again, calling update_staff() directly
+      Then the queued change has become the doctor's current hours, and the new
+        edit queues a further change for the day after today
+
+    This test builds its own isolated in-memory database and calls update_staff()
+    directly (bypassing the HTTP layer and the client fixture) because it needs
+    precise control over next_effective_date relative to "today" at test-run
+    time - something the real day-by-day flow can't be driven through in a fast
+    automated test.
+    """
+    import datetime as dt
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from agile_ci_demo.core.database import Base
+    from agile_ci_demo.staff.models import DoctorProfile, Staff
+    from agile_ci_demo.staff.schemas import StaffUpdate
+    from agile_ci_demo.staff.service import update_staff
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
+    staff = Staff(
+        staff_id="S00001",
+        full_name="Dr. Alan Chua",
+        email="alan.chua@example.com",
+        role="doctor",
+        password_hash="x",
+        is_active=True,
+    )
+    db.add(staff)
+    db.flush()
+
+    profile = DoctorProfile(
+        doctor_id="D00001",
+        staff_account_id=staff.id,
+        license_number="MMC-12345",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+        next_start_time=dt.time(10, 0),
+        next_end_time=dt.time(18, 0),
+        next_effective_date=dt.date.today(),  # already in effect as of today
+    )
+    db.add(profile)
+    db.commit()
+
+    update_staff(
+        db,
+        "S00001",
+        StaffUpdate(
+            full_name="Dr. Alan Chua",
+            email="alan.chua@example.com",
+            is_active=True,
+            license_number="MMC-12345",
+            specialty="Cardiology",
+            doctor_status="active",
+            start_time=dt.time(9, 0),
+            end_time=dt.time(16, 0),
+        ),
+    )
+
+    db.refresh(profile)
+    # The already-effective queued change (10:00-18:00) is now "current"...
+    assert profile.start_time == dt.time(10, 0)
+    assert profile.end_time == dt.time(18, 0)
+    # ...and the new edit is queued for tomorrow.
+    assert profile.next_start_time == dt.time(9, 0)
+    assert profile.next_end_time == dt.time(16, 0)
+    assert profile.next_effective_date == dt.date.today() + dt.timedelta(days=1)
+
+    db.close()

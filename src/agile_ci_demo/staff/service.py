@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as dt
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -177,6 +179,32 @@ def update_staff(
         doctor.status = (data.doctor_status or DoctorStatus.ACTIVE).value
 
         staff.is_active = doctor.status == DoctorStatus.ACTIVE.value
+
+        if data.start_time is None:
+            raise ValueError("Working hours start time is required for a doctor.")
+
+        if data.end_time is None:
+            raise ValueError("Working hours end time is required for a doctor.")
+
+        if data.start_time >= data.end_time:
+            raise ValueError("Working hours start time must be before the end time.")
+
+        # 30 minutes matches SLOT_MINUTES in appointments/service.py - duplicated
+        # here as a plain number rather than imported, to avoid a circular import
+        # between the staff and appointments modules.
+        for label, value in (("start", data.start_time), ("end", data.end_time)):
+            minutes_since_midnight = value.hour * 60 + value.minute
+            if minutes_since_midnight % 30 != 0:
+                raise ValueError(f"Working hours {label} time must align to 30-minute slots.")
+
+        today = dt.date.today()
+        if doctor.next_effective_date is not None and doctor.next_effective_date <= today:
+            doctor.start_time = doctor.next_start_time  # type: ignore[assignment]
+            doctor.end_time = doctor.next_end_time  # type: ignore[assignment]
+
+        doctor.next_start_time = data.start_time
+        doctor.next_end_time = data.end_time
+        doctor.next_effective_date = today + dt.timedelta(days=1)
 
     try:
         db.commit()
