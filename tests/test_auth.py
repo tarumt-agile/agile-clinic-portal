@@ -74,6 +74,13 @@ def _create_staff_and_get_temp_password(
     return match.group(1)
 
 
+def _login_as_admin(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+
 # --- 1. Login tests ---------------------------------------------------------
 
 
@@ -125,6 +132,7 @@ def test_login_blocked_for_deactivated_account(client: TestClient) -> None:
       Then I receive 403 Forbidden
     """
     temp_password = _create_staff_and_get_temp_password(client)
+    _login_as_admin(client)
     client.patch("/api/staff/S00001/status", json={"is_active": False})
 
     r = client.post(
@@ -136,6 +144,7 @@ def test_login_blocked_for_deactivated_account(client: TestClient) -> None:
 def test_login_allowed_after_reactivation(client: TestClient) -> None:
     """A staff account that was deactivated and then reactivated can log in again."""
     temp_password = _create_staff_and_get_temp_password(client)
+    _login_as_admin(client)
     client.patch("/api/staff/S00001/status", json={"is_active": False})
     client.patch("/api/staff/S00001/status", json={"is_active": True})
 
@@ -151,6 +160,7 @@ def test_login_wrong_password_on_deactivated_account_still_returns_401(
     """An incorrect password must report as invalid credentials even for a deactivated
     account, so the deactivated status of an account is never leaked to a guesser."""
     _create_staff_and_get_temp_password(client)
+    _login_as_admin(client)
     client.patch("/api/staff/S00001/status", json={"is_active": False})
 
     r = client.post(

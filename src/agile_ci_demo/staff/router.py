@@ -147,6 +147,7 @@ def update_staff_status(
     staff_id: str,
     payload: StaffStatusUpdate,
     db: Session = Depends(get_db),
+    _staff: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = set_staff_active_status(
@@ -196,6 +197,7 @@ def update_staff_details(
     staff_id: str,
     payload: StaffUpdate,
     db: Session = Depends(get_db),
+    _staff: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = update_staff(

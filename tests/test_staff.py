@@ -366,6 +366,7 @@ def test_deactivate_staff_success(client: TestClient) -> None:
       When I PATCH /api/staff/{staff_id}/status with is_active=false
       Then the account is marked inactive
     """
+    _login_as_admin(client)
     created = client.post("/api/staff", json=valid_staff_payload()).json()
 
     r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
@@ -375,6 +376,7 @@ def test_deactivate_staff_success(client: TestClient) -> None:
 
 def test_reactivate_staff_success(client: TestClient) -> None:
     """The status toggle also supports reactivating a previously deactivated account."""
+    _login_as_admin(client)
     created = client.post("/api/staff", json=valid_staff_payload()).json()
     client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
 
@@ -390,6 +392,7 @@ def test_deactivate_doctor_excludes_from_doctor_list(client: TestClient) -> None
       When I PATCH /api/staff/{staff_id}/status with is_active=false
       Then GET /api/staff/doctor reports that doctor's status as inactive
     """
+    _login_as_admin(client)
     created = client.post(
         "/api/staff",
         json=valid_staff_payload(
@@ -410,6 +413,7 @@ def test_deactivate_doctor_excludes_from_doctor_list(client: TestClient) -> None
 
 def test_reactivate_doctor_restores_doctor_list_status(client: TestClient) -> None:
     """Reactivating a doctor also restores DoctorProfile.status, not just is_active."""
+    _login_as_admin(client)
     created = client.post(
         "/api/staff",
         json=valid_staff_payload(
@@ -430,8 +434,55 @@ def test_reactivate_doctor_restores_doctor_list_status(client: TestClient) -> No
 
 
 def test_deactivate_unknown_staff_returns_404(client: TestClient) -> None:
+    _login_as_admin(client)
     r = client.patch("/api/staff/S99999/status", json={"is_active": False})
     assert r.status_code == 404
+
+
+def test_deactivate_staff_requires_admin_login(client: TestClient) -> None:
+    """The bug this fix closes: PATCH .../status had no role check at all."""
+    created = client.post("/api/staff", json=valid_staff_payload()).json()
+
+    r = client.patch(
+        f"/api/staff/{created['staff_id']}/status",
+        json={"is_active": False},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+def test_deactivate_staff_rejects_a_non_admin_login(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    created = client.post("/api/staff", json=valid_staff_payload()).json()
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse2@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse2@example.com", "password": temp_password})
+
+    r = client.patch(
+        f"/api/staff/{created['staff_id']}/status",
+        json={"is_active": False},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+def test_update_staff_details_requires_admin_login(client: TestClient) -> None:
+    """The bug this fix closes: PATCH /api/staff/{staff_id} had no role check at all."""
+    created = client.post("/api/staff", json=valid_staff_payload()).json()
+
+    r = client.patch(
+        f"/api/staff/{created['staff_id']}",
+        json={
+            "full_name": "Alice Wong",
+            "email": "alice.wong@example.com",
+            "is_active": True,
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
 
 
 # --- 3. Doctor working hours ---------------------------------------------------
