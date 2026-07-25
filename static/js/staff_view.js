@@ -33,6 +33,14 @@
     "edit-doctor-status"
   );
 
+  const startTimeInput = byId(
+    "edit-start-time"
+  );
+
+  const endTimeInput = byId(
+    "edit-end-time"
+  );
+
   let currentStaff = null;
 
   const roleLabels = {
@@ -266,6 +274,13 @@
         "view-doctor-status",
         staff.doctor_status
       );
+
+      setText(
+        "view-working-hours",
+        staff.start_time && staff.end_time
+          ? staff.start_time.slice(0, 5) + " - " + staff.end_time.slice(0, 5)
+          : null
+      );
     }
 
     byId(
@@ -304,11 +319,19 @@
       currentStaff.doctor_status ||
       "active";
 
+    startTimeInput.value =
+      (currentStaff.start_time || "").slice(0, 5);
+
+    endTimeInput.value =
+      (currentStaff.end_time || "").slice(0, 5);
+
     [
       nameInput,
       emailInput,
       licenseInput,
-      specialtyInput
+      specialtyInput,
+      startTimeInput,
+      endTimeInput
     ].forEach(function (input) {
       input.classList.remove(
         "is-valid",
@@ -380,6 +403,32 @@
         showFieldValid(
           specialtyInput
         );
+      }
+
+      if (!startTimeInput.value) {
+        isValid = showFieldError(
+          startTimeInput,
+          "Please choose a start time."
+        );
+      } else {
+        showFieldValid(startTimeInput);
+      }
+
+      if (!endTimeInput.value) {
+        isValid = showFieldError(
+          endTimeInput,
+          "Please choose an end time."
+        );
+      } else if (
+        startTimeInput.value &&
+        endTimeInput.value <= startTimeInput.value
+      ) {
+        isValid = showFieldError(
+          endTimeInput,
+          "End time must be after the start time."
+        );
+      } else {
+        showFieldValid(endTimeInput);
       }
     }
 
@@ -508,7 +557,9 @@
           activeInput.value === "true",
         license_number: null,
         specialty: null,
-        doctor_status: null
+        doctor_status: null,
+        start_time: null,
+        end_time: null
       };
 
       if (
@@ -522,6 +573,12 @@
 
         payload.doctor_status =
           doctorStatusInput.value;
+
+        payload.start_time =
+          startTimeInput.value;
+
+        payload.end_time =
+          endTimeInput.value;
       }
 
       try {

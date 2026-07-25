@@ -174,6 +174,11 @@ Staff Details - Agile Clinic Portal
             <dt>Doctor Status</dt>
             <dd id="view-doctor-status">—</dd>
           </div>
+
+          <div>
+            <dt>Working Hours</dt>
+            <dd id="view-working-hours">—</dd>
+          </div>
         </dl>
       </section>
     </div>
@@ -345,6 +350,44 @@ Staff Details - Agile Clinic Portal
                   Inactive
                 </option>
               </select>
+            </div>
+
+            <div class="staff-edit-field">
+              <label for="edit-start-time">
+                Working Hours Start *
+              </label>
+
+              <input
+                type="time"
+                id="edit-start-time"
+                step="1800"
+              >
+
+              <div
+                id="edit-start-time-error"
+                class="staff-field-error"
+              ></div>
+            </div>
+
+            <div class="staff-edit-field">
+              <label for="edit-end-time">
+                Working Hours End *
+              </label>
+
+              <input
+                type="time"
+                id="edit-end-time"
+                step="1800"
+              >
+
+              <div
+                id="edit-end-time-error"
+                class="staff-field-error"
+              ></div>
+
+              <small class="staff-field-hint">
+                Changes take effect starting tomorrow, not today.
+              </small>
             </div>
           </div>
         </div>
