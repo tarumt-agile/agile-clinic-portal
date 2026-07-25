@@ -103,6 +103,25 @@ def _login_as_doctor(client: TestClient, email: str) -> None:
     client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
 
 
+def _login_as_admin(client: TestClient) -> None:
+    response = client.post(
+        "/api/staff",
+        json={
+            "full_name": "Admin User",
+            "email": "admin@example.com",
+            "role": "admin",
+        },
+    )
+    assert response.status_code == 201, response.json()
+
+    from agile_ci_demo.core.email import get_outbox
+
+    body = get_outbox()[-1].body
+    match = re.search(r"temporary password is: (\S+)", body)
+    assert match is not None
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": match.group(1)})
+
+
 def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
     """Register a doctor and log in as them, returning their public staff_id."""
     doctor_id = _register_doctor(client, **overrides)
@@ -565,6 +584,93 @@ def test_get_slots_past_date_returns_422(client: TestClient) -> None:
 
     r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": yesterday})
     assert r.status_code == 422
+
+
+def test_get_slots_respects_a_doctors_custom_hours(client: TestClient) -> None:
+    """
+    Scenario: A doctor has non-default working hours
+      Given admin has changed a doctor's hours to 10:00-16:00, effective tomorrow
+      When I GET /api/appointments/slots for that doctor for tomorrow
+      Then the slot grid runs from 10:00 to 16:00, not the old 09:00-17:00
+    """
+    doctor_id = _register_doctor(client)
+    _login_as_admin(client)
+
+    client.patch(
+        f"/api/staff/{doctor_id}",
+        json={
+            "full_name": "Dr. Alan Chua",
+            "email": "alan.chua@example.com",
+            "is_active": True,
+            "license_number": "MMC-12345",
+            "specialty": "General Medicine",
+            "doctor_status": "active",
+            "start_time": "10:00",
+            "end_time": "16:00",
+        },
+    )
+
+    r = client.get("/api/appointments/slots", params={"doctor_id": doctor_id, "date": TOMORROW})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["slots"]) == 12  # (16:00 - 10:00) / 30 minutes
+    assert body["slots"][0]["start_time"] == "10:00:00"
+    assert body["slots"][-1]["start_time"] == "15:30:00"
+
+
+def test_booking_outside_a_doctors_custom_hours_is_rejected(client: TestClient) -> None:
+    """A booking request for a time the doctor no longer works must fail, even
+    though it would have been valid under the old 09:00-17:00 default - this is
+    the real enforcement boundary, not just the slot grid's display."""
+    doctor_id = _register_doctor(client)
+    patient_id = _register_patient(client)
+    _login_as_admin(client)
+
+    client.patch(
+        f"/api/staff/{doctor_id}",
+        json={
+            "full_name": "Dr. Alan Chua",
+            "email": "alan.chua@example.com",
+            "is_active": True,
+            "license_number": "MMC-12345",
+            "specialty": "General Medicine",
+            "doctor_status": "active",
+            "start_time": "10:00",
+            "end_time": "16:00",
+        },
+    )
+
+    r = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, start_time="09:00"),
+    )
+    assert r.status_code == 422
+
+
+def test_booking_within_a_doctors_custom_hours_succeeds(client: TestClient) -> None:
+    doctor_id = _register_doctor(client)
+    patient_id = _register_patient(client)
+    _login_as_admin(client)
+
+    client.patch(
+        f"/api/staff/{doctor_id}",
+        json={
+            "full_name": "Dr. Alan Chua",
+            "email": "alan.chua@example.com",
+            "is_active": True,
+            "license_number": "MMC-12345",
+            "specialty": "General Medicine",
+            "doctor_status": "active",
+            "start_time": "10:00",
+            "end_time": "16:00",
+        },
+    )
+
+    r = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, start_time="11:00"),
+    )
+    assert r.status_code == 201
 
 
 # --- 7. Cancel appointment tests ------------------------------------------------

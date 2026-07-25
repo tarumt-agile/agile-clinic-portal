@@ -146,7 +146,7 @@ def get_slots(
         )
 
     try:
-        slots = get_available_slots(db, doctor.id, schedule_date)
+        slots = get_available_slots(db, doctor, schedule_date)
     except PastDateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
