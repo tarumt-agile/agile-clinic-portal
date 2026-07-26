@@ -195,6 +195,30 @@
     slotError.classList.remove("d-block");
   }
 
+  // Reformats digits-only input into dash-separated groups as the user types,
+  // e.g. groupSizes [6, 2, 4] turns "900520101234" into "900520-10-1234". Skips
+  // reformatting if the field has any letters in it - the IC field also accepts
+  // passport numbers, which aren't digits-only and shouldn't be touched.
+  function autoDash(input, groupSizes) {
+    input.addEventListener("input", () => {
+      if (/[a-zA-Z]/.test(input.value)) {
+        input.value = input.value.replace(/-/g, "");
+        return;
+      }
+      const digits = input.value.replace(/\D/g, "");
+      const groups = [];
+      let start = 0;
+      for (const size of groupSizes) {
+        if (start >= digits.length) break;
+        groups.push(digits.slice(start, start + size));
+        start += size;
+      }
+      input.value = groups.join("-");
+    });
+  }
+
+  const IC_PATTERN = /^\d{6}-\d{2}-\d{4}$/;
+
   async function lookupPatient() {
     const ic = patientIcInput.value.trim();
     patientFeedback.textContent = "";
@@ -202,6 +226,13 @@
     patientIcInput.classList.remove("is-invalid");
     patientIdInput.value = "";
     if (!ic) return;
+
+    if (!IC_PATTERN.test(ic)) {
+      patientIcInput.classList.add("is-invalid");
+      patientFeedback.textContent = "Enter a valid IC in the format xxxxxx-xx-xxxx.";
+      patientFeedback.classList.add("text-danger");
+      return;
+    }
 
     try {
       const response = await fetch(`/api/patients/by-ic/${encodeURIComponent(ic)}`);
@@ -330,6 +361,7 @@
     loadCurrentPatient();
   } else {
     patientIcInput.addEventListener("blur", lookupPatient);
+    autoDash(patientIcInput, [6, 2, 4]);
   }
   form.addEventListener("submit", handleSubmit);
   loadDoctors();
