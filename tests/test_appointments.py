@@ -341,7 +341,7 @@ def test_double_booking_same_doctor_same_slot_returns_409(client: TestClient) ->
     """
     doctor_id = _register_doctor(client)
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
     r1 = client.post("/api/appointments", json=valid_appointment_payload(patient_a, doctor_id))
     assert r1.status_code == 201
@@ -354,7 +354,7 @@ def test_different_doctor_same_slot_succeeds(client: TestClient) -> None:
     """Two different doctors can be booked for the same date/time - only the same
     doctor's own schedule can conflict."""
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
     doctor_a = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
     doctor_b = _register_doctor(
         client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67980"
@@ -370,7 +370,7 @@ def test_different_doctor_same_slot_succeeds(client: TestClient) -> None:
 def test_same_doctor_different_slot_succeeds(client: TestClient) -> None:
     doctor_id = _register_doctor(client)
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
     r1 = client.post("/api/appointments", json=valid_appointment_payload(patient_a, doctor_id))
     assert r1.status_code == 201
@@ -395,7 +395,7 @@ def test_get_schedule_returns_current_doctors_appointments(client: TestClient) -
     """
     doctor_id = _register_and_login_doctor(client)
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
     client.post(
         "/api/appointments",
@@ -425,7 +425,7 @@ def test_get_schedule_excludes_other_doctors_appointments(client: TestClient) ->
         client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67954"
     )
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
     client.post("/api/appointments", json=valid_appointment_payload(patient_a, first_doctor))
     client.post("/api/appointments", json=valid_appointment_payload(patient_b, other_doctor))
@@ -703,7 +703,7 @@ def test_cancel_appointment_frees_the_slot_for_rebooking(client: TestClient) -> 
     """Cancelling must free the slot so another patient can book it - this is the
     whole point of the story ("so that the slot is freed for other patients")."""
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
     doctor_id = _register_doctor(client)
     created = client.post(
         "/api/appointments", json=valid_appointment_payload(patient_a, doctor_id)
@@ -822,7 +822,7 @@ def test_get_my_appointments_excludes_other_patients(client: TestClient) -> None
     patient_a = _register_and_login_patient(
         client, full_name="Jane Tan", ic_or_passport="900520-10-1234"
     )
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
     doctor_id = _register_doctor(client)
     client.post("/api/appointments", json=valid_appointment_payload(patient_b, doctor_id))
 
@@ -1024,7 +1024,7 @@ def doctor_already_booked_step(api_is_running: dict, context: Context) -> None:
 @bdd_when("I try to book another appointment with that doctor at the same date and time")
 def book_conflicting_appointment_step(api_is_running: dict, context: Context) -> None:
     client: TestClient = api_is_running["client"]
-    other_patient = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    other_patient = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
     context.last_response = client.post(
         "/api/appointments",
         json=valid_appointment_payload(other_patient, context.doctor_id),

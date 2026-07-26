@@ -369,7 +369,7 @@ def test_patient_history_scoped_to_correct_patient(client: TestClient) -> None:
     """A patient's medical history only includes their own consultation notes."""
     doctor_id = _register_doctor(client)
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
-    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="880311-14-5678")
+    patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
     client.post("/api/records", json=valid_record_payload(patient_a, doctor_id, notes="Visit A"))
     client.post("/api/records", json=valid_record_payload(patient_b, doctor_id, notes="Visit B"))

@@ -4,7 +4,7 @@ import datetime as dt
 import re
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 _PHONE_RE = re.compile(r"^\+?\d[\d\s-]{6,19}$")
 
@@ -22,6 +22,7 @@ class PatientCreate(BaseModel):
     date_of_birth: dt.date
     gender: Gender
     phone_number: str = Field(min_length=7, max_length=20)
+    ic_or_passport: str = Field(min_length=1, max_length=30)
     email: EmailStr | None = None
     address: str | None = Field(default=None, max_length=255)
 
@@ -56,10 +57,35 @@ class PatientCreate(BaseModel):
         v = v.strip()
         return v or None
 
+    @model_validator(mode="after")
+    def validate_ic_or_passport(self) -> "PatientCreate":
+        ic = self.ic_or_passport
+        if ic is None:
+            return self
+
+        if re.fullmatch(r"\d{6}-\d{2}-\d{4}", ic):
+            dob_digits = self.date_of_birth.strftime("%y%m%d")
+            if ic[:6] != dob_digits:
+                raise ValueError("IC number does not match the date of birth.")
+
+            last_digit = int(ic[-1])
+            if self.gender == Gender.MALE and last_digit % 2 == 0:
+                raise ValueError("IC number's last digit does not match a male patient.")
+            if self.gender == Gender.FEMALE and last_digit % 2 != 0:
+                raise ValueError("IC number's last digit does not match a female patient.")
+        elif not re.match(r"^[A-Za-z]", ic):
+            raise ValueError("Enter a valid IC number (xxxxxx-xx-xxxx) or passport number.")
+
+        return self
+
 
 class PatientUpdate(PatientCreate):
     """Payload for editing an existing patient. Same shape and validation as PatientCreate -
-    every field is re-validated on save, per the "validate every patient field" requirement."""
+    every field is re-validated on save, per the "validate every patient field" requirement.
+    ic_or_passport is the one exception: it's optional here and always ignored by
+    update_patient() - IC/passport is fixed at registration and never changes."""
+
+    ic_or_passport: str | None = None  # type: ignore[assignment]
 
 
 class PatientOut(BaseModel):

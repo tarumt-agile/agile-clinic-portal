@@ -211,6 +211,7 @@ def test_patient_login_success(client: TestClient) -> None:
             "gender": "female",
             "phone_number": "012-3456789",
             "email": "jane.tan@example.com",
+            "ic_or_passport": "900520-10-1234",
             "address": "1 Jalan Testing, Kuala Lumpur",
         },
     ).json()
@@ -234,6 +235,7 @@ def test_patient_login_wrong_ic_returns_401(client: TestClient) -> None:
             "date_of_birth": "1990-05-20",
             "gender": "female",
             "phone_number": "012-3456789",
+            "ic_or_passport": "900520-10-1234",
             "address": "1 Jalan Testing, Kuala Lumpur",
         },
     ).json()
@@ -253,6 +255,7 @@ def test_patient_login_wrong_phone_returns_401(client: TestClient) -> None:
             "date_of_birth": "1990-05-20",
             "gender": "female",
             "phone_number": "012-3456789",
+            "ic_or_passport": "900520-10-1234",
             "address": "1 Jalan Testing, Kuala Lumpur",
         },
     ).json()
@@ -296,6 +299,7 @@ def test_patient_login_after_staff_login_clears_the_staff_session(client: TestCl
             "gender": "female",
             "phone_number": "012-3456789",
             "email": "jane.tan@example.com",
+            "ic_or_passport": "900520-10-1234",
             "address": "1 Jalan Testing, Kuala Lumpur",
         },
     ).json()
@@ -327,6 +331,7 @@ def test_staff_login_after_patient_login_clears_the_patient_session(client: Test
             "gender": "female",
             "phone_number": "012-3456789",
             "email": "jane.tan@example.com",
+            "ic_or_passport": "900520-10-1234",
             "address": "1 Jalan Testing, Kuala Lumpur",
         },
     ).json()

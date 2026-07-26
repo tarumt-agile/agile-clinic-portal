@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import re
 from collections.abc import Generator
 
 import pytest
@@ -51,6 +50,7 @@ def valid_patient_payload(**overrides: object) -> dict[str, object]:
         "gender": "female",
         "phone_number": "012-3456789",
         "email": "jane.tan@example.com",
+        "ic_or_passport": "900520-10-1234",
         "address": "1 Jalan Testing, Kuala Lumpur",
     }
     payload.update(overrides)
@@ -82,8 +82,15 @@ def test_register_patient_generates_sequential_ids(client: TestClient) -> None:
       Then each receives the next sequential patient_id
     """
     ids = []
-    for name in ("Jane Tan", "John Lee", "Ah Kow"):
-        r = client.post("/api/patients", json=valid_patient_payload(full_name=name))
+    patients = [
+        ("Jane Tan", "900520-10-1234"),
+        ("John Lee", "900520-10-1236"),
+        ("Ah Kow", "900520-10-1238"),
+    ]
+    for name, ic in patients:
+        r = client.post(
+            "/api/patients", json=valid_patient_payload(full_name=name, ic_or_passport=ic)
+        )
         assert r.status_code == 201
         ids.append(r.json()["patient_id"])
 
@@ -123,7 +130,7 @@ def test_me_endpoint_does_not_show_a_different_patient(client: TestClient) -> No
     client.post("/api/patients", json=valid_patient_payload())  # first-registered
     second = client.post(
         "/api/patients",
-        json=valid_patient_payload(full_name="John Lee", ic_or_passport="880311-14-5678"),
+        json=valid_patient_payload(full_name="John Lee", ic_or_passport="900520-10-5678"),
     ).json()
     client.post(
         "/api/auth/patient-login",
@@ -222,32 +229,121 @@ def test_register_without_optional_fields_succeeds(client: TestClient) -> None:
     assert r.json()["address"] is None
 
 
-def test_register_generates_ic_from_date_of_birth(client: TestClient) -> None:
+def test_register_stores_the_ic_exactly_as_submitted(client: TestClient) -> None:
     """
-    Scenario: IC number is generated automatically, not client-supplied
-      Given a patient is registered with date_of_birth "1990-05-20"
-      Then the generated ic_or_passport starts with "900520-0" and is
-        formatted YYMMDD-0X-XXXX
+    Scenario: IC number is typed in by staff, not generated
+      Given a patient is registered with a specific IC number
+      Then the stored ic_or_passport is exactly that value
     """
-    r = client.post("/api/patients", json=valid_patient_payload(date_of_birth="1990-05-20"))
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(date_of_birth="1990-05-20", ic_or_passport="900520-10-1234"),
+    )
     assert r.status_code == 201
-    ic = r.json()["ic_or_passport"]
-    assert re.fullmatch(r"900520-0[1-9]-\d{4}", ic)
+    assert r.json()["ic_or_passport"] == "900520-10-1234"
 
 
-def test_register_generates_unique_ic_for_same_date_of_birth(client: TestClient) -> None:
-    """Two patients sharing a date_of_birth must still get distinct IC numbers."""
+def test_register_two_patients_sharing_a_date_of_birth_with_different_ics_succeeds(
+    client: TestClient,
+) -> None:
+    """Sharing a date_of_birth is fine as long as the IC numbers themselves differ -
+    there's no implicit uniqueness tied to date_of_birth anymore."""
     r1 = client.post(
         "/api/patients",
-        json=valid_patient_payload(full_name="Jane Tan", date_of_birth="1990-05-20"),
+        json=valid_patient_payload(
+            full_name="Jane Tan", date_of_birth="1990-05-20", ic_or_passport="900520-10-1234"
+        ),
     )
     r2 = client.post(
         "/api/patients",
-        json=valid_patient_payload(full_name="John Lee", date_of_birth="1990-05-20"),
+        json=valid_patient_payload(
+            full_name="John Lee", date_of_birth="1990-05-20", ic_or_passport="900520-10-5678"
+        ),
     )
     assert r1.status_code == 201
     assert r2.status_code == 201
     assert r1.json()["ic_or_passport"] != r2.json()["ic_or_passport"]
+
+
+def test_register_with_a_duplicate_ic_returns_409(client: TestClient) -> None:
+    """Two different patients cannot share the same IC number - this was already true
+    at the database level, but is now much more likely to actually be hit in practice
+    since staff type the IC in by hand instead of the system generating a random one."""
+    client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="Jane Tan", ic_or_passport="900520-10-1234"),
+    )
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="Someone Else", ic_or_passport="900520-10-1234"),
+    )
+    assert r.status_code == 409
+
+
+def test_register_with_a_passport_number_skips_dob_and_gender_checks(client: TestClient) -> None:
+    """A passport-shaped value (starts with a letter) has no birth-date or gender digit
+    to check against, regardless of what date_of_birth/gender were submitted."""
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(
+            date_of_birth="1975-01-01", gender="male", ic_or_passport="A12345678"
+        ),
+    )
+    assert r.status_code == 201
+    assert r.json()["ic_or_passport"] == "A12345678"
+
+
+def test_register_rejects_an_ic_not_matching_date_of_birth(client: TestClient) -> None:
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(date_of_birth="1985-01-01", ic_or_passport="900520-10-1234"),
+    )
+    assert r.status_code == 422
+
+
+def test_register_rejects_an_ic_not_matching_male_gender(client: TestClient) -> None:
+    """Male requires an odd last digit; 4 is even."""
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(
+            date_of_birth="1990-05-20", gender="male", ic_or_passport="900520-10-1234"
+        ),
+    )
+    assert r.status_code == 422
+
+
+def test_register_rejects_an_ic_not_matching_female_gender(client: TestClient) -> None:
+    """Female requires an even last digit; 3 is odd."""
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(
+            date_of_birth="1990-05-20", gender="female", ic_or_passport="900520-10-1233"
+        ),
+    )
+    assert r.status_code == 422
+
+
+def test_register_gender_other_skips_the_last_digit_check(client: TestClient) -> None:
+    """Gender "other" has no odd/even convention to check against - any last digit is fine
+    as long as the date-of-birth digits still match."""
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(
+            date_of_birth="1990-05-20", gender="other", ic_or_passport="900520-10-1234"
+        ),
+    )
+    assert r.status_code == 201
+
+
+def test_register_rejects_a_malformed_ic_that_is_neither_ic_nor_passport_shaped(
+    client: TestClient,
+) -> None:
+    """Too few digits, no dashes, or otherwise not matching either recognized shape."""
+    r = client.post(
+        "/api/patients",
+        json=valid_patient_payload(ic_or_passport="12345"),
+    )
+    assert r.status_code == 422
 
 
 def _login_as_receptionist(client: TestClient) -> None:
@@ -303,8 +399,16 @@ def test_register_page_renders(client: TestClient) -> None:
 
 def _register_sample_patients(client: TestClient) -> list[str]:
     ids = []
-    for name in ("Jane Tan", "John Lee", "Ah Kow", "Janet Wong"):
-        r = client.post("/api/patients", json=valid_patient_payload(full_name=name))
+    patients = [
+        ("Jane Tan", "900520-10-1234"),
+        ("John Lee", "900520-10-1236"),
+        ("Ah Kow", "900520-10-1238"),
+        ("Janet Wong", "900520-10-1230"),
+    ]
+    for name, ic in patients:
+        r = client.post(
+            "/api/patients", json=valid_patient_payload(full_name=name, ic_or_passport=ic)
+        )
         assert r.status_code == 201
         ids.append(r.json()["patient_id"])
     return ids
