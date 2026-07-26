@@ -78,9 +78,15 @@ def get_patient_by_ic(db: Session, ic_or_passport: str) -> Patient | None:
 
 
 def search_patients(
-    db: Session, query: str | None, page: int, page_size: int
+    db: Session,
+    query: str | None,
+    page: int,
+    page_size: int,
+    registered_from: dt.date | None = None,
+    registered_to: dt.date | None = None,
 ) -> tuple[list[Patient], int]:
-    """Search patients by name or patient_id (case-insensitive, partial match).
+    """Search patients by name or patient_id (case-insensitive, partial match), optionally
+    narrowed to a registration date range.
 
     Returns (page of results ordered by registration order, total matching count).
     """
@@ -88,6 +94,10 @@ def search_patients(
     if query and query.strip():
         pattern = f"%{query.strip()}%"
         conditions.append(or_(Patient.full_name.ilike(pattern), Patient.patient_id.ilike(pattern)))
+    if registered_from is not None:
+        conditions.append(Patient.created_at >= dt.datetime.combine(registered_from, dt.time.min))
+    if registered_to is not None:
+        conditions.append(Patient.created_at <= dt.datetime.combine(registered_to, dt.time.max))
 
     count_stmt = select(func.count()).select_from(Patient)
     items_stmt = select(Patient).order_by(Patient.id)

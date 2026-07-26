@@ -1,3 +1,4 @@
+import datetime as dt
 from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -48,11 +49,17 @@ def register_patient(payload: PatientCreate, db: Session = Depends(get_db)) -> P
 @api_router.get("", response_model=PaginatedPatients)
 def list_patients(
     q: str | None = Query(default=None, description="Search by name or patient ID"),
+    registered_from: dt.date | None = Query(
+        default=None, description="Only include patients registered on or after this date"
+    ),
+    registered_to: dt.date | None = Query(
+        default=None, description="Only include patients registered on or before this date"
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedPatients:
-    items, total = search_patients(db, q, page, page_size)
+    items, total = search_patients(db, q, page, page_size, registered_from, registered_to)
     total_pages = max(1, ceil(total / page_size))
     return PaginatedPatients(
         items=[PatientOut.model_validate(p) for p in items],

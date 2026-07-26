@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import re
 from collections.abc import Generator
 
@@ -407,7 +408,153 @@ def test_list_page_redirects_for_doctor(client: TestClient) -> None:
     assert r.status_code == 303
 
 
-# --- 4. Update patient tests ---------------------------------------------------
+def test_list_patients_registered_today_matches_when_filtered_to_today(client: TestClient) -> None:
+    from datetime import date
+
+    _register_sample_patients(client)
+    today = date.today().isoformat()
+
+    r = client.get("/api/patients", params={"registered_from": today, "registered_to": today})
+    assert r.status_code == 200
+    assert r.json()["total"] == 4
+
+
+def test_list_patients_registered_today_excluded_when_filtered_to_yesterday(
+    client: TestClient,
+) -> None:
+    from datetime import date, timedelta
+
+    _register_sample_patients(client)
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    r = client.get("/api/patients", params={"registered_to": yesterday})
+    assert r.status_code == 200
+    assert r.json()["total"] == 0
+
+
+# --- 4. Isolated in-memory DB tests for search_patients with date filtering ---
+
+
+def _build_isolated_patients_db() -> Session:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from agile_ci_demo.core.database import Base
+    import agile_ci_demo.patients.models  # noqa: F401 - registers Patient with Base
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return SessionLocal()
+
+
+def _make_patient(patient_id: str, full_name: str, created_at: dt.datetime) -> object:
+    from agile_ci_demo.patients.models import Patient
+
+    return Patient(
+        patient_id=patient_id,
+        full_name=full_name,
+        date_of_birth=dt.date(1990, 1, 1),
+        gender="female",
+        phone_number="012-0000000",
+        ic_or_passport=f"900101-01-{patient_id[-4:]}",
+        created_at=created_at,
+    )
+
+
+def test_search_patients_filters_by_registered_from() -> None:
+    from agile_ci_demo.patients.service import search_patients
+
+    db = _build_isolated_patients_db()
+    db.add_all(
+        [
+            _make_patient("P00001", "Old Patient", dt.datetime(2026, 1, 1, 10, 0, 0)),
+            _make_patient("P00002", "New Patient", dt.datetime(2026, 1, 15, 10, 0, 0)),
+        ]
+    )
+    db.commit()
+
+    items, total = search_patients(db, None, 1, 10, registered_from=dt.date(2026, 1, 10))
+    assert total == 1
+    assert items[0].patient_id == "P00002"
+    db.close()
+
+
+def test_search_patients_filters_by_registered_to() -> None:
+    from agile_ci_demo.patients.service import search_patients
+
+    db = _build_isolated_patients_db()
+    db.add_all(
+        [
+            _make_patient("P00001", "Old Patient", dt.datetime(2026, 1, 1, 10, 0, 0)),
+            _make_patient("P00002", "New Patient", dt.datetime(2026, 1, 15, 10, 0, 0)),
+        ]
+    )
+    db.commit()
+
+    items, total = search_patients(db, None, 1, 10, registered_to=dt.date(2026, 1, 10))
+    assert total == 1
+    assert items[0].patient_id == "P00001"
+    db.close()
+
+
+def test_search_patients_registered_from_and_to_are_inclusive_of_the_whole_day() -> None:
+    """A patient registered at 23:59 on the boundary date must still match when that
+    same date is used for both registered_from and registered_to - the range must
+    cover the whole day, not just midnight."""
+    from agile_ci_demo.patients.service import search_patients
+
+    db = _build_isolated_patients_db()
+    db.add(_make_patient("P00001", "Late Patient", dt.datetime(2026, 1, 10, 23, 59, 0)))
+    db.commit()
+
+    items, total = search_patients(
+        db, None, 1, 10, registered_from=dt.date(2026, 1, 10), registered_to=dt.date(2026, 1, 10)
+    )
+    assert total == 1
+    assert items[0].patient_id == "P00001"
+    db.close()
+
+
+def test_search_patients_inverted_date_range_returns_empty() -> None:
+    from agile_ci_demo.patients.service import search_patients
+
+    db = _build_isolated_patients_db()
+    db.add(_make_patient("P00001", "Some Patient", dt.datetime(2026, 1, 10, 10, 0, 0)))
+    db.commit()
+
+    items, total = search_patients(
+        db, None, 1, 10, registered_from=dt.date(2026, 1, 15), registered_to=dt.date(2026, 1, 1)
+    )
+    assert total == 0
+    assert items == []
+    db.close()
+
+
+def test_search_patients_combines_date_range_with_text_query() -> None:
+    from agile_ci_demo.patients.service import search_patients
+
+    db = _build_isolated_patients_db()
+    db.add_all(
+        [
+            _make_patient("P00001", "Jane Tan", dt.datetime(2026, 1, 15, 10, 0, 0)),
+            _make_patient("P00002", "Jane Wong", dt.datetime(2026, 1, 1, 10, 0, 0)),
+        ]
+    )
+    db.commit()
+
+    items, total = search_patients(db, "jane", 1, 10, registered_from=dt.date(2026, 1, 10))
+    assert total == 1
+    assert items[0].patient_id == "P00001"
+    db.close()
+
+
+# --- 6. Update patient tests ---------------------------------------------------
 
 
 def test_update_patient_success(client: TestClient) -> None:
@@ -506,7 +653,7 @@ def test_dashboard_page_loads_when_logged_in_as_patient(client: TestClient) -> N
     assert r.status_code == 200
 
 
-# --- 5. BDD-style tests with pytest-bdd --------------------------------------
+# --- 7. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/patients.feature
 
 scenarios("features/patients.feature")
