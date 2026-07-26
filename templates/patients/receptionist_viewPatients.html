@@ -12,14 +12,26 @@
 
 <div class="card">
   <div class="card-header">
-    <label for="search-input" class="visually-hidden">Search by name or patient ID</label>
-    <input
-      type="search"
-      id="search-input"
-      class="form-control"
-      placeholder="Search by name or patient ID (e.g. Jane or P00001)"
-      autocomplete="off"
-    >
+    <div class="row g-2 align-items-end">
+      <div class="col-md-6">
+        <label for="search-input" class="form-label">Search by name or patient ID</label>
+        <input
+          type="search"
+          id="search-input"
+          class="form-control"
+          placeholder="e.g. Jane or P00001"
+          autocomplete="off"
+        >
+      </div>
+      <div class="col-md-3">
+        <label for="registered-from-input" class="form-label">Registered from</label>
+        <input type="date" id="registered-from-input" class="form-control">
+      </div>
+      <div class="col-md-3">
+        <label for="registered-to-input" class="form-label">Registered to</label>
+        <input type="date" id="registered-to-input" class="form-control">
+      </div>
+    </div>
   </div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -30,10 +42,11 @@
           <th scope="col">Gender</th>
           <th scope="col">Phone</th>
           <th scope="col">Date of birth</th>
+          <th scope="col">Registered on</th>
         </tr>
       </thead>
       <tbody id="patients-table-body">
-        <tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr>
       </tbody>
     </table>
   </div>
