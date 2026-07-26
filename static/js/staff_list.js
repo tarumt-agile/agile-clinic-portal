@@ -21,6 +21,10 @@
     "role-filter"
   );
 
+  const specialtyFilter = document.getElementById(
+    "specialty-filter"
+  );
+
   const statusFilter = document.getElementById(
     "staff-status-filter"
   );
@@ -146,6 +150,7 @@
       .toLowerCase();
 
     const selectedRole = roleFilter.value;
+    const selectedSpecialty = specialtyFilter.value;
     const selectedStatus =
       statusFilter.value;
 
@@ -178,9 +183,14 @@
           !selectedStatus ||
           staffStatus === selectedStatus;
 
+        const matchesSpecialty =
+          !selectedSpecialty ||
+          staff.specialty === selectedSpecialty;
+
         return (
           matchesSearch &&
           matchesRole &&
+          matchesSpecialty &&
           matchesStatus
         );
       }
@@ -364,6 +374,11 @@
     renderStaff
   );
 
+  specialtyFilter.addEventListener(
+    "change",
+    renderStaff
+  );
+
   statusFilter.addEventListener(
     "change",
     renderStaff
@@ -374,6 +389,7 @@
     function () {
       searchInput.value = "";
       roleFilter.value = "";
+      specialtyFilter.value = "";
       statusFilter.value = "";
 
       renderStaff();
