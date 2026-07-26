@@ -69,6 +69,24 @@ class Staff(Base):
             return None
         return get_doctor_hours(self.doctor_profile, dt.date.today())[1]
 
+    @property
+    def next_start_time(self) -> dt.time | None:
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.next_start_time
+
+    @property
+    def next_end_time(self) -> dt.time | None:
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.next_end_time
+
+    @property
+    def next_effective_date(self) -> dt.date | None:
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.next_effective_date
+
 
 class DoctorProfile(Base):
     __tablename__ = "doctor_profiles"

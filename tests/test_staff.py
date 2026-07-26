@@ -596,6 +596,27 @@ def test_update_staff_requires_30_minute_alignment(client: TestClient) -> None:
     assert r.status_code == 422
 
 
+def test_staff_out_exposes_the_queued_hours_change(client: TestClient) -> None:
+    """After an admin edit, the queued next_* values are visible via the API even
+    though today's start_time/end_time stay unchanged - the UI badge in Task 3
+    reads these fields directly, separately from today's effective hours."""
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    assert r.status_code == 200
+    body = r.json()
+
+    assert body["start_time"] == "09:00:00"  # today's hours, unchanged
+    assert body["end_time"] == "17:00:00"
+    assert body["next_start_time"] == "10:00:00"  # from _doctor_update_payload()
+    assert body["next_end_time"] == "16:00:00"
+
+    import datetime as dt
+
+    assert body["next_effective_date"] == (dt.date.today() + dt.timedelta(days=1)).isoformat()
+
+
 def test_update_staff_second_edit_collapses_the_first_queued_change() -> None:
     """
     Scenario: Admin edits a doctor's hours twice

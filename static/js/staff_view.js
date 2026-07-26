@@ -281,6 +281,25 @@
           ? staff.start_time.slice(0, 5) + " - " + staff.end_time.slice(0, 5)
           : null
       );
+
+      const nextHoursBadge = byId("view-next-hours-badge");
+      const today = new Date().toISOString().slice(0, 10);
+      const hasQueuedChange =
+        staff.next_effective_date &&
+        staff.next_effective_date > today &&
+        staff.next_start_time &&
+        staff.next_end_time;
+
+      if (hasQueuedChange) {
+        nextHoursBadge.textContent =
+          "New Working Hour Tomorrow Onwards: " +
+          staff.next_start_time.slice(0, 5) +
+          "-" +
+          staff.next_end_time.slice(0, 5);
+        nextHoursBadge.classList.remove("d-none");
+      } else {
+        nextHoursBadge.classList.add("d-none");
+      }
     }
 
     byId(

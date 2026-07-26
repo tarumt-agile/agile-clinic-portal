@@ -108,6 +108,9 @@ class StaffOut(BaseModel):
     doctor_status: str | None = None
     start_time: dt.time | None = None
     end_time: dt.time | None = None
+    next_start_time: dt.time | None = None
+    next_end_time: dt.time | None = None
+    next_effective_date: dt.date | None = None
 
 
 class StaffUpdate(BaseModel):
