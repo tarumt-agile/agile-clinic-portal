@@ -7,6 +7,46 @@
   const { showAlert, hideAlert, clearFieldErrors, applyValidationErrors, collectPayload } =
     window.PatientForm;
 
+  const dobInput = document.getElementById("date_of_birth");
+  const genderInput = document.getElementById("gender");
+  const icInput = document.getElementById("ic_or_passport");
+
+  const IC_PATTERN = /^\d{6}-\d{2}-\d{4}$/;
+
+  function checkIcConsistency() {
+    const ic = icInput.value.trim();
+    icInput.classList.remove("is-invalid");
+    if (!ic || !IC_PATTERN.test(ic)) return; // not IC-shaped (empty or a passport) - nothing to check
+
+    const dob = dobInput.value; // "YYYY-MM-DD"
+    if (dob) {
+      const dobDigits = dob.slice(2, 4) + dob.slice(5, 7) + dob.slice(8, 10);
+      if (ic.slice(0, 6) !== dobDigits) {
+        icInput.classList.add("is-invalid");
+        document.getElementById("ic-or-passport-error").textContent =
+          "This IC number does not match the date of birth.";
+        return;
+      }
+    }
+
+    const gender = genderInput.value;
+    const lastDigit = Number(ic.slice(-1));
+    if (gender === "male" && lastDigit % 2 === 0) {
+      icInput.classList.add("is-invalid");
+      document.getElementById("ic-or-passport-error").textContent =
+        "This IC number's last digit does not match a male patient.";
+    } else if (gender === "female" && lastDigit % 2 !== 0) {
+      icInput.classList.add("is-invalid");
+      document.getElementById("ic-or-passport-error").textContent =
+        "This IC number's last digit does not match a female patient.";
+    }
+  }
+
+  window.PatientForm.autoDash(icInput, [6, 2, 4]);
+  icInput.addEventListener("input", checkIcConsistency);
+  dobInput.addEventListener("change", checkIcConsistency);
+  genderInput.addEventListener("change", checkIcConsistency);
+
   const alertBox = document.getElementById("form-alert");
   const submitBtn = document.getElementById("submit-btn");
   const confirmationModalEl = document.getElementById("confirmation-modal");

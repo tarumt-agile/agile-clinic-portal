@@ -44,6 +44,28 @@ window.PatientForm = (function () {
     return hadFieldError;
   }
 
+  // Reformats digits-only input into dash-separated groups as the user types,
+  // e.g. groupSizes [6, 2, 4] turns "900520101234" into "900520-10-1234". Skips
+  // reformatting if the field has any letters in it - this field also accepts
+  // passport numbers, which aren't digits-only and shouldn't be touched.
+  function autoDash(input, groupSizes) {
+    input.addEventListener("input", () => {
+      if (/[a-zA-Z]/.test(input.value)) {
+        input.value = input.value.replace(/-/g, "");
+        return;
+      }
+      const digits = input.value.replace(/\D/g, "");
+      const groups = [];
+      let start = 0;
+      for (const size of groupSizes) {
+        if (start >= digits.length) break;
+        groups.push(digits.slice(start, start + size));
+        start += size;
+      }
+      input.value = groups.join("-");
+    });
+  }
+
   // Reads the patient form fields (registration and edit forms share the same field set).
   function collectPayload(form) {
     const data = new FormData(form);
@@ -55,8 +77,10 @@ window.PatientForm = (function () {
     };
     const email = data.get("email")?.trim();
     const address = data.get("address")?.trim();
+    const icOrPassport = data.get("ic_or_passport")?.trim();
     if (email) payload.email = email;
     if (address) payload.address = address;
+    if (icOrPassport) payload.ic_or_passport = icOrPassport;
     return payload;
   }
 
@@ -78,5 +102,6 @@ window.PatientForm = (function () {
     applyValidationErrors,
     collectPayload,
     fillForm,
+    autoDash,
   };
 })();
