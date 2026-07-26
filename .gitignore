@@ -11,3 +11,4 @@ dist/
 *.db-journal
 .env
 .superpowers/
+.claude/worktrees/
