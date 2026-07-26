@@ -16,7 +16,16 @@
   function checkIcConsistency() {
     const ic = icInput.value.trim();
     icInput.classList.remove("is-invalid");
-    if (!ic || !IC_PATTERN.test(ic)) return; // not IC-shaped (empty or a passport) - nothing to check
+    document.getElementById("ic-or-passport-error").textContent = "";
+    if (!ic) return;
+
+    if (!IC_PATTERN.test(ic)) {
+      if (/^[A-Za-z]/.test(ic)) return; // passport-shaped - nothing to cross-check
+      icInput.classList.add("is-invalid");
+      document.getElementById("ic-or-passport-error").textContent =
+        "Enter a valid IC number (xxxxxx-xx-xxxx) or passport number.";
+      return;
+    }
 
     const dob = dobInput.value; // "YYYY-MM-DD"
     if (dob) {
