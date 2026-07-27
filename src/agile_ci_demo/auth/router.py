@@ -67,6 +67,12 @@ def logout_endpoint(request: Request) -> dict:
     return {"status": "ok"}
 
 
+@api_router.delete("/session")
+def delete_session(request: Request) -> dict:
+    logout(request)
+    return {"status": "ok"}
+
+
 @pages_router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/login.html", {})

@@ -193,6 +193,19 @@ def test_logout_clears_the_session(client: TestClient) -> None:
     assert r.status_code == 303
 
 
+def test_delete_session_clears_the_session(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.delete("/api/auth/session")
+    assert r.status_code == 200
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+
+
 # --- 4. Patient login ---------------------------------------------------------
 
 
