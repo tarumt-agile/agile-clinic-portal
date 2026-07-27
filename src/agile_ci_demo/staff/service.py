@@ -109,16 +109,21 @@ def create_staff(db: Session, data: StaffCreate) -> Staff:
 
     db.refresh(staff)
 
-    send_email(
-        to=staff.email,
-        subject="Welcome to Agile Clinic Portal",
-        body=(
-            f"Hi {staff.full_name},\n\n"
-            f"An account has been created for you as {staff.role}.\n"
-            f"Your temporary password is: {temp_password}\n\n"
-            "Please log in and change your password as soon as possible."
-        ),
-    )
+    try:
+        send_email(
+            to=staff.email,
+            subject="Welcome to Agile Clinic Portal",
+            body=(
+                f"Hi {staff.full_name},\n\n"
+                f"An account has been created for you as {staff.role}.\n"
+                f"Your temporary password is: {temp_password}\n\n"
+                "Please log in and change your password as soon as possible."
+            ),
+        )
+    except Exception:
+        # A delivery failure (e.g. SMTP quota, network issue) must never block
+        # account creation - the account is already committed at this point.
+        pass
 
     return staff
 
@@ -382,16 +387,21 @@ def create_doctor_with_account(db: Session, data: DoctorRegister) -> DoctorOut:
     db.refresh(staff)
     db.refresh(doctor)
 
-    send_email(
-        to=staff.email,
-        subject="Welcome to Agile Clinic Portal",
-        body=(
-            f"Hi {staff.full_name},\n\n"
-            "Your doctor account has been created.\n"
-            f"Your temporary password is: {temp_password}\n\n"
-            "Please log in and change your password as soon as possible."
-        ),
-    )
+    try:
+        send_email(
+            to=staff.email,
+            subject="Welcome to Agile Clinic Portal",
+            body=(
+                f"Hi {staff.full_name},\n\n"
+                "Your doctor account has been created.\n"
+                f"Your temporary password is: {temp_password}\n\n"
+                "Please log in and change your password as soon as possible."
+            ),
+        )
+    except Exception:
+        # A delivery failure (e.g. SMTP quota, network issue) must never block
+        # account creation - the account is already committed at this point.
+        pass
 
     return DoctorOut(
         doctor_id=doctor.doctor_id or "",

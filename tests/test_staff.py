@@ -259,6 +259,23 @@ def test_create_staff_sends_welcome_email_with_temp_password(client: TestClient)
     assert "temporary password" in outbox[0].body.lower()
 
 
+def test_create_staff_succeeds_even_if_the_welcome_email_fails_to_send(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A delivery failure (e.g. SMTP quota, network issue) must never block account
+    creation - the account is already committed by the time the email is sent."""
+    from agile_ci_demo.staff import service as staff_service
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated SMTP failure")
+
+    monkeypatch.setattr(staff_service, "send_email", _raise)
+
+    r = client.post("/api/staff", json=valid_staff_payload())
+    assert r.status_code == 201
+    assert r.json()["staff_id"] == "S00001"
+
+
 def test_create_staff_page_renders(client: TestClient) -> None:
     from test_auth import _create_staff_and_get_temp_password
 
