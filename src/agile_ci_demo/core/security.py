@@ -35,3 +35,12 @@ def verify_password(password: str, hashed: str) -> bool:
 def generate_temp_password(length: int = 12) -> str:
     """Generate a random temporary password for a newly created staff account."""
     return "".join(secrets.choice(_TEMP_PASSWORD_ALPHABET) for _ in range(length))
+
+
+def generate_session_token() -> str:
+    """Generate a random opaque token for the frontend to hold in localStorage.
+
+    Not validated server-side - the cookie session is the real auth mechanism.
+    This exists only so logout has a token to clear, per the story's literal ask.
+    """
+    return secrets.token_urlsafe(32)

@@ -3,10 +3,23 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import verify_password
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.patients.service import get_patient_by_ic
 from agile_ci_demo.staff.models import Staff
+
+_REDIRECT_BY_ROLE: dict[Role, str] = {
+    Role.ADMIN: "/staff",
+    Role.DOCTOR: "/appointments/schedule",
+    Role.NURSE: "/patients",
+    Role.RECEPTIONIST: "/patients",
+}
+
+
+def redirect_url_for_role(role: Role) -> str:
+    """Return the landing page a staff member is sent to right after login."""
+    return _REDIRECT_BY_ROLE[role]
 
 
 class InvalidCredentialsError(Exception):

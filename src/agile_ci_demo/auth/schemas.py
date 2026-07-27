@@ -17,6 +17,8 @@ class LoginResponse(BaseModel):
     full_name: str
     role: Role
     must_change_password: bool
+    redirect_url: str
+    session_token: str
 
 
 class PatientLoginRequest(BaseModel):

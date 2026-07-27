@@ -14,8 +14,11 @@ from agile_ci_demo.auth.service import (
     InvalidCredentialsError,
     authenticate_patient,
     authenticate_staff,
+    redirect_url_for_role,
 )
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
+from agile_ci_demo.core.security import generate_session_token
 from agile_ci_demo.core.templates import templates
 
 # JSON API used by the frontend's JavaScript.
@@ -35,7 +38,14 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
     login_staff(request, staff)
-    return LoginResponse.model_validate(staff)
+    return LoginResponse(
+        staff_id=staff.staff_id,
+        full_name=staff.full_name,
+        role=staff.role,
+        must_change_password=staff.must_change_password,
+        redirect_url=redirect_url_for_role(Role(staff.role)),
+        session_token=generate_session_token(),
+    )
 
 
 @api_router.post("/patient-login", response_model=PatientLoginResponse)
