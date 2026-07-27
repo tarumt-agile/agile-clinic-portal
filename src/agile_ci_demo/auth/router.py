@@ -1,3 +1,5 @@
+from typing import cast
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -44,12 +46,13 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
     login_staff(request, staff)
+    role = Role(staff.role)
     return LoginResponse(
-        staff_id=staff.staff_id,
+        staff_id=cast(str, staff.staff_id),
         full_name=staff.full_name,
-        role=staff.role,
+        role=role,
         must_change_password=staff.must_change_password,
-        redirect_url=redirect_url_for_role(Role(staff.role)),
+        redirect_url=redirect_url_for_role(role),
         session_token=generate_session_token(),
     )
 

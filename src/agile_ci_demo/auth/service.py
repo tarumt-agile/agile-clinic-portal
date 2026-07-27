@@ -91,17 +91,22 @@ def request_password_reset(db: Session, email: str) -> None:
     db.add(reset_token)
     db.commit()
 
-    send_email(
-        to=staff.email,
-        subject="Reset your Agile Clinic Portal password",
-        body=(
-            f"Hi {staff.full_name},\n\n"
-            "We received a request to reset your password. This link expires in "
-            "30 minutes:\n"
-            f"/auth/reset-password?token={raw_token}\n\n"
-            "If you didn't request this, you can ignore this email."
-        ),
-    )
+    try:
+        send_email(
+            to=staff.email,
+            subject="Reset your Agile Clinic Portal password",
+            body=(
+                f"Hi {staff.full_name},\n\n"
+                "We received a request to reset your password. This link expires in "
+                "30 minutes:\n"
+                f"/auth/reset-password?token={raw_token}\n\n"
+                "If you didn't request this, you can ignore this email."
+            ),
+        )
+    except Exception:
+        # A delivery failure must never surface differently than success, or the
+        # generic response above stops being generic (see docstring).
+        pass
 
 
 def reset_password(db: Session, token: str, new_password: str) -> None:
