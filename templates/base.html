@@ -61,7 +61,8 @@
     if (logoutLink) {
       logoutLink.addEventListener("click", async (event) => {
         event.preventDefault();
-        await fetch("/api/auth/logout", { method: "POST" });
+        await fetch("/api/auth/session", { method: "DELETE" });
+        localStorage.removeItem("clinicSessionToken");
         window.location.href = "/auth/login";
       });
     }
