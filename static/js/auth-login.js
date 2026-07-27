@@ -3,13 +3,6 @@
 
   const alertBox = document.getElementById("form-alert");
 
-  const REDIRECT_BY_ROLE = {
-    admin: "/staff",
-    doctor: "/appointments/schedule",
-    nurse: "/patients",
-    receptionist: "/patients",
-  };
-
   function showAlert(message) {
     alertBox.textContent = message;
     alertBox.classList.remove("d-none");
@@ -71,7 +64,8 @@
 
       if (response.ok) {
         const body = await response.json();
-        window.location.href = REDIRECT_BY_ROLE[body.role] || "/patients";
+        localStorage.setItem("clinicSessionToken", body.session_token);
+        window.location.href = body.redirect_url;
         return;
       }
 
