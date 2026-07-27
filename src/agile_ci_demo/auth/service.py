@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from agile_ci_demo.auth.models import PasswordResetToken
 from agile_ci_demo.core.email import send_email
 from agile_ci_demo.core.rbac import Role
-from agile_ci_demo.core.security import verify_password
+from agile_ci_demo.core.security import hash_password, verify_password
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.patients.service import get_patient_by_ic
 from agile_ci_demo.staff.models import Staff
@@ -102,3 +102,26 @@ def request_password_reset(db: Session, email: str) -> None:
             "If you didn't request this, you can ignore this email."
         ),
     )
+
+
+def reset_password(db: Session, token: str, new_password: str) -> None:
+    """Set a new password for the staff account owning a valid, unused, unexpired token."""
+    token_hash = _hash_token(token)
+    reset_token = db.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+    ).scalar_one_or_none()
+
+    if (
+        reset_token is None
+        or reset_token.used_at is not None
+        or reset_token.expires_at < dt.datetime.utcnow()
+    ):
+        raise InvalidResetTokenError("This reset link is invalid or has expired")
+
+    staff = db.get(Staff, reset_token.staff_id)
+    assert staff is not None  # the FK guarantees the staff row exists
+
+    staff.password_hash = hash_password(new_password)
+    staff.must_change_password = False
+    reset_token.used_at = dt.datetime.utcnow()
+    db.commit()

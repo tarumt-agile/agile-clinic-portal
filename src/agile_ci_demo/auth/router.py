@@ -10,14 +10,17 @@ from agile_ci_demo.auth.schemas import (
     LoginResponse,
     PatientLoginRequest,
     PatientLoginResponse,
+    ResetPasswordRequest,
 )
 from agile_ci_demo.auth.service import (
     AccountInactiveError,
     InvalidCredentialsError,
+    InvalidResetTokenError,
     authenticate_patient,
     authenticate_staff,
     redirect_url_for_role,
     request_password_reset,
+    reset_password,
 )
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
@@ -92,3 +95,17 @@ def forgot_password(
 @pages_router.get("/forgot-password", response_class=HTMLResponse)
 def forgot_password_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/forgot_password.html", {})
+
+
+@api_router.post("/reset-password")
+def reset_password_endpoint(payload: ResetPasswordRequest, db: Session = Depends(get_db)) -> dict:
+    try:
+        reset_password(db, payload.token, payload.new_password)
+    except InvalidResetTokenError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return {"status": "ok"}
+
+
+@pages_router.get("/reset-password", response_class=HTMLResponse)
+def reset_password_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "auth/reset_password.html", {})

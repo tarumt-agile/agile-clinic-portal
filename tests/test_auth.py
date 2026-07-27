@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import itertools
 import re
 from collections.abc import Generator
@@ -389,4 +390,112 @@ def test_forgot_password_returns_same_generic_message_for_unknown_email(
 
 def test_forgot_password_page_renders(client: TestClient) -> None:
     r = client.get("/auth/forgot-password")
+    assert r.status_code == 200
+
+
+# --- 7. Reset password --------------------------------------------------------
+
+
+def _request_reset_token(client: TestClient, email: str = "alice.wong@example.com") -> str:
+    client.post("/api/auth/forgot-password", json={"email": email})
+    body = get_outbox()[-1].body
+    match = re.search(r"token=(\S+)", body)
+    assert match is not None
+    return match.group(1)
+
+
+def test_reset_password_succeeds_with_a_valid_token(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    token = _request_reset_token(client)
+
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "alice.wong@example.com", "password": "new-password-123"},
+    )
+    assert r.status_code == 200
+    assert r.json()["must_change_password"] is False
+
+
+def test_reset_password_rejects_an_unknown_token(client: TestClient) -> None:
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": "not-a-real-token",
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_reset_password_rejects_an_already_used_token(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    token = _request_reset_token(client)
+
+    client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "another-password-456",
+            "confirm_password": "another-password-456",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_reset_password_rejects_an_expired_token(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agile_ci_demo.auth import service as auth_service
+
+    _create_staff_and_get_temp_password(client)
+    monkeypatch.setattr(auth_service, "_RESET_TOKEN_TTL", dt.timedelta(seconds=-1))
+    token = _request_reset_token(client)
+
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_reset_password_rejects_mismatched_passwords(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    token = _request_reset_token(client)
+
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "totally-different",
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_reset_password_page_renders(client: TestClient) -> None:
+    r = client.get("/auth/reset-password?token=whatever")
     assert r.status_code == 200
