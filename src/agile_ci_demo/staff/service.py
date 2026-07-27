@@ -237,6 +237,15 @@ def get_staff_by_staff_id(db: Session, staff_id: str) -> Staff | None:
     ).scalar_one_or_none()
 
 
+def delete_staff(db: Session, staff_id: str) -> None:
+    """Permanently remove a staff account (and its doctor profile, if any)."""
+    staff = get_staff_by_staff_id(db, staff_id)
+    if staff is None:
+        raise StaffNotFoundError(f"No staff account found with staff_id '{staff_id}'")
+    db.delete(staff)
+    db.commit()
+
+
 def set_staff_active_status(db: Session, staff_id: str, is_active: bool) -> Staff:
     """Activate or deactivate a staff account.
 
