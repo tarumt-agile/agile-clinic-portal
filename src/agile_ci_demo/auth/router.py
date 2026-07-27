@@ -89,9 +89,9 @@ def login_page(request: Request) -> HTMLResponse:
 
 @api_router.post("/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(
-    payload: ForgotPasswordRequest, db: Session = Depends(get_db)
+    payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)
 ) -> ForgotPasswordResponse:
-    request_password_reset(db, str(payload.email))
+    request_password_reset(db, str(payload.email), base_url=str(request.base_url))
     return ForgotPasswordResponse(message="If that email is registered, we've sent a reset link.")
 
 

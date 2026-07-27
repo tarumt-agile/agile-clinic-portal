@@ -71,12 +71,16 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def request_password_reset(db: Session, email: str) -> None:
+def request_password_reset(db: Session, email: str, base_url: str) -> None:
     """Email a password reset link if the email matches a staff account.
 
     Always succeeds silently for an unknown email, so this endpoint can't be used
     to discover which emails have accounts - same reasoning as authenticate_staff
     checking the password before the active-status check.
+
+    base_url must be an absolute URL (e.g. request.base_url from the caller) - a
+    relative link isn't clickable in a real mail client, and gets mangled when a
+    plain-text email gets word-wrapped and copy-pasted.
     """
     staff = db.execute(select(Staff).where(Staff.email == email)).scalar_one_or_none()
     if staff is None:
@@ -91,6 +95,7 @@ def request_password_reset(db: Session, email: str) -> None:
     db.add(reset_token)
     db.commit()
 
+    reset_link = f"{base_url.rstrip('/')}/auth/reset-password?token={raw_token}"
     try:
         send_email(
             to=staff.email,
@@ -99,7 +104,7 @@ def request_password_reset(db: Session, email: str) -> None:
                 f"Hi {staff.full_name},\n\n"
                 "We received a request to reset your password. This link expires in "
                 "30 minutes:\n"
-                f"/auth/reset-password?token={raw_token}\n\n"
+                f"{reset_link}\n\n"
                 "If you didn't request this, you can ignore this email."
             ),
         )
