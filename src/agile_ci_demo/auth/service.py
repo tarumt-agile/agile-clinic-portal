@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import datetime as dt
+import hashlib
+import secrets
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.models import PasswordResetToken
+from agile_ci_demo.core.email import send_email
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import verify_password
 from agile_ci_demo.patients.models import Patient
@@ -52,3 +58,47 @@ def authenticate_patient(db: Session, ic_or_passport: str, phone_number: str) ->
     if patient is None or patient.phone_number != phone_number:
         raise InvalidCredentialsError("Invalid IC/passport number or phone number")
     return patient
+
+
+_RESET_TOKEN_TTL = dt.timedelta(minutes=30)
+
+
+class InvalidResetTokenError(Exception):
+    """Raised when a password reset token is unknown, expired, or already used."""
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def request_password_reset(db: Session, email: str) -> None:
+    """Email a password reset link if the email matches a staff account.
+
+    Always succeeds silently for an unknown email, so this endpoint can't be used
+    to discover which emails have accounts - same reasoning as authenticate_staff
+    checking the password before the active-status check.
+    """
+    staff = db.execute(select(Staff).where(Staff.email == email)).scalar_one_or_none()
+    if staff is None:
+        return
+
+    raw_token = secrets.token_urlsafe(32)
+    reset_token = PasswordResetToken(
+        staff_id=staff.id,
+        token_hash=_hash_token(raw_token),
+        expires_at=dt.datetime.utcnow() + _RESET_TOKEN_TTL,
+    )
+    db.add(reset_token)
+    db.commit()
+
+    send_email(
+        to=staff.email,
+        subject="Reset your Agile Clinic Portal password",
+        body=(
+            f"Hi {staff.full_name},\n\n"
+            "We received a request to reset your password. This link expires in "
+            "30 minutes:\n"
+            f"/auth/reset-password?token={raw_token}\n\n"
+            "If you didn't request this, you can ignore this email."
+        ),
+    )

@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
+from agile_ci_demo.auth import models as _auth_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
@@ -363,3 +364,29 @@ def test_staff_login_after_patient_login_clears_the_patient_session(client: Test
 
     r = client.get("/patients/dashboard", follow_redirects=False)
     assert r.status_code == 303
+
+
+# --- 6. Forgot password ------------------------------------------------------
+
+
+def test_forgot_password_returns_generic_message_for_known_email(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+
+    r = client.post("/api/auth/forgot-password", json={"email": "alice.wong@example.com"})
+    assert r.status_code == 200
+    assert "sent a reset link" in r.json()["message"]
+    assert len(get_outbox()) == 2  # welcome email + reset email
+
+
+def test_forgot_password_returns_same_generic_message_for_unknown_email(
+    client: TestClient,
+) -> None:
+    r = client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
+    assert r.status_code == 200
+    assert "sent a reset link" in r.json()["message"]
+    assert len(get_outbox()) == 0
+
+
+def test_forgot_password_page_renders(client: TestClient) -> None:
+    r = client.get("/auth/forgot-password")
+    assert r.status_code == 200

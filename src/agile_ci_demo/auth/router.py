@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.auth.deps import login_patient, login_staff, logout
 from agile_ci_demo.auth.schemas import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
     LoginResponse,
     PatientLoginRequest,
@@ -15,6 +17,7 @@ from agile_ci_demo.auth.service import (
     authenticate_patient,
     authenticate_staff,
     redirect_url_for_role,
+    request_password_reset,
 )
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
@@ -76,3 +79,16 @@ def delete_session(request: Request) -> dict:
 @pages_router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/login.html", {})
+
+
+@api_router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(
+    payload: ForgotPasswordRequest, db: Session = Depends(get_db)
+) -> ForgotPasswordResponse:
+    request_password_reset(db, str(payload.email))
+    return ForgotPasswordResponse(message="If that email is registered, we've sent a reset link.")
+
+
+@pages_router.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "auth/forgot_password.html", {})
