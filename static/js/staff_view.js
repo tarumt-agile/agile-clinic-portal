@@ -41,6 +41,14 @@
     "edit-end-time"
   );
 
+  const deleteButton = byId(
+    "delete-staff-button"
+  );
+
+  const deleteModalAlert = byId(
+    "delete-staff-modal-alert"
+  );
+
   let currentStaff = null;
 
   const roleLabels = {
@@ -313,6 +321,8 @@
     byId(
       "edit-staff-button"
     ).classList.remove("d-none");
+
+    deleteButton.classList.remove("d-none");
   }
 
   function populateForm() {
@@ -650,6 +660,50 @@
         saveButton.disabled = false;
         saveButton.textContent =
           "Save Changes";
+      }
+    }
+  );
+
+  deleteButton.addEventListener("click", function () {
+    deleteModalAlert.classList.add("d-none");
+    deleteModalAlert.textContent = "";
+
+    const modalElement = byId("delete-staff-modal");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    modal.show();
+  });
+
+  byId("confirm-delete-staff-button").addEventListener(
+    "click",
+    async function () {
+      const confirmButton = byId("confirm-delete-staff-button");
+      confirmButton.disabled = true;
+
+      try {
+        const response = await fetch(
+          "/api/staff/" + encodeURIComponent(staffId),
+          { method: "DELETE" }
+        );
+
+        if (response.status === 204) {
+          window.location.href = "/staff";
+          return;
+        }
+
+        const result = await response.json();
+        deleteModalAlert.textContent =
+          typeof result.detail === "string"
+            ? result.detail
+            : "This staff account could not be deleted.";
+        deleteModalAlert.classList.remove("d-none");
+
+      } catch (error) {
+        deleteModalAlert.textContent =
+          "Unable to reach the server. Please try again.";
+        deleteModalAlert.classList.remove("d-none");
+
+      } finally {
+        confirmButton.disabled = false;
       }
     }
   );

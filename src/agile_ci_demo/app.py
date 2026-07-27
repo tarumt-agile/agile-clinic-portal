@@ -73,6 +73,12 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/")
+def root() -> RedirectResponse:
+    """Send a bare visit to the app straight to the login page."""
+    return RedirectResponse("/auth/login")
+
+
 @app.post("/items", status_code=201)
 def create_item(item: Item) -> Item:
     """Create a new todo item.
