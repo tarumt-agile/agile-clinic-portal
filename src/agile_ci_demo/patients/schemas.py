@@ -104,6 +104,16 @@ class PatientOut(BaseModel):
     created_at: dt.datetime
 
 
+class PatientIcSuggestion(BaseModel):
+    """A lightweight patient match for the IC autocomplete suggestion dropdown."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    patient_id: str
+    full_name: str
+    ic_or_passport: str
+
+
 class PaginatedPatients(BaseModel):
     """Paginated search results for the patient list page."""
 

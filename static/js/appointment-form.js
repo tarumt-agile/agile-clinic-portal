@@ -11,6 +11,7 @@
   const patientIcInput = document.getElementById("patient_ic");
   const patientFeedback = document.getElementById("patient-lookup-feedback");
   const patientDisplay = document.getElementById("patient-display");
+  const patientIcSuggestions = document.getElementById("patient-ic-suggestions");
   const specialtySelect = document.getElementById("specialty");
   const doctorSelect = document.getElementById("doctor_id");
   const slotGrid = document.getElementById("slot-grid");
@@ -252,6 +253,73 @@
     }
   }
 
+  // --- IC autocomplete ------------------------------------------------------
+  // Shows matching patients as soon as the first few IC digits are typed,
+  // instead of requiring the full formatted IC before anything resolves (the
+  // blur-triggered lookupPatient() above still runs as the final check).
+
+  let icSuggestDebounceTimer = null;
+
+  function hideIcSuggestions() {
+    patientIcSuggestions.classList.add("d-none");
+    patientIcSuggestions.innerHTML = "";
+  }
+
+  function pickIcSuggestion(patient) {
+    patientIcInput.value = patient.ic_or_passport;
+    patientIdInput.value = patient.patient_id;
+    patientIcInput.classList.remove("is-invalid");
+    patientFeedback.textContent = `✓ ${patient.full_name} (${patient.patient_id})`;
+    patientFeedback.classList.remove("text-danger");
+    patientFeedback.classList.add("text-success");
+    hideIcSuggestions();
+  }
+
+  async function searchIcSuggestions() {
+    const prefix = patientIcInput.value.replace(/[^a-zA-Z0-9]/g, "");
+    if (prefix.length < 3) {
+      hideIcSuggestions();
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/patients/search-ic?q=${encodeURIComponent(prefix)}`);
+      if (!response.ok) throw new Error("Request failed");
+      const matches = await response.json();
+
+      if (matches.length === 0) {
+        hideIcSuggestions();
+        return;
+      }
+
+      patientIcSuggestions.innerHTML = matches
+        .map(
+          (patient, i) =>
+            `<button type="button" class="list-group-item list-group-item-action" data-index="${i}">` +
+            `<strong>${patient.ic_or_passport}</strong> - ${patient.full_name}</button>`
+        )
+        .join("");
+      patientIcSuggestions.classList.remove("d-none");
+
+      patientIcSuggestions.querySelectorAll("button").forEach((btn, i) => {
+        // Without this, clicking a suggestion first blurs the input (mousedown
+        // moves focus to the button before click fires), which runs the
+        // blur-triggered lookupPatient() against the still-partial IC, flags it
+        // as invalid, and reflows the invalid-feedback text into view - shifting
+        // this dropdown out from under the click before it registers.
+        btn.addEventListener("mousedown", (event) => event.preventDefault());
+        btn.addEventListener("click", () => pickIcSuggestion(matches[i]));
+      });
+    } catch (err) {
+      hideIcSuggestions();
+    }
+  }
+
+  function onPatientIcInput() {
+    clearTimeout(icSuggestDebounceTimer);
+    icSuggestDebounceTimer = setTimeout(searchIcSuggestions, 250);
+  }
+
   async function loadCurrentPatient() {
     try {
       const response = await fetch("/api/patients/me");
@@ -362,6 +430,12 @@
   } else {
     patientIcInput.addEventListener("blur", lookupPatient);
     autoDash(patientIcInput, [6, 2, 4]);
+    patientIcInput.addEventListener("input", onPatientIcInput);
+    document.addEventListener("click", (event) => {
+      if (!patientIcInput.contains(event.target) && !patientIcSuggestions.contains(event.target)) {
+        hideIcSuggestions();
+      }
+    });
   }
   form.addEventListener("submit", handleSubmit);
   loadDoctors();

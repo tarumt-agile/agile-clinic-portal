@@ -133,6 +133,53 @@ Consultation Record - Agile Clinic Portal
 
           <div id="diagnosis-list"></div>
         </section>
+
+        <section class="card mb-4">
+          <div class="card-body">
+            <div
+              class="d-flex justify-content-between
+                align-items-center mb-3"
+            >
+              <h2 class="h5 mb-0">
+                Attachments
+              </h2>
+            </div>
+
+            <div
+              id="attachments-alert"
+              class="alert alert-danger d-none"
+            ></div>
+
+            <form
+              id="attachment-upload-form"
+              class="d-flex align-items-start gap-2 mb-3"
+              novalidate
+            >
+              <div class="flex-grow-1">
+                <input
+                  type="file"
+                  class="form-control"
+                  id="attachment-file-input"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  required
+                >
+                <div class="form-text">
+                  PDF, JPG, or PNG. Maximum 5 MB.
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                id="attachment-upload-btn"
+                class="btn btn-primary"
+              >
+                Upload
+              </button>
+            </form>
+
+            <div id="attachment-list"></div>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -303,4 +350,5 @@ Consultation Record - Agile Clinic Portal
 
 {% block extra_js %}
 <script src="/static/js/record_detail.js?v=5"></script>
+<script src="/static/js/consultation-attachments.js"></script>
 {% endblock %}  

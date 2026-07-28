@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import logging
+import re
 import secrets
 
 from sqlalchemy import select
@@ -14,6 +16,8 @@ from agile_ci_demo.core.security import hash_password, verify_password
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.patients.service import get_patient_by_ic
 from agile_ci_demo.staff.models import Staff
+
+logger = logging.getLogger(__name__)
 
 _REDIRECT_BY_ROLE: dict[Role, str] = {
     Role.ADMIN: "/staff",
@@ -53,9 +57,16 @@ def authenticate_staff(db: Session, email: str, password: str) -> Staff:
 
 
 def authenticate_patient(db: Session, ic_or_passport: str, phone_number: str) -> Patient:
-    """Verify a patient's IC/passport number and phone number match a registered patient."""
+    """Verify a patient's IC/passport number and phone number match a registered patient.
+
+    Phone numbers are compared digit-only: registration leaves the phone field
+    freeform (whatever dash/space grouping the staff member typed), while the
+    login page auto-formats it into a fixed grouping as you type - an exact
+    string match would fail whenever those two don't happen to produce the
+    same punctuation, even with the correct number.
+    """
     patient = get_patient_by_ic(db, ic_or_passport)
-    if patient is None or patient.phone_number != phone_number:
+    if patient is None or re.sub(r"\D", "", patient.phone_number) != re.sub(r"\D", "", phone_number):
         raise InvalidCredentialsError("Invalid IC/passport number or phone number")
     return patient
 
@@ -110,8 +121,10 @@ def request_password_reset(db: Session, email: str, base_url: str) -> None:
         )
     except Exception:
         # A delivery failure must never surface differently than success, or the
-        # generic response above stops being generic (see docstring).
-        pass
+        # generic response above stops being generic (see docstring). Still log
+        # it server-side so a real failure (e.g. the SMTP account being
+        # throttled) is diagnosable instead of vanishing without a trace.
+        logger.exception("Password reset email failed to send to %s", staff.email)
 
 
 def reset_password(db: Session, token: str, new_password: str) -> None:

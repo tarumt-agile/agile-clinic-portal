@@ -126,6 +126,14 @@ end state to today's successful blur lookup. The existing blur-triggered exact l
 unchanged and still runs as the final check before submit (covers the case where a receptionist
 pastes or types a full IC without ever seeing/using a suggestion).
 
+Each suggestion button also gets a `mousedown` handler that calls `event.preventDefault()` -
+found necessary during manual browser verification: without it, clicking a suggestion first blurs
+`#patient_ic` (mousedown moves focus to the button before the click event fires), which runs the
+blur-triggered lookup against the still-partial IC, flags it invalid, and reflows the
+invalid-feedback text into view, shifting the dropdown out from under the click before it
+registers. Preventing the mousedown's default action keeps focus on the input, so blur never
+fires for a suggestion click.
+
 `receptionist_createAppointment.html` gains one new empty container,
 `<div id="patient-ic-suggestions" class="list-group position-absolute d-none"></div>`, placed
 right after the existing `#patient_ic` input. No existing markup in this file changes.
@@ -165,10 +173,14 @@ explicit ordering keeps the intent clear and works unchanged if that ever change
 
 1. `PrescriptionHistory` rows for any `Prescription` belonging to the patient.
 2. `Prescription` rows for the patient (`patient_id`).
-3. `Diagnosis` rows for any `ConsultationNote` belonging to the patient.
-4. `ConsultationNote` rows for the patient (`patient_id`).
-5. `Appointment` rows for the patient (`patient_id`).
-6. The `Patient` row itself.
+3. `Attachment` rows (and their files on disk) for any `ConsultationNote` belonging to the
+   patient - found during manual browser verification: an attachment survived a patient delete
+   and stayed downloadable via `/api/attachments/{id}/download` even after its consultation note
+   and patient were gone, because the first pass only handled `Diagnosis`/`ConsultationNote`.
+4. `Diagnosis` rows for any `ConsultationNote` belonging to the patient.
+5. `ConsultationNote` rows for the patient (`patient_id`).
+6. `Appointment` rows for the patient (`patient_id`).
+7. The `Patient` row itself.
 
 All in one transaction (single commit after all deletes).
 
@@ -179,7 +191,7 @@ New `delete_patient(db: Session, patient_id: str) -> None` in `patients/service.
 ```python
 def delete_patient(db: Session, patient_id: str) -> None:
     """Permanently remove a patient and all of their appointments, consultation
-    notes, diagnoses, and prescriptions."""
+    notes, diagnoses, prescriptions, and attachments (cascading hard delete)."""
     patient = get_patient_by_patient_id(db, patient_id)
     if patient is None:
         raise PatientNotFoundError(f"No patient found with patient_id '{patient_id}'")
@@ -195,6 +207,13 @@ def delete_patient(db: Session, patient_id: str) -> None:
         select(ConsultationNote.id).where(ConsultationNote.patient_id == patient.id)
     ).scalars().all()
     if note_ids:
+        attachments = db.execute(
+            select(Attachment).where(Attachment.consultation_note_id.in_(note_ids))
+        ).scalars().all()
+        for attachment in attachments:
+            (settings.attachments_dir / attachment.stored_filename).unlink(missing_ok=True)
+        db.execute(delete(Attachment).where(Attachment.consultation_note_id.in_(note_ids)))
+
         db.execute(delete(Diagnosis).where(Diagnosis.consultation_note_id.in_(note_ids)))
         db.execute(delete(ConsultationNote).where(ConsultationNote.id.in_(note_ids)))
 
@@ -204,8 +223,12 @@ def delete_patient(db: Session, patient_id: str) -> None:
 ```
 
 (Imports `Prescription`, `PrescriptionHistory` from `prescription.models`; `ConsultationNote`,
-`Diagnosis` from `records.models`; `Appointment` from `appointments.models` - all new imports into
-`patients/service.py`, no changes to those other modules.)
+`Diagnosis` from `records.models`; `Appointment` from `appointments.models`; `Attachment` from
+`attachments.models` - all new imports into `patients/service.py`, no changes to those other
+modules. `attachment_file_path()` from `attachments/service.py` was deliberately *not* imported
+here - doing so created a real circular import, `patients.service -> attachments.service ->
+records.service -> patients.service`, since `attachments/service.py` itself imports
+`records.service`. The one-line path join is inlined instead.)
 
 New endpoint in `patients/router.py`:
 
@@ -237,8 +260,11 @@ to `/patients` on success, shows the error inline on failure (404 - already dele
 
 New tests in `tests/test_patients.py`:
 - Deleting a patient with no history succeeds (204); subsequent `GET` returns 404.
-- Deleting a patient with appointments/consultation notes/diagnoses/prescriptions succeeds and all
-  of those rows are gone afterward too (verified via direct queries or their own list endpoints).
+- Deleting a patient with appointments/consultation notes/diagnoses/prescriptions/an attachment
+  succeeds and all of those are gone afterward too, including the attachment (`GET
+  /api/attachments/{id}/download` returns 404 - this exact case was missed by the first version of
+  this test, which built history without an attachment, and only caught by manual browser
+  verification after the automated suite was green; the test was extended to close the gap).
 - A non-admin (or logged-out) request is redirected to `/auth/login` (303), same pattern as the
   existing staff-delete role test.
 - Deleting an unknown `patient_id` returns 404.

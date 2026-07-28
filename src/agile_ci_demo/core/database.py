@@ -187,6 +187,9 @@ def init_db() -> None:
     from agile_ci_demo.appointments import (
         models as _appointments_models,  # noqa: F401
     )
+    from agile_ci_demo.attachments import (
+        models as _attachments_models,  # noqa: F401
+    )
     from agile_ci_demo.patients import (
         models as _patients_models,  # noqa: F401
     )

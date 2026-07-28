@@ -242,6 +242,30 @@ def test_patient_login_success(client: TestClient) -> None:
     assert r.json()["patient_id"] == created["patient_id"]
 
 
+def test_patient_login_succeeds_with_differently_formatted_phone(client: TestClient) -> None:
+    """Registration leaves the phone number freeform while the login page's
+    auto-dash always reformats it into a fixed grouping as you type - a login
+    with the same digits but different dash placement must still succeed."""
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-345-6789",
+            "ic_or_passport": "900520-10-1234",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+
+    r = client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": created["ic_or_passport"], "phone_number": "012-3456789"},
+    )
+    assert r.status_code == 200
+    assert r.json()["patient_id"] == created["patient_id"]
+
+
 def test_patient_login_wrong_ic_returns_401(client: TestClient) -> None:
     created = client.post(
         "/api/patients",
@@ -391,6 +415,28 @@ def test_forgot_password_returns_same_generic_message_for_unknown_email(
 def test_forgot_password_page_renders(client: TestClient) -> None:
     r = client.get("/auth/forgot-password")
     assert r.status_code == 200
+
+
+def test_forgot_password_logs_email_send_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A delivery failure must stay invisible to the caller (same generic
+    response), but should be logged server-side instead of silently vanishing."""
+    from agile_ci_demo.auth import service as auth_service
+
+    _create_staff_and_get_temp_password(client)
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("SMTP quota exceeded")
+
+    monkeypatch.setattr(auth_service, "send_email", _raise)
+
+    with caplog.at_level("ERROR"):
+        r = client.post("/api/auth/forgot-password", json={"email": "alice.wong@example.com"})
+
+    assert r.status_code == 200
+    assert "sent a reset link" in r.json()["message"]
+    assert any("Password reset email failed to send" in record.message for record in caplog.records)
 
 
 # --- 7. Reset password --------------------------------------------------------

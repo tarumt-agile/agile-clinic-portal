@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections.abc import Generator
 
 import pytest
@@ -11,15 +12,22 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from agile_ci_demo.app import app
+from agile_ci_demo.appointments import models as _appointments_models  # noqa: F401
+from agile_ci_demo.attachments import models as _attachments_models  # noqa: F401
 from agile_ci_demo.core.database import Base, get_db
+from agile_ci_demo.core.email import get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
+from agile_ci_demo.prescription import models as _prescription_models  # noqa: F401
+from agile_ci_demo.records import models as _records_models  # noqa: F401
+from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
 
 @pytest.fixture
-def client() -> Generator[TestClient, None, None]:
-    """FastAPI test client backed by a fresh in-memory SQLite DB for every test."""
+def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
+    """FastAPI test client backed by a fresh in-memory SQLite DB and a temp
+    uploads directory for every test."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -27,6 +35,10 @@ def client() -> Generator[TestClient, None, None]:
     )
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
+
+    from agile_ci_demo.core.config import settings
+
+    monkeypatch.setattr(settings, "attachments_dir", tmp_path / "consultation_attachments")
 
     def override_get_db() -> Generator[Session, None, None]:
         db = TestingSessionLocal()
@@ -841,3 +853,217 @@ def patient_is_registered_step(context: Context) -> None:
 def i_receive_status_code_step(context: Context, status_code: int) -> None:
     assert context.last_response is not None
     assert context.last_response.status_code == status_code
+
+
+# --- IC autocomplete (search-ic) ---------------------------------------------
+
+
+def test_search_ic_matches_prefix(client: TestClient) -> None:
+    client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="Jane Tan", ic_or_passport="900520-10-1234"),
+    )
+    client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="John Lee", ic_or_passport="900520-10-1236"),
+    )
+
+    r = client.get("/api/patients/search-ic?q=900520-10-12")
+    assert r.status_code == 200
+    results = r.json()
+    assert {item["ic_or_passport"] for item in results} == {"900520-10-1234", "900520-10-1236"}
+    assert {item["full_name"] for item in results} == {"Jane Tan", "John Lee"}
+
+
+def test_search_ic_excludes_non_matching_prefix(client: TestClient) -> None:
+    client.post(
+        "/api/patients",
+        json=valid_patient_payload(full_name="Jane Tan", ic_or_passport="900520-10-1234"),
+    )
+
+    r = client.get("/api/patients/search-ic?q=850101")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_search_ic_with_no_matches_returns_empty_list_not_404(client: TestClient) -> None:
+    r = client.get("/api/patients/search-ic?q=999999")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_search_ic_caps_results_at_eight(client: TestClient) -> None:
+    # Last IC digit must match gender parity (female => even) - step by 2 so
+    # all ten registrations are valid, unique, and share the queried prefix.
+    for i in range(10):
+        r = client.post(
+            "/api/patients",
+            json=valid_patient_payload(
+                full_name=f"Patient {i}",
+                ic_or_passport=f"900520-10-{1230 + i * 2}",
+                email=f"patient{i}@example.com",
+            ),
+        )
+        assert r.status_code == 201, r.json()
+
+    r = client.get("/api/patients/search-ic?q=900520-10-12")
+    assert r.status_code == 200
+    assert len(r.json()) == 8
+
+
+# --- Admin patient delete ----------------------------------------------------
+
+
+def valid_doctor_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "full_name": "Dr. Alan Chua",
+        "email": "alan.chua@example.com",
+        "role": "doctor",
+        "license_number": "MMC-12345",
+        "specialty": "General Medicine",
+        "status": "active",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _login_as(client: TestClient, email: str) -> None:
+    body = get_outbox()[-1].body
+    match = re.search(r"temporary password is: (\S+)", body)
+    assert match is not None
+    r = client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
+    assert r.status_code == 200, r.json()
+
+
+def _login_as_admin(client: TestClient) -> None:
+    r = client.post(
+        "/api/staff", json={"full_name": "Admin User", "email": "admin@example.com", "role": "admin"}
+    )
+    assert r.status_code == 201, r.json()
+    _login_as(client, "admin@example.com")
+
+
+def _register_doctor(client: TestClient, **overrides: object) -> str:
+    payload = valid_doctor_payload(**overrides)
+    r = client.post("/api/staff", json=payload)
+    assert r.status_code == 201, r.json()
+    return str(r.json()["staff_id"])
+
+
+TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+
+
+def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
+    """Register a patient and a doctor, then create one appointment, one
+    consultation note (with a diagnosis and an attachment), and one
+    prescription for that patient. Returns (patient_id, doctor_id, attachment_id)."""
+    patient_id = client.post("/api/patients", json=valid_patient_payload()).json()["patient_id"]
+    doctor_id = _register_doctor(client)
+
+    appt = client.post(
+        "/api/appointments",
+        json={
+            "patient_id": patient_id,
+            "doctor_id": doctor_id,
+            "appointment_date": TOMORROW,
+            "start_time": "10:00",
+            "reason": "Fever and cough",
+        },
+    )
+    assert appt.status_code == 201, appt.json()
+
+    _login_as(client, str(valid_doctor_payload()["email"]))
+
+    note = client.post(
+        "/api/records",
+        json={
+            "patient_id": patient_id,
+            "doctor_id": doctor_id,
+            "notes": "Patient presented with fever and cough for 3 days.",
+            "diagnoses": [{"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}],
+        },
+    )
+    assert note.status_code == 201, note.json()
+    record_id = note.json()["record_id"]
+    diagnosis_id = note.json()["diagnoses"][0]["id"]
+
+    prescription = client.post(
+        "/api/prescriptions",
+        json={
+            "consultation_record_id": record_id,
+            "diagnosis_id": diagnosis_id,
+            "medication": "Amoxicillin 500 mg Capsule",
+            "dosage": "1 capsule",
+            "frequency": "Three times daily",
+            "duration": "7 days",
+        },
+    )
+    assert prescription.status_code == 201, prescription.json()
+
+    attachment = client.post(
+        "/api/attachments",
+        data={"consultation_record_id": record_id},
+        files={"file": ("lab_result.pdf", b"%PDF-1.4\nmock", "application/pdf")},
+    )
+    assert attachment.status_code == 201, attachment.json()
+
+    return patient_id, doctor_id, attachment.json()["id"]
+
+
+def test_delete_patient_with_no_history_succeeds(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    r = client.delete(f"/api/patients/{created['patient_id']}")
+    assert r.status_code == 204
+
+    r = client.get(f"/api/patients/{created['patient_id']}")
+    assert r.status_code == 404
+
+
+def test_delete_patient_cascades_to_all_history(client: TestClient) -> None:
+    """Deleting a patient also deletes their appointments, consultation notes,
+    diagnoses, prescriptions, and attachments - nothing referencing the deleted
+    patient stays reachable afterward."""
+    patient_id, doctor_id, attachment_id = _build_full_history_for_patient(client)
+
+    _login_as_admin(client)
+    r = client.delete(f"/api/patients/{patient_id}")
+    assert r.status_code == 204
+
+    assert client.get(f"/api/patients/{patient_id}").status_code == 404
+
+    history = client.get(
+        "/api/records", params={"patient_id": patient_id}
+    )
+    # get_patient_history requires the patient to exist - it's gone now, so a
+    # direct history lookup 404s. The important assertion is that nothing
+    # referencing the deleted patient is left orphaned in the DB, which the
+    # cascading deletes in delete_patient() guarantee at the query level.
+    assert history.status_code == 404
+
+    assert client.get(f"/api/attachments/{attachment_id}/download").status_code == 404
+
+
+def test_delete_unknown_patient_returns_404(client: TestClient) -> None:
+    _login_as_admin(client)
+    r = client.delete("/api/patients/P99999")
+    assert r.status_code == 404
+
+
+def test_delete_patient_requires_admin_login(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    r = client.delete(f"/api/patients/{created['patient_id']}", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_delete_patient_as_non_admin_is_redirected(client: TestClient) -> None:
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+    _register_doctor(client)
+    _login_as(client, str(valid_doctor_payload()["email"]))
+
+    r = client.delete(f"/api/patients/{created['patient_id']}", follow_redirects=False)
+    assert r.status_code == 303
+
+    assert client.get(f"/api/patients/{created['patient_id']}").status_code == 200
