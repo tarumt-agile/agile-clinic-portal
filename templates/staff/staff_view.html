@@ -41,13 +41,23 @@ Staff Details - Agile Clinic Portal
       </p>
     </div>
 
-    <button
-      type="button"
-      id="edit-staff-button"
-      class="btn btn-primary d-none"
-    >
-      Edit Staff
-    </button>
+    <div class="staff-detail-header-actions">
+      <button
+        type="button"
+        id="edit-staff-button"
+        class="btn btn-primary d-none"
+      >
+        Edit Staff
+      </button>
+
+      <button
+        type="button"
+        id="delete-staff-button"
+        class="btn btn-danger d-none"
+      >
+        Delete Staff
+      </button>
+    </div>
   </header>
 
   <div
@@ -414,8 +424,65 @@ Staff Details - Agile Clinic Portal
     </section>
   </div>
 </div>
+
+<div
+  class="modal fade"
+  id="delete-staff-modal"
+  tabindex="-1"
+  aria-labelledby="delete-staff-modal-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h2
+          id="delete-staff-modal-title"
+          class="modal-title fs-5"
+        >
+          Delete Staff Account
+        </h2>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        <p>Delete this staff account permanently? This cannot be undone.</p>
+
+        <div
+          id="delete-staff-modal-alert"
+          class="alert alert-danger d-none"
+          role="alert"
+        ></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-dismiss="modal"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          id="confirm-delete-staff-button"
+          class="btn btn-danger"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/staff_view.js?v=2"></script>
+<script src="/static/js/staff_view.js?v=3"></script>
 {% endblock %}

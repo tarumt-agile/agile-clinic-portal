@@ -13,6 +13,7 @@ from agile_ci_demo.core.database import get_db
 from agile_ci_demo.patients.schemas import (
     PaginatedPatients,
     PatientCreate,
+    PatientIcSuggestion,
     PatientOut,
     PatientUpdate,
 )
@@ -20,9 +21,11 @@ from agile_ci_demo.patients.service import (
     DuplicatePatientError,
     PatientNotFoundError,
     create_patient,
+    delete_patient,
     get_patient_by_ic,
     get_patient_by_patient_id,
     search_patients,
+    search_patients_by_ic_prefix,
     update_patient,
 )
 from agile_ci_demo.patients.models import Patient
@@ -89,6 +92,17 @@ def get_patient_by_ic_number(ic_or_passport: str, db: Session = Depends(get_db))
     return PatientOut.model_validate(patient)
 
 
+@api_router.get("/search-ic", response_model=list[PatientIcSuggestion])
+def search_patients_by_ic(
+    q: str = Query(default="", description="IC/passport prefix typed so far"),
+    db: Session = Depends(get_db),
+) -> list[PatientIcSuggestion]:
+    """Patients whose IC/passport starts with the given digits, for the booking
+    form's autocomplete dropdown."""
+    patients = search_patients_by_ic_prefix(db, q)
+    return [PatientIcSuggestion.model_validate(p) for p in patients]
+
+
 @api_router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(patient_id: str, db: Session = Depends(get_db)) -> PatientOut:
     patient = get_patient_by_patient_id(db, patient_id)
@@ -107,6 +121,18 @@ def edit_patient(
     except PatientNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return PatientOut.model_validate(patient)
+
+
+@api_router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_patient_endpoint(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_role(Role.ADMIN)),
+) -> None:
+    try:
+        delete_patient(db, patient_id)
+    except PatientNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @pages_router.get("/register", response_class=HTMLResponse)

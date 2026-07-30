@@ -181,8 +181,14 @@ def migrate_sqlite_database() -> None:
 def init_db() -> None:
     """Create all tables and update older SQLite tables."""
 
+    from agile_ci_demo.auth import (
+        models as _auth_models,  # noqa: F401
+    )
     from agile_ci_demo.appointments import (
         models as _appointments_models,  # noqa: F401
+    )
+    from agile_ci_demo.attachments import (
+        models as _attachments_models,  # noqa: F401
     )
     from agile_ci_demo.patients import (
         models as _patients_models,  # noqa: F401

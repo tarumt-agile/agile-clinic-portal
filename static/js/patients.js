@@ -10,6 +10,7 @@
   const dobInput = document.getElementById("date_of_birth");
   const genderInput = document.getElementById("gender");
   const icInput = document.getElementById("ic_or_passport");
+  const phoneInput = document.getElementById("phone_number");
 
   const IC_PATTERN = /^\d{6}-\d{2}-\d{4}$/;
 
@@ -52,6 +53,7 @@
   }
 
   window.PatientForm.autoDash(icInput, [6, 2, 4]);
+  window.PatientForm.autoDash(phoneInput, [3, 3, 4]);
   icInput.addEventListener("input", checkIcConsistency);
   dobInput.addEventListener("change", checkIcConsistency);
   genderInput.addEventListener("change", checkIcConsistency);

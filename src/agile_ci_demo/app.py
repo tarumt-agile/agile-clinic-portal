@@ -10,6 +10,7 @@ from starlette.responses import RedirectResponse
 
 from agile_ci_demo.appointments.router import api_router as appointments_api_router
 from agile_ci_demo.appointments.router import pages_router as appointments_pages_router
+from agile_ci_demo.attachments.router import api_router as attachments_api_router
 from agile_ci_demo.auth.deps import NotAuthenticatedError
 from agile_ci_demo.auth.router import api_router as auth_api_router
 from agile_ci_demo.auth.router import pages_router as auth_pages_router
@@ -55,6 +56,7 @@ app.include_router(appointments_pages_router)
 app.include_router(records_api_router)
 app.include_router(records_pages_router)
 app.include_router(prescription_api_router)
+app.include_router(attachments_api_router)
 
 
 class Item(BaseModel):
@@ -71,6 +73,12 @@ _db: Dict[int, Item] = {}
 def health() -> dict:
     """Simple health check endpoint used by tests and monitoring."""
     return {"status": "ok"}
+
+
+@app.get("/")
+def root() -> RedirectResponse:
+    """Send a bare visit to the app straight to the login page."""
+    return RedirectResponse("/auth/login")
 
 
 @app.post("/items", status_code=201)

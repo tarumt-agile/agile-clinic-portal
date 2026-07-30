@@ -259,6 +259,23 @@ def test_create_staff_sends_welcome_email_with_temp_password(client: TestClient)
     assert "temporary password" in outbox[0].body.lower()
 
 
+def test_create_staff_succeeds_even_if_the_welcome_email_fails_to_send(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A delivery failure (e.g. SMTP quota, network issue) must never block account
+    creation - the account is already committed by the time the email is sent."""
+    from agile_ci_demo.staff import service as staff_service
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated SMTP failure")
+
+    monkeypatch.setattr(staff_service, "send_email", _raise)
+
+    r = client.post("/api/staff", json=valid_staff_payload())
+    assert r.status_code == 201
+    assert r.json()["staff_id"] == "S00001"
+
+
 def test_create_staff_page_renders(client: TestClient) -> None:
     from test_auth import _create_staff_and_get_temp_password
 
@@ -704,3 +721,76 @@ def test_update_staff_second_edit_collapses_the_first_queued_change() -> None:
     assert profile.next_effective_date == dt.date.today() + dt.timedelta(days=1)
 
     db.close()
+
+
+# --- Delete staff -------------------------------------------------------------
+
+
+def test_delete_staff_success(client: TestClient) -> None:
+    """
+    Scenario: Admin permanently deletes a staff account
+      Given a staff account exists
+      When I DELETE /api/staff/{staff_id}
+      Then it's gone - a subsequent GET returns 404
+    """
+    _login_as_admin(client)
+    created = client.post("/api/staff", json=valid_staff_payload()).json()
+
+    r = client.delete(f"/api/staff/{created['staff_id']}")
+    assert r.status_code == 204
+
+    r = client.get(f"/api/staff/{created['staff_id']}")
+    assert r.status_code == 404
+
+
+def test_delete_doctor_also_removes_their_doctor_profile(client: TestClient) -> None:
+    """Deleting a doctor's staff account cascades to their DoctorProfile too."""
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    r = client.delete(f"/api/staff/{created['staff_id']}")
+    assert r.status_code == 204
+
+    doctors = client.get("/api/staff/doctor").json()
+    assert all(d["staff_id"] != created["staff_id"] for d in doctors)
+
+
+def test_delete_unknown_staff_returns_404(client: TestClient) -> None:
+    _login_as_admin(client)
+    r = client.delete("/api/staff/S99999")
+    assert r.status_code == 404
+
+
+def test_delete_staff_blocks_deleting_your_own_account(client: TestClient) -> None:
+    """An admin cannot delete the account they're currently logged in as."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    login_body = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": temp_password}
+    ).json()
+    admin_staff_id = login_body["staff_id"]
+
+    r = client.delete(f"/api/staff/{admin_staff_id}")
+    assert r.status_code == 400
+
+    r = client.get(f"/api/staff/{admin_staff_id}")
+    assert r.status_code == 200
+
+
+def test_delete_staff_requires_admin_login(client: TestClient) -> None:
+    """Matches the existing pattern for PATCH .../status: no session -> redirect to login."""
+    created = client.post("/api/staff", json=valid_staff_payload()).json()
+
+    r = client.delete(f"/api/staff/{created['staff_id']}", follow_redirects=False)
+    assert r.status_code == 303

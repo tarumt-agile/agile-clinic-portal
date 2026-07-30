@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import itertools
 import re
 from collections.abc import Generator
@@ -13,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
+from agile_ci_demo.auth import models as _auth_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
@@ -193,6 +195,19 @@ def test_logout_clears_the_session(client: TestClient) -> None:
     assert r.status_code == 303
 
 
+def test_delete_session_clears_the_session(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.delete("/api/auth/session")
+    assert r.status_code == 200
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+
+
 # --- 4. Patient login ---------------------------------------------------------
 
 
@@ -222,6 +237,30 @@ def test_patient_login_success(client: TestClient) -> None:
             "ic_or_passport": created["ic_or_passport"],
             "phone_number": created["phone_number"],
         },
+    )
+    assert r.status_code == 200
+    assert r.json()["patient_id"] == created["patient_id"]
+
+
+def test_patient_login_succeeds_with_differently_formatted_phone(client: TestClient) -> None:
+    """Registration leaves the phone number freeform while the login page's
+    auto-dash always reformats it into a fixed grouping as you type - a login
+    with the same digits but different dash placement must still succeed."""
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-345-6789",
+            "ic_or_passport": "900520-10-1234",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+
+    r = client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": created["ic_or_passport"], "phone_number": "012-3456789"},
     )
     assert r.status_code == 200
     assert r.json()["patient_id"] == created["patient_id"]
@@ -350,3 +389,159 @@ def test_staff_login_after_patient_login_clears_the_patient_session(client: Test
 
     r = client.get("/patients/dashboard", follow_redirects=False)
     assert r.status_code == 303
+
+
+# --- 6. Forgot password ------------------------------------------------------
+
+
+def test_forgot_password_returns_generic_message_for_known_email(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+
+    r = client.post("/api/auth/forgot-password", json={"email": "alice.wong@example.com"})
+    assert r.status_code == 200
+    assert "sent a reset link" in r.json()["message"]
+    assert len(get_outbox()) == 2  # welcome email + reset email
+
+
+def test_forgot_password_returns_same_generic_message_for_unknown_email(
+    client: TestClient,
+) -> None:
+    r = client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
+    assert r.status_code == 200
+    assert "sent a reset link" in r.json()["message"]
+    assert len(get_outbox()) == 0
+
+
+def test_forgot_password_page_renders(client: TestClient) -> None:
+    r = client.get("/auth/forgot-password")
+    assert r.status_code == 200
+
+
+def test_forgot_password_logs_email_send_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A delivery failure must stay invisible to the caller (same generic
+    response), but should be logged server-side instead of silently vanishing."""
+    from agile_ci_demo.auth import service as auth_service
+
+    _create_staff_and_get_temp_password(client)
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("SMTP quota exceeded")
+
+    monkeypatch.setattr(auth_service, "send_email", _raise)
+
+    with caplog.at_level("ERROR"):
+        r = client.post("/api/auth/forgot-password", json={"email": "alice.wong@example.com"})
+
+    assert r.status_code == 200
+    assert "sent a reset link" in r.json()["message"]
+    assert any("Password reset email failed to send" in record.message for record in caplog.records)
+
+
+# --- 7. Reset password --------------------------------------------------------
+
+
+def _request_reset_token(client: TestClient, email: str = "alice.wong@example.com") -> str:
+    client.post("/api/auth/forgot-password", json={"email": email})
+    body = get_outbox()[-1].body
+    match = re.search(r"token=(\S+)", body)
+    assert match is not None
+    return match.group(1)
+
+
+def test_reset_password_succeeds_with_a_valid_token(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    token = _request_reset_token(client)
+
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "alice.wong@example.com", "password": "new-password-123"},
+    )
+    assert r.status_code == 200
+    assert r.json()["must_change_password"] is False
+
+
+def test_reset_password_rejects_an_unknown_token(client: TestClient) -> None:
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": "not-a-real-token",
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_reset_password_rejects_an_already_used_token(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    token = _request_reset_token(client)
+
+    client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "another-password-456",
+            "confirm_password": "another-password-456",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_reset_password_rejects_an_expired_token(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agile_ci_demo.auth import service as auth_service
+
+    _create_staff_and_get_temp_password(client)
+    monkeypatch.setattr(auth_service, "_RESET_TOKEN_TTL", dt.timedelta(seconds=-1))
+    token = _request_reset_token(client)
+
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "new-password-123",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_reset_password_rejects_mismatched_passwords(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    token = _request_reset_token(client)
+
+    r = client.post(
+        "/api/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "new-password-123",
+            "confirm_password": "totally-different",
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_reset_password_page_renders(client: TestClient) -> None:
+    r = client.get("/auth/reset-password?token=whatever")
+    assert r.status_code == 200

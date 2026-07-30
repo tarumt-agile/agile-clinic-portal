@@ -27,6 +27,7 @@ from agile_ci_demo.staff.service import (
     StaffUpdateEmailExistsError,
     StaffUpdateLicenseExistsError,
     create_staff,
+    delete_staff,
     get_doctor_by_doctor_id,
     get_staff_by_staff_id,
     list_doctors,
@@ -163,6 +164,31 @@ def update_staff_status(
         ) from exc
 
     return StaffOut.model_validate(staff)
+
+
+# This route permanently deletes a staff account.
+@api_router.delete(
+    "/{staff_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_staff_endpoint(
+    staff_id: str,
+    db: Session = Depends(get_db),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> None:
+    if staff_id == admin.staff_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own account.",
+        )
+
+    try:
+        delete_staff(db, staff_id)
+    except StaffNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 # This route returns the details of one staff account.

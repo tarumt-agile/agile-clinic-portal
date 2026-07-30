@@ -109,16 +109,21 @@ def create_staff(db: Session, data: StaffCreate) -> Staff:
 
     db.refresh(staff)
 
-    send_email(
-        to=staff.email,
-        subject="Welcome to Agile Clinic Portal",
-        body=(
-            f"Hi {staff.full_name},\n\n"
-            f"An account has been created for you as {staff.role}.\n"
-            f"Your temporary password is: {temp_password}\n\n"
-            "Please log in and change your password as soon as possible."
-        ),
-    )
+    try:
+        send_email(
+            to=staff.email,
+            subject="Welcome to Agile Clinic Portal",
+            body=(
+                f"Hi {staff.full_name},\n\n"
+                f"An account has been created for you as {staff.role}.\n"
+                f"Your temporary password is: {temp_password}\n\n"
+                "Please log in and change your password as soon as possible."
+            ),
+        )
+    except Exception:
+        # A delivery failure (e.g. SMTP quota, network issue) must never block
+        # account creation - the account is already committed at this point.
+        pass
 
     return staff
 
@@ -235,6 +240,15 @@ def get_staff_by_staff_id(db: Session, staff_id: str) -> Staff | None:
     return db.execute(
         select(Staff).options(selectinload(Staff.doctor_profile)).where(Staff.staff_id == staff_id)
     ).scalar_one_or_none()
+
+
+def delete_staff(db: Session, staff_id: str) -> None:
+    """Permanently remove a staff account (and its doctor profile, if any)."""
+    staff = get_staff_by_staff_id(db, staff_id)
+    if staff is None:
+        raise StaffNotFoundError(f"No staff account found with staff_id '{staff_id}'")
+    db.delete(staff)
+    db.commit()
 
 
 def set_staff_active_status(db: Session, staff_id: str, is_active: bool) -> Staff:
@@ -373,16 +387,21 @@ def create_doctor_with_account(db: Session, data: DoctorRegister) -> DoctorOut:
     db.refresh(staff)
     db.refresh(doctor)
 
-    send_email(
-        to=staff.email,
-        subject="Welcome to Agile Clinic Portal",
-        body=(
-            f"Hi {staff.full_name},\n\n"
-            "Your doctor account has been created.\n"
-            f"Your temporary password is: {temp_password}\n\n"
-            "Please log in and change your password as soon as possible."
-        ),
-    )
+    try:
+        send_email(
+            to=staff.email,
+            subject="Welcome to Agile Clinic Portal",
+            body=(
+                f"Hi {staff.full_name},\n\n"
+                "Your doctor account has been created.\n"
+                f"Your temporary password is: {temp_password}\n\n"
+                "Please log in and change your password as soon as possible."
+            ),
+        )
+    except Exception:
+        # A delivery failure (e.g. SMTP quota, network issue) must never block
+        # account creation - the account is already committed at this point.
+        pass
 
     return DoctorOut(
         doctor_id=doctor.doctor_id or "",

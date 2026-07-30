@@ -18,6 +18,7 @@ class Settings:
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./clinic.db")
     templates_dir: Path = BASE_DIR / "templates"
     static_dir: Path = BASE_DIR / "static"
+    attachments_dir: Path = BASE_DIR / "uploads" / "consultation_attachments"
 
     # SMTP is optional. When unset, welcome emails are only recorded in the in-memory
     # outbox (see core/email.py) instead of actually being sent.

@@ -45,6 +45,16 @@ Patient Details - Agile Clinic Portal
           >
             Edit
           </button>
+
+          {% if role == "admin" %}
+          <button
+            type="button"
+            class="btn btn-danger"
+            id="delete-patient-button"
+          >
+            Delete Patient
+          </button>
+          {% endif %}
         </div>
       </div>
 
@@ -653,6 +663,69 @@ Patient Details - Agile Clinic Portal
     </div>
   </div>
 </div>
+
+{% if role == "admin" %}
+<div
+  class="modal fade"
+  id="delete-patient-modal"
+  tabindex="-1"
+  aria-labelledby="delete-patient-modal-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h2
+          id="delete-patient-modal-title"
+          class="modal-title fs-5"
+        >
+          Delete Patient
+        </h2>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        <p>
+          Delete this patient permanently? This will also permanently delete
+          their appointments, consultation records, and prescriptions. This
+          cannot be undone.
+        </p>
+
+        <div
+          id="delete-patient-modal-alert"
+          class="alert alert-danger d-none"
+          role="alert"
+        ></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-dismiss="modal"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          id="confirm-delete-patient-button"
+          class="btn btn-danger"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -660,4 +733,5 @@ Patient Details - Agile Clinic Portal
 <script src="/static/js/patient_detail.js"></script>
 <script src="/static/js/medical_history.js"></script>
 <script src="/static/js/prescription-history.js?v=2"></script>
+<script src="/static/js/patient-delete.js"></script>
 {% endblock %}
