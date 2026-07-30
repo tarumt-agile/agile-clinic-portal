@@ -18,6 +18,8 @@ from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import init_db
 from agile_ci_demo.patients.router import api_router as patients_api_router
 from agile_ci_demo.patients.router import pages_router as patients_pages_router
+from agile_ci_demo.pharmacy.router import api_router as pharmacy_api_router
+from agile_ci_demo.pharmacy.router import pages_router as pharmacy_pages_router
 from agile_ci_demo.records.router import api_router as records_api_router
 from agile_ci_demo.records.router import pages_router as records_pages_router
 from agile_ci_demo.staff.router import api_router as staff_api_router
@@ -48,6 +50,8 @@ if settings.static_dir.exists():
 
 app.include_router(patients_api_router)
 app.include_router(patients_pages_router)
+app.include_router(pharmacy_api_router)
+app.include_router(pharmacy_pages_router)
 app.include_router(staff_api_router)
 app.include_router(staff_pages_router)
 app.include_router(auth_api_router)

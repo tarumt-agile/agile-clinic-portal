@@ -1,0 +1,459 @@
+{% extends "base.html" %}
+
+{% block title %}
+Pharmacy - Agile Clinic Portal
+{% endblock %}
+
+{% block extra_css %}
+<link href="/static/css/pharmacy.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div id="pharmacy-root">
+  <header
+    class="d-flex justify-content-between
+      align-items-start gap-3 mb-4"
+  >
+    <div>
+      <p class="text-muted mb-1">
+        Pharmacy / Inventory
+      </p>
+      <h1 class="h3 mb-1">
+        Medication Management
+      </h1>
+      <p class="text-muted mb-0">
+        Maintain the prescribing catalogue and
+        record audited stock adjustments.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      id="add-medication-button"
+      class="btn btn-primary"
+    >
+      Add Medication
+    </button>
+  </header>
+
+  <div
+    id="pharmacy-alert"
+    class="alert alert-danger d-none"
+    role="alert"
+  ></div>
+
+  <section class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <p class="text-muted mb-1">
+            Displayed medications
+          </p>
+          <strong
+            id="medication-total"
+            class="fs-3"
+          >
+            0
+          </strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <p class="text-muted mb-1">
+            Low stock
+          </p>
+          <strong
+            id="low-stock-total"
+            class="fs-3 text-warning-emphasis"
+          >
+            0
+          </strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <p class="text-muted mb-1">
+            Out of stock
+          </p>
+          <strong
+            id="out-of-stock-total"
+            class="fs-3 text-danger"
+          >
+            0
+          </strong>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-body">
+      <div class="row g-3 align-items-end mb-3">
+        <div class="col-md-8">
+          <label
+            for="pharmacy-search"
+            class="form-label"
+          >
+            Search medication
+          </label>
+          <input
+            type="search"
+            id="pharmacy-search"
+            class="form-control"
+            placeholder="Search by code, name, form, or dosage"
+          >
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check mb-2">
+            <input
+              type="checkbox"
+              id="include-inactive"
+              class="form-check-input"
+            >
+            <label
+              for="include-inactive"
+              class="form-check-label"
+            >
+              Include inactive medications
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="pharmacy-loading"
+        class="text-center text-muted py-5"
+      >
+        Loading medications...
+      </div>
+
+      <div
+        id="pharmacy-empty"
+        class="alert alert-light border d-none"
+      >
+        No medications match the current filters.
+      </div>
+
+      <div
+        id="pharmacy-table-wrap"
+        class="table-responsive d-none"
+      >
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Medication</th>
+              <th>Form</th>
+              <th>Standard dosage</th>
+              <th>Stock</th>
+              <th>Status</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="pharmacy-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div
+  class="modal fade"
+  id="medication-modal"
+  tabindex="-1"
+  aria-labelledby="medication-modal-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="medication-form" novalidate>
+        <div class="modal-header">
+          <h2
+            id="medication-modal-title"
+            class="modal-title fs-5"
+          >
+            Add Medication
+          </h2>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
+        </div>
+
+        <div class="modal-body">
+          <div
+            id="medication-form-alert"
+            class="alert alert-danger d-none"
+          ></div>
+
+          <input
+            type="hidden"
+            id="medication-edit-id"
+          >
+
+          <div class="mb-3">
+            <label
+              for="medication-name"
+              class="form-label"
+            >
+              Medication name *
+            </label>
+            <input
+              type="text"
+              id="medication-name"
+              class="form-control"
+              maxlength="120"
+              required
+            >
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label
+                for="medication-form-type"
+                class="form-label"
+              >
+                Form *
+              </label>
+              <input
+                type="text"
+                id="medication-form-type"
+                class="form-control"
+                placeholder="Tablet, capsule..."
+                maxlength="80"
+                required
+              >
+            </div>
+
+            <div class="col-sm-6">
+              <label
+                for="medication-standard-dosage"
+                class="form-label"
+              >
+                Standard dosage *
+              </label>
+              <input
+                type="text"
+                id="medication-standard-dosage"
+                class="form-control"
+                placeholder="500 mg"
+                maxlength="80"
+                required
+              >
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label
+                for="medication-unit"
+                class="form-label"
+              >
+                Stock unit *
+              </label>
+              <input
+                type="text"
+                id="medication-unit"
+                class="form-control"
+                value="units"
+                maxlength="40"
+                required
+              >
+            </div>
+
+            <div class="col-sm-6">
+              <label
+                for="medication-reorder-level"
+                class="form-label"
+              >
+                Reorder level *
+              </label>
+              <input
+                type="number"
+                id="medication-reorder-level"
+                class="form-control"
+                min="0"
+                value="10"
+                required
+              >
+            </div>
+          </div>
+
+          <div
+            id="initial-stock-group"
+            class="mb-3"
+          >
+            <label
+              for="medication-initial-stock"
+              class="form-label"
+            >
+              Initial stock
+            </label>
+            <input
+              type="number"
+              id="medication-initial-stock"
+              class="form-control"
+              min="0"
+              value="0"
+            >
+          </div>
+
+          <div class="form-check">
+            <input
+              type="checkbox"
+              id="medication-active"
+              class="form-check-input"
+              checked
+            >
+            <label
+              for="medication-active"
+              class="form-check-label"
+            >
+              Available for prescribing
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="save-medication-button"
+            class="btn btn-primary"
+          >
+            Save Medication
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal fade"
+  id="stock-modal"
+  tabindex="-1"
+  aria-labelledby="stock-modal-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <form id="stock-form" novalidate>
+        <div class="modal-header">
+          <div>
+            <h2
+              id="stock-modal-title"
+              class="modal-title fs-5"
+            >
+              Adjust Stock
+            </h2>
+            <p
+              id="stock-medication-label"
+              class="text-muted mb-0"
+            ></p>
+          </div>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
+        </div>
+
+        <div class="modal-body">
+          <div
+            id="stock-form-alert"
+            class="alert alert-danger d-none"
+          ></div>
+
+          <input
+            type="hidden"
+            id="stock-medication-id"
+          >
+
+          <div class="row g-3 mb-4">
+            <div class="col-sm-5">
+              <label
+                for="stock-quantity-change"
+                class="form-label"
+              >
+                Quantity change *
+              </label>
+              <input
+                type="number"
+                id="stock-quantity-change"
+                class="form-control"
+                placeholder="+50 or -5"
+                required
+              >
+              <div class="form-text">
+                Positive adds stock; negative removes stock.
+              </div>
+            </div>
+
+            <div class="col-sm-7">
+              <label
+                for="stock-reason"
+                class="form-label"
+              >
+                Reason *
+              </label>
+              <input
+                type="text"
+                id="stock-reason"
+                class="form-control"
+                minlength="3"
+                maxlength="255"
+                placeholder="Received delivery, damaged stock..."
+                required
+              >
+            </div>
+          </div>
+
+          <h3 class="h6">Recent stock history</h3>
+          <div
+            id="stock-history"
+            class="stock-history border rounded"
+          ></div>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            data-bs-dismiss="modal"
+          >
+            Close
+          </button>
+          <button
+            type="submit"
+            id="save-stock-button"
+            class="btn btn-primary"
+          >
+            Save Adjustment
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/pharmacy-management.js"></script>
+{% endblock %}
