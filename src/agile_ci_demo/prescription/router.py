@@ -3,13 +3,17 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Request,
     status,
 )
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.auth.deps import require_role
+from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
+from agile_ci_demo.core.templates import templates
 from agile_ci_demo.pharmacy.service import (
     MedicationNotFoundError,
     search_active_medications,
@@ -47,6 +51,13 @@ api_router = APIRouter(
     prefix="/api/prescriptions",
     tags=["prescriptions"],
 )
+
+pages_router = APIRouter(
+    prefix="/prescriptions",
+    tags=["prescription-pages"],
+    include_in_schema=False,
+)
+
 
 def serialize_prescription(
     prescription: Prescription,
@@ -201,6 +212,45 @@ def create_prescription_endpoint(
     return serialize_prescription(
         prescription,
         doctor.id,
+    )
+
+
+@pages_router.get(
+    "/{prescription_id}",
+    response_class=HTMLResponse,
+)
+def prescription_detail_page(
+    request: Request,
+    prescription_id: str,
+    db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+) -> HTMLResponse:
+    prescription = get_prescription_by_public_id(
+        db,
+        prescription_id,
+    )
+
+    if prescription is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prescription not found.",
+        )
+
+    if prescription.prescribing_doctor_id != doctor.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the prescribing doctor can print this prescription.",
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "prescriptions/detail.html",
+        {
+            "prescription_id": prescription_id,
+            "clinic_name": settings.clinic_name,
+            "clinic_address": settings.clinic_address,
+            "clinic_phone": settings.clinic_phone,
+        },
     )
 
 

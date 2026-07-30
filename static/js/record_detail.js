@@ -426,6 +426,22 @@
 
     return items
       .map(function (item) {
+        const printAction = item.can_edit
+          ? `
+            <a
+              href="/prescriptions/${
+                encodeURIComponent(
+                  item.prescription_id
+                )
+              }"
+              class="btn btn-sm
+                btn-outline-primary mt-2"
+            >
+              View / Print
+            </a>
+          `
+          : "";
+
         return `
           <article
             class="border rounded p-3 mb-2 bg-light"
@@ -481,6 +497,8 @@
                     ).toLocaleString()
                   )}
                 </div>
+
+                ${printAction}
               </div>
             </div>
           </article>

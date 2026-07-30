@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from agile_ci_demo.app import app
+from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
@@ -573,7 +574,7 @@ def test_update_rejects_when_nothing_changed(
     assert response.status_code == 409
 
 
-def test_non_prescribing_doctor_cannot_update(
+def test_non_prescribing_doctor_cannot_update_or_print(
     client: TestClient,
 ) -> None:
     prepared = prepare_consultation(client)
@@ -591,7 +592,12 @@ def test_non_prescribing_doctor_cannot_update(
         f"/api/prescriptions/{prescription['prescription_id']}/instructions",
         json=valid_instruction_update(),
     )
+    print_response = client.get(
+        f"/prescriptions/{prescription['prescription_id']}"
+    )
+
     assert update_response.status_code == 403
+    assert print_response.status_code == 403
 
 
 def test_other_doctor_cannot_edit_patient_history_item(
@@ -614,6 +620,76 @@ def test_other_doctor_cannot_edit_patient_history_item(
 
     assert response.status_code == 200
     assert response.json()["items"][0]["can_edit"] is False
+
+
+# Printable prescription
+
+
+def test_prescription_detail_api_contains_print_fields(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
+
+    response = client.get(
+        f"/api/prescriptions/{prescription['prescription_id']}"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["patient_name"] == "Jane Tan"
+    assert body["medication"] == "Amoxicillin 500 mg Capsule"
+    assert body["dosage"] == "1 capsule"
+    assert body["frequency"] == "Three times daily"
+    assert body["duration"] == "7 days"
+    assert body["prescribing_doctor_name"] == "Dr. Alan Chua"
+
+
+def test_prescribing_doctor_can_open_print_page(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
+
+    response = client.get(
+        f"/prescriptions/{prescription['prescription_id']}"
+    )
+
+    assert response.status_code == 200
+    assert 'id="print-prescription-button"' in response.text
+    assert 'id="prescription-sheet"' in response.text
+    assert 'id="print-patient-name"' in response.text
+    assert 'id="print-medication"' in response.text
+    assert 'id="print-dosage"' in response.text
+    assert 'id="print-frequency"' in response.text
+    assert 'id="print-duration"' in response.text
+    assert 'id="print-doctor-name"' in response.text
+    assert settings.clinic_name in response.text
+    assert "Telephone:" in response.text
+    assert "/static/css/prescription-print.css" in response.text
+    assert "/static/js/prescription-detail.js" in response.text
+
+
+def test_print_page_requires_login(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/prescriptions/RX00001",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
+
+
+def test_unknown_prescription_print_page_returns_404(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    assert prepared.doctor_id
+
+    response = client.get("/prescriptions/RX99999")
+    assert response.status_code == 404
 
 
 def test_consultation_page_has_medication_autocomplete(
@@ -644,3 +720,32 @@ def test_autocomplete_script_caches_search_results_client_side() -> None:
     assert '"/api/prescriptions/medications?"' in script
     assert "medicationIdInput.value" in script
     assert "medication_id:" in script
+
+
+def test_existing_prescription_cards_link_to_print_page() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    record_script = (
+        project_root / "static" / "js" / "record_detail.js"
+    ).read_text(encoding="utf-8")
+    history_script = (
+        project_root / "static" / "js" / "prescription-history.js"
+    ).read_text(encoding="utf-8")
+
+    assert "View / Print" in record_script
+    assert "View / Print" in history_script
+    assert 'href="/prescriptions/${' in record_script
+    assert 'href="/prescriptions/${' in history_script
+
+
+def test_print_styles_define_print_media_and_a4_page() -> None:
+    stylesheet_path = (
+        Path(__file__).resolve().parents[1]
+        / "static"
+        / "css"
+        / "prescription-print.css"
+    )
+    stylesheet = stylesheet_path.read_text(encoding="utf-8")
+
+    assert "@media print" in stylesheet
+    assert "size: A4" in stylesheet
+    assert ".print-actions" in stylesheet
