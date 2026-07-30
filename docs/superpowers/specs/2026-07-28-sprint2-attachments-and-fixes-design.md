@@ -77,20 +77,20 @@ existing eleven router registrations.
 
 ### Frontend
 
-`templates/records/detail.html` gets a new "Attachments" `<section class="card mb-4">`, inserted
+`templates/consultations/consultation_detail.html` gets a new "Attachments" `<section class="card mb-4">`, inserted
 after the existing Diagnoses section, with an upload form (file input + submit button) and a list
 container for existing attachments (name, size, uploaded-by, a Download link). One new
 `<script src="/static/js/consultation-attachments.js">` tag is added alongside the existing
-`record_detail.js` include. No existing lines in this file or in `record_detail.js` are changed.
+`consultation-detail.js` include. No existing lines in this file or in `consultation-detail.js` are changed.
 
 New `static/js/consultation-attachments.js` (standalone, reads `record-detail-root`'s
-`data-record-id` the same way `record_detail.js` does): loads the attachment list on page load,
+`data-record-id` the same way `consultation-detail.js` does): loads the attachment list on page load,
 handles the upload form's submit (client-side type/size pre-check for fast feedback, real
 enforcement is server-side), re-renders the list on success, shows inline errors on 422/404.
 
 ### Testing
 
-New `tests/test_attachments.py`, same fixture pattern as `test_records.py` (in-memory SQLite,
+New `tests/test_attachments.py`, same fixture pattern as `test_consultations.py` (in-memory SQLite,
 `TestClient`, direct model imports):
 - Valid PDF/JPG/PNG upload succeeds (201) and appears in the list.
 - Oversized file (>5 MB) rejected (422), no DB row, no file written.

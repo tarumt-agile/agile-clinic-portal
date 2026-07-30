@@ -17,16 +17,16 @@ from agile_ci_demo.pharmacy.service import (
     get_medication_by_public_id,
     list_medications,
 )
-from agile_ci_demo.prescription.models import (
+from agile_ci_demo.prescriptions.models import (
     Prescription,
     PrescriptionHistory,
 )
-from agile_ci_demo.prescription.schemas import (
+from agile_ci_demo.prescriptions.schemas import (
     PrescriptionCreate,
     PrescriptionInstructionUpdate,
 )
-from agile_ci_demo.records.models import Diagnosis
-from agile_ci_demo.records.service import (
+from agile_ci_demo.consultations.models import Diagnosis
+from agile_ci_demo.consultations.service import (
     get_consultation_note_by_record_id,
 )
 from agile_ci_demo.staff.models import Staff

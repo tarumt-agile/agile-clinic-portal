@@ -697,7 +697,7 @@
   async function loadRecord() {
     try {
       const response = await fetch(
-        "/api/records/" +
+        "/api/consultations/" +
         encodeURIComponent(recordId)
       );
 

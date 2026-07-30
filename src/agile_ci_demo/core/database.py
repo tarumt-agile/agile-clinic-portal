@@ -240,11 +240,11 @@ def init_db() -> None:
     from agile_ci_demo.pharmacy import (
         models as _pharmacy_models,  # noqa: F401
     )
-    from agile_ci_demo.prescription import (
+    from agile_ci_demo.prescriptions import (
         models as _prescription_models,  # noqa: F401
     )
-    from agile_ci_demo.records import (
-        models as _records_models,  # noqa: F401
+    from agile_ci_demo.consultations import (
+        models as _consultation_models,  # noqa: F401
     )
     from agile_ci_demo.staff import (
         models as _staff_models,  # noqa: F401

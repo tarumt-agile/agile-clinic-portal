@@ -369,7 +369,7 @@
                     <strong>Consultation:</strong>
 
                     <a
-                      href="/records/${
+                      href="/consultations/${
                         encodeURIComponent(
                           item.consultation_record_id
                         )

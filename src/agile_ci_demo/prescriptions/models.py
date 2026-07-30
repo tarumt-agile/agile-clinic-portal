@@ -17,7 +17,7 @@ from sqlalchemy.orm import (
 from agile_ci_demo.core.database import Base
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.pharmacy.models import Medication
-from agile_ci_demo.records.models import (
+from agile_ci_demo.consultations.models import (
     ConsultationNote,
     Diagnosis,
 )

@@ -907,25 +907,25 @@ git commit -m "Require the right login for every appointment page"
 ## Task 6: Protect the records and staff pages
 
 **Files:**
-- Modify: `src/agile_ci_demo/records/router.py`
+- Modify: `src/agile_ci_demo/consultations/router.py`
 - Modify: `src/agile_ci_demo/staff/router.py`
-- Test: `tests/test_records.py`, `tests/test_staff.py`
+- Test: `tests/test_consultations.py`, `tests/test_staff.py`
 
 **Interfaces:**
 - Consumes: `require_role(*roles: Role)` (Task 2), `Role` enum.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/test_records.py`, add:
+In `tests/test_consultations.py`, add:
 
 ```python
 def test_new_record_page_redirects_when_not_logged_in(client: TestClient) -> None:
-    r = client.get("/records/new?patient_id=P00001", follow_redirects=False)
+    r = client.get("/consultations/new?patient_id=P00001", follow_redirects=False)
     assert r.status_code == 303
 
 
 def test_record_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
-    r = client.get("/records/R00001", follow_redirects=False)
+    r = client.get("/consultations/R00001", follow_redirects=False)
     assert r.status_code == 303
 ```
 
@@ -944,12 +944,12 @@ def test_staff_detail_page_redirects_when_not_logged_in(client: TestClient) -> N
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/test_records.py tests/test_staff.py -v -k redirects_when_not_logged_in`
+Run: `pytest tests/test_consultations.py tests/test_staff.py -v -k redirects_when_not_logged_in`
 Expected: FAIL - all four return 200 today.
 
 - [ ] **Step 3: Protect the records pages**
 
-In `src/agile_ci_demo/records/router.py`, add the import:
+In `src/agile_ci_demo/consultations/router.py`, add the import:
 
 ```python
 from agile_ci_demo.auth.deps import require_role
@@ -965,7 +965,7 @@ def new_note_page(
     patient_id: str = Query(..., description="Patient to document a visit for"),
     _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> HTMLResponse:
-    return templates.TemplateResponse(request, "records/new.html", {"patient_id": patient_id})
+    return templates.TemplateResponse(request, "consultations/consultation_form.html", {"patient_id": patient_id})
 
 
 @pages_router.get("/{record_id}", response_class=HTMLResponse)
@@ -974,7 +974,7 @@ def note_detail_page(
     record_id: str,
     _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> HTMLResponse:
-    return templates.TemplateResponse(request, "records/detail.html", {"record_id": record_id})
+    return templates.TemplateResponse(request, "consultations/consultation_detail.html", {"record_id": record_id})
 ```
 
 - [ ] **Step 4: Protect the remaining staff pages**
@@ -1017,7 +1017,7 @@ def staff_detail_page(
 
 - [ ] **Step 5: Fix the pre-existing "page renders" tests, which now need a login first**
 
-In `tests/test_records.py`, update both tests:
+In `tests/test_consultations.py`, update both tests:
 
 ```python
 def test_new_record_page_renders(client: TestClient) -> None:
@@ -1029,7 +1029,7 @@ def test_new_record_page_renders(client: TestClient) -> None:
     )
     client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
 
-    r = client.get("/records/new?patient_id=P00001")
+    r = client.get("/consultations/new?patient_id=P00001")
     assert r.status_code == 200
     assert "New Consultation Note" in r.text
 
@@ -1042,7 +1042,7 @@ def test_record_detail_page_renders(client: TestClient) -> None:
     )
     client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
 
-    r = client.get("/records/R00001")
+    r = client.get("/consultations/R00001")
     assert r.status_code == 200
     assert "Consultation Note" in r.text
 ```
@@ -1065,7 +1065,7 @@ def test_create_staff_page_renders(client: TestClient) -> None:
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `pytest tests/test_records.py tests/test_staff.py -v`
+Run: `pytest tests/test_consultations.py tests/test_staff.py -v`
 Expected: PASS
 
 - [ ] **Step 7: Run full check suite**
@@ -1076,7 +1076,7 @@ Expected: all pass
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/agile_ci_demo/records/router.py src/agile_ci_demo/staff/router.py tests/test_records.py tests/test_staff.py
+git add src/agile_ci_demo/consultations/router.py src/agile_ci_demo/staff/router.py tests/test_consultations.py tests/test_staff.py
 git commit -m "Require a login for the consultation-note and staff-admin pages"
 ```
 
@@ -1579,7 +1579,7 @@ git commit -m "Show real nav links based on who's actually logged in, remove the
 
 ## Self-Review Notes
 
-- **Spec coverage**: session mechanism (Task 1), staff login sets session + logout (Task 2), patient login (Task 3), page protection for patients/appointments/records/staff (Tasks 2, 4, 5, 6), placeholder replacement + deletion (Task 7), login page UI with redirect-by-role (Task 8), nav bar + role-switcher removal (Task 9). All design sections are covered.
+- **Spec coverage**: session mechanism (Task 1), staff login sets session + logout (Task 2), patient login (Task 3), page protection for patients/appointments/consultations/staff (Tasks 2, 4, 5, 6), placeholder replacement + deletion (Task 7), login page UI with redirect-by-role (Task 8), nav bar + role-switcher removal (Task 9). All design sections are covered.
 - **Placeholder scan**: no TBDs; every step has complete, runnable code.
 - **Type consistency**: `require_role(*roles: Role) -> Callable[..., Staff]` and `require_patient(request, db) -> Patient` are defined once in Task 2/3 and referenced with the same names and signatures in every later task. `login_staff`/`login_patient`/`logout`/`NotAuthenticatedError` are likewise defined once and reused as-is.
 - **Test file conventions followed**: every new test reuses each file's existing local `client` fixture and payload helpers rather than introducing a new pattern, matching how this codebase's test suite is already organized (helpers duplicated per file, not shared).

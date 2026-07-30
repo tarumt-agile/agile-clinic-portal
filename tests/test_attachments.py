@@ -14,7 +14,7 @@ from agile_ci_demo.attachments import models as _attachments_models  # noqa: F40
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
-from agile_ci_demo.records import models as _records_models  # noqa: F401
+from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
@@ -110,7 +110,7 @@ def prepare_consultation(client: TestClient) -> str:
     doctor_id = client.post("/api/staff", json=valid_doctor_payload()).json()["staff_id"]
     _login_as_doctor(client)
 
-    r = client.post("/api/records", json=valid_record_payload(patient_id, doctor_id))
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id))
     assert r.status_code == 201, r.json()
     return str(r.json()["record_id"])
 

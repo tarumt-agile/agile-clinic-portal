@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from agile_ci_demo.core.database import Base
-from agile_ci_demo.records.models import ConsultationNote
+from agile_ci_demo.consultations.models import ConsultationNote
 from agile_ci_demo.staff.models import Staff
 
 

@@ -18,10 +18,10 @@ from agile_ci_demo.pharmacy.service import (
     MedicationNotFoundError,
     search_active_medications,
 )
-from agile_ci_demo.prescription.models import (
+from agile_ci_demo.prescriptions.models import (
     Prescription,
 )
-from agile_ci_demo.prescription.schemas import (
+from agile_ci_demo.prescriptions.schemas import (
     MedicationOption,
     MedicationSearchResultOut,
     PrescriptionCreate,
@@ -32,7 +32,7 @@ from agile_ci_demo.prescription.schemas import (
     PrescriptionOut,
     PrescriptionStatus,
 )
-from agile_ci_demo.prescription.service import (
+from agile_ci_demo.prescriptions.service import (
     ConsultationRecordNotFoundError,
     DiagnosisNotFoundError,
     PrescriptionConflictError,
@@ -244,7 +244,7 @@ def prescription_detail_page(
 
     return templates.TemplateResponse(
         request,
-        "prescriptions/detail.html",
+        "prescriptions/prescription_print.html",
         {
             "prescription_id": prescription_id,
             "clinic_name": settings.clinic_name,

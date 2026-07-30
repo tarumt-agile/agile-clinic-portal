@@ -276,6 +276,6 @@ def pharmacy_page(
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
-        "pharmacy/index.html",
+        "pharmacy/pharmacy_management.html",
         {},
     )

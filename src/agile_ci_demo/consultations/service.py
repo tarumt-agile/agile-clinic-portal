@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import get_patient_by_patient_id
-from agile_ci_demo.records.models import ConsultationNote, Diagnosis
-from agile_ci_demo.records.schemas import ConsultationNoteCreate
+from agile_ci_demo.consultations.models import ConsultationNote, Diagnosis
+from agile_ci_demo.consultations.schemas import ConsultationNoteCreate
 from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # A small curated reference list of common ICD-10 codes, used to power the diagnosis

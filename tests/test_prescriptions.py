@@ -17,8 +17,8 @@ from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.pharmacy.service import seed_default_medications
-from agile_ci_demo.prescription import models as _prescription_models  # noqa: F401
-from agile_ci_demo.records import models as _records_models  # noqa: F401
+from agile_ci_demo.prescriptions import models as _prescription_models  # noqa: F401
+from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 
@@ -201,7 +201,7 @@ def create_consultation(
     **overrides: object,
 ) -> dict[str, object]:
     response = client.post(
-        "/api/records",
+        "/api/consultations",
         json=valid_record_payload(
             patient_id,
             doctor_id,
@@ -667,7 +667,7 @@ def test_prescribing_doctor_can_open_print_page(
     assert settings.clinic_name in response.text
     assert "Telephone:" in response.text
     assert "/static/css/prescription-print.css" in response.text
-    assert "/static/js/prescription-detail.js" in response.text
+    assert "/static/js/prescription-print.js" in response.text
 
 
 def test_print_page_requires_login(
@@ -697,7 +697,7 @@ def test_consultation_page_has_medication_autocomplete(
 ) -> None:
     prepared = prepare_consultation(client)
 
-    response = client.get(f"/records/{prepared.record_id}")
+    response = client.get(f"/consultations/{prepared.record_id}")
 
     assert response.status_code == 200
     assert 'type="search"' in response.text
@@ -710,7 +710,7 @@ def test_autocomplete_script_caches_search_results_client_side() -> None:
         Path(__file__).resolve().parents[1]
         / "static"
         / "js"
-        / "record_detail.js"
+        / "consultation-detail.js"
     )
     script = script_path.read_text(encoding="utf-8")
 
@@ -725,10 +725,10 @@ def test_autocomplete_script_caches_search_results_client_side() -> None:
 def test_existing_prescription_cards_link_to_print_page() -> None:
     project_root = Path(__file__).resolve().parents[1]
     record_script = (
-        project_root / "static" / "js" / "record_detail.js"
+        project_root / "static" / "js" / "consultation-detail.js"
     ).read_text(encoding="utf-8")
     history_script = (
-        project_root / "static" / "js" / "prescription-history.js"
+        project_root / "static" / "js" / "patient-prescription-history.js"
     ).read_text(encoding="utf-8")
 
     assert "View / Print" in record_script

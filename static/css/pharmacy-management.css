@@ -1,3 +1,4 @@
+/* Pharmacy management and medication inventory presentation. */
 .pharmacy-stock-low {
   color: var(--bs-warning-text-emphasis);
   font-weight: 700;

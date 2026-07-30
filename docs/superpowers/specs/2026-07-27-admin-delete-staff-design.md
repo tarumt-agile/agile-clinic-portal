@@ -20,7 +20,7 @@ turns into a redirect to `/auth/login` (303), exactly like every other admin-onl
 member is a doctor, their `DoctorProfile` is removed too: `Staff.doctor_profile` already has
 `cascade="all, delete-orphan"` (`staff/models.py`), so no new cascade logic is needed.
 
-No blocking checks against appointments/records/prescriptions history - this is meant for
+No blocking checks against appointments/consultations/prescriptions history - this is meant for
 cleaning up mistaken or test accounts, not for staff with a real clinical history. Rows in other
 tables that reference the deleted staff (e.g. `appointments.doctor_id`, `records`,
 `prescriptions`, this app's new `password_reset_tokens.staff_id`) are left as dangling

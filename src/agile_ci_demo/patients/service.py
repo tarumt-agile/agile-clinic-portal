@@ -11,8 +11,8 @@ from agile_ci_demo.attachments.models import Attachment
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.patients.schemas import PatientCreate, PatientUpdate
-from agile_ci_demo.prescription.models import Prescription, PrescriptionHistory
-from agile_ci_demo.records.models import ConsultationNote, Diagnosis
+from agile_ci_demo.consultations.models import ConsultationNote, Diagnosis
+from agile_ci_demo.prescriptions.models import Prescription, PrescriptionHistory
 
 
 class DuplicatePatientError(Exception):

@@ -137,7 +137,7 @@
     );
 
     backLink.href =
-      "/records/" +
+      "/consultations/" +
       encodeURIComponent(
         item.consultation_record_id
       );

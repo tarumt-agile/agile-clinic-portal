@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.attachments.models import Attachment
 from agile_ci_demo.core.config import settings
-from agile_ci_demo.records.service import get_consultation_note_by_record_id
+from agile_ci_demo.consultations.service import get_consultation_note_by_record_id
 
 MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 

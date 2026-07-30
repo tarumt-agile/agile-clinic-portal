@@ -1,3 +1,5 @@
+"""Validation schemas for consultation notes and diagnoses."""
+
 from __future__ import annotations
 
 import datetime as dt

@@ -18,8 +18,8 @@ from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.pharmacy.service import seed_default_medications
-from agile_ci_demo.prescription import models as _prescription_models  # noqa: F401
-from agile_ci_demo.records import models as _records_models  # noqa: F401
+from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
+from agile_ci_demo.prescriptions import models as _prescription_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
@@ -980,7 +980,7 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
     _login_as(client, str(valid_doctor_payload()["email"]))
 
     note = client.post(
-        "/api/records",
+        "/api/consultations",
         json={
             "patient_id": patient_id,
             "doctor_id": doctor_id,
@@ -1047,7 +1047,7 @@ def test_delete_patient_cascades_to_all_history(client: TestClient) -> None:
 
     assert client.get(f"/api/patients/{patient_id}").status_code == 404
 
-    history = client.get("/api/records", params={"patient_id": patient_id})
+    history = client.get("/api/consultations", params={"patient_id": patient_id})
     # get_patient_history requires the patient to exist - it's gone now, so a
     # direct history lookup 404s. The important assertion is that nothing
     # referencing the deleted patient is left orphaned in the DB, which the

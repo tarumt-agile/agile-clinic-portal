@@ -77,7 +77,7 @@ Route -> required role:
 | `/appointments/create`, `/appointments/doctor-schedule` | receptionist, nurse, admin |
 | `/appointments/schedule`, `/appointments/consultations` | doctor |
 | `/appointments/book`, `/appointments/mine` | patient |
-| `/records/new`, `/records/{id}` | doctor, nurse, receptionist, admin |
+| `/consultations/new`, `/consultations/{id}` | doctor, nurse, receptionist, admin |
 | `/staff`, `/staff/create`, `/staff/{id}` | admin |
 | `/auth/login` | public (no protection) |
 

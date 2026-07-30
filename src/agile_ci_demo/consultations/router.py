@@ -6,8 +6,8 @@ from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
-from agile_ci_demo.records.models import ConsultationNote
-from agile_ci_demo.records.schemas import (
+from agile_ci_demo.consultations.models import ConsultationNote
+from agile_ci_demo.consultations.schemas import (
     ConsultationNoteCreate,
     ConsultationNoteOut,
     ConsultationNoteSummary,
@@ -15,7 +15,7 @@ from agile_ci_demo.records.schemas import (
     Icd10Entry,
     PatientHistory,
 )
-from agile_ci_demo.records.service import (
+from agile_ci_demo.consultations.service import (
     ConsultationNoteConflictError,
     DoctorNotFoundError,
     PatientNotFoundError,
@@ -26,10 +26,10 @@ from agile_ci_demo.records.service import (
 )
 
 # JSON API used by the frontend's JavaScript.
-api_router = APIRouter(prefix="/api/records", tags=["records"])
+api_router = APIRouter(prefix="/api/consultations", tags=["consultations"])
 
 # Server-rendered HTML pages.
-pages_router = APIRouter(prefix="/records", tags=["records-pages"])
+pages_router = APIRouter(prefix="/consultations", tags=["consultation-pages"])
 
 
 def _serialize(note: ConsultationNote) -> ConsultationNoteOut:
@@ -105,7 +105,11 @@ def new_note_page(
     patient_id: str = Query(..., description="Patient to document a visit for"),
     _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> HTMLResponse:
-    return templates.TemplateResponse(request, "records/new.html", {"patient_id": patient_id})
+    return templates.TemplateResponse(
+        request,
+        "consultations/consultation_form.html",
+        {"patient_id": patient_id},
+    )
 
 
 @pages_router.get("/{record_id}", response_class=HTMLResponse)
@@ -114,4 +118,8 @@ def note_detail_page(
     record_id: str,
     _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> HTMLResponse:
-    return templates.TemplateResponse(request, "records/detail.html", {"record_id": record_id})
+    return templates.TemplateResponse(
+        request,
+        "consultations/consultation_detail.html",
+        {"record_id": record_id},
+    )

@@ -1,3 +1,5 @@
+"""Validation schemas for prescription creation, history, and printing."""
+
 from __future__ import annotations
 
 import datetime as dt

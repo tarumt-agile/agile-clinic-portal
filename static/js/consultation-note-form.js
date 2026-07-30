@@ -156,7 +156,7 @@
 
   async function runSearch(term, suggestionsEl, onPick) {
     try {
-      const response = await fetch(`/api/records/icd10?q=${encodeURIComponent(term)}`);
+      const response = await fetch(`/api/consultations/icd10?q=${encodeURIComponent(term)}`);
       if (!response.ok) throw new Error("Request failed");
       const results = await response.json();
 
@@ -229,7 +229,7 @@
 
     submitBtn.disabled = true;
     try {
-      const response = await fetch("/api/records", {
+      const response = await fetch("/api/consultations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(collectPayload()),
@@ -272,7 +272,7 @@
   }
 
   document.getElementById("view-record-btn").addEventListener("click", () => {
-    if (lastCreatedRecordId) window.location.href = `/records/${encodeURIComponent(lastCreatedRecordId)}`;
+    if (lastCreatedRecordId) window.location.href = `/consultations/${encodeURIComponent(lastCreatedRecordId)}`;
   });
   document.getElementById("back-to-patient-btn").addEventListener("click", () => {
     window.location.href = `/patients/${encodeURIComponent(patientId)}`;

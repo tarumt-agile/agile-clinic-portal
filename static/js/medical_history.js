@@ -15,7 +15,7 @@
   let searchDebounceTimer = null;
   let hasLoadedOnce = false;
 
-  newRecordLink.href = `/records/new?patient_id=${encodeURIComponent(patientId)}`;
+  newRecordLink.href = `/consultations/new?patient_id=${encodeURIComponent(patientId)}`;
 
   function escapeHtml(str) {
     return str.replace(/[&<>"']/g, (c) => (
@@ -55,7 +55,7 @@
           item.notes.length > 160 ? `${item.notes.slice(0, 160)}…` : item.notes;
 
         return (
-          `<a href="/records/${encodeURIComponent(item.record_id)}" ` +
+          `<a href="/consultations/${encodeURIComponent(item.record_id)}" ` +
           `class="card mb-2 text-decoration-none text-body">` +
           `<div class="card-body">` +
           `<div class="d-flex justify-content-between">` +
@@ -76,7 +76,7 @@
     try {
       const params = new URLSearchParams({ patient_id: patientId });
       if (query) params.set("q", query);
-      const response = await fetch(`/api/records?${params.toString()}`);
+      const response = await fetch(`/api/consultations?${params.toString()}`);
       if (!response.ok) throw new Error("Request failed");
       const data = await response.json();
       renderHistory(data.items, query);

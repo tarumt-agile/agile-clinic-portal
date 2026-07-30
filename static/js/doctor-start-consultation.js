@@ -72,7 +72,7 @@
         const badgeClass = STATUS_BADGE[a.status] || "text-bg-light";
         const action =
           a.status === "scheduled"
-            ? `<a href="/records/new?patient_id=${encodeURIComponent(a.patient_id)}" class="btn btn-sm btn-primary">Start Consultation</a>`
+            ? `<a href="/consultations/new?patient_id=${encodeURIComponent(a.patient_id)}" class="btn btn-sm btn-primary">Start Consultation</a>`
             : "-";
         return `
       <tr>

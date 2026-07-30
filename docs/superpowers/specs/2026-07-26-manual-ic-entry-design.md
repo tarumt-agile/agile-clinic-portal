@@ -18,7 +18,7 @@ the generator ignores the latter. The registration page currently just tells the
 is generated automatically from the date of birth after registration" and has no input for it.
 
 Three of the four test files that register patients (`tests/test_appointments.py`,
-`tests/test_prescription.py`, `tests/test_records.py`) already include an `ic_or_passport` key in
+`tests/test_prescriptions.py`, `tests/test_consultations.py`) already include an `ic_or_passport` key in
 their patient payloads - currently silently dropped by Pydantic since the field doesn't exist on
 `PatientCreate` yet. Only `tests/test_patients.py`'s own helper is missing it. This keeps the test
 blast radius small.

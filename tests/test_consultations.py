@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
-from agile_ci_demo.records import models as _records_models  # noqa: F401
+from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
 
 # --- Isolated in-memory DB per test -----------------------------------------
@@ -106,13 +106,13 @@ def test_create_consultation_note_success(client: TestClient) -> None:
     """
     Scenario: Document a consultation
       Given a registered patient and an active doctor
-      When I POST /api/records with notes and at least one diagnosis
+      When I POST /api/consultations with notes and at least one diagnosis
       Then I receive 201 and a generated record number, and the diagnosis is stored
     """
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
 
-    r = client.post("/api/records", json=valid_record_payload(patient_id, doctor_id))
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id))
     assert r.status_code == 201
     body = r.json()
     assert body["record_id"].startswith("R")
@@ -129,15 +129,15 @@ def test_create_consultation_note_success(client: TestClient) -> None:
 def test_create_consultation_note_then_fetch_by_record_id(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
-    created = client.post("/api/records", json=valid_record_payload(patient_id, doctor_id)).json()
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id)).json()
 
-    r = client.get(f"/api/records/{created['record_id']}")
+    r = client.get(f"/api/consultations/{created['record_id']}")
     assert r.status_code == 200
     assert r.json()["record_id"] == created["record_id"]
 
 
 def test_get_unknown_record_returns_404(client: TestClient) -> None:
-    r = client.get("/api/records/R99999")
+    r = client.get("/api/consultations/R99999")
     assert r.status_code == 404
 
 
@@ -150,7 +150,7 @@ def test_new_record_page_renders(client: TestClient) -> None:
     )
     client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
 
-    r = client.get("/records/new?patient_id=P00001")
+    r = client.get("/consultations/new?patient_id=P00001")
     assert r.status_code == 200
     assert "New Consultation Note" in r.text
 
@@ -163,18 +163,18 @@ def test_record_detail_page_renders(client: TestClient) -> None:
     )
     client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
 
-    r = client.get("/records/R00001")
+    r = client.get("/consultations/R00001")
     assert r.status_code == 200
     assert "Consultation Note" in r.text
 
 
 def test_new_record_page_redirects_when_not_logged_in(client: TestClient) -> None:
-    r = client.get("/records/new?patient_id=P00001", follow_redirects=False)
+    r = client.get("/consultations/new?patient_id=P00001", follow_redirects=False)
     assert r.status_code == 303
 
 
 def test_record_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
-    r = client.get("/records/R00001", follow_redirects=False)
+    r = client.get("/consultations/R00001", follow_redirects=False)
     assert r.status_code == 303
 
 
@@ -191,7 +191,7 @@ def test_create_missing_required_field_returns_422(client: TestClient, missing_f
     payload = valid_record_payload(patient_id, doctor_id)
     del payload[missing_field]
 
-    r = client.post("/api/records", json=payload)
+    r = client.post("/api/consultations", json=payload)
     assert r.status_code == 422
 
 
@@ -200,7 +200,7 @@ def test_create_with_no_diagnoses_returns_422(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
 
-    r = client.post("/api/records", json=valid_record_payload(patient_id, doctor_id, diagnoses=[]))
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id, diagnoses=[]))
     assert r.status_code == 422
 
 
@@ -208,19 +208,19 @@ def test_create_with_blank_notes_returns_422(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
 
-    r = client.post("/api/records", json=valid_record_payload(patient_id, doctor_id, notes="   "))
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="   "))
     assert r.status_code == 422
 
 
 def test_create_unknown_patient_returns_404(client: TestClient) -> None:
     doctor_id = _register_doctor(client)
-    r = client.post("/api/records", json=valid_record_payload("P99999", doctor_id))
+    r = client.post("/api/consultations", json=valid_record_payload("P99999", doctor_id))
     assert r.status_code == 404
 
 
 def test_create_unknown_doctor_returns_404(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    r = client.post("/api/records", json=valid_record_payload(patient_id, "S99999"))
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, "S99999"))
     assert r.status_code == 404
 
 
@@ -231,7 +231,7 @@ def test_create_with_non_doctor_staff_returns_404(client: TestClient) -> None:
         client, full_name="Nurse Amy", email="amy@example.com", role="nurse"
     )
 
-    r = client.post("/api/records", json=valid_record_payload(patient_id, nurse_id))
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, nurse_id))
     assert r.status_code == 404
 
 
@@ -243,7 +243,7 @@ def test_diagnosis_stores_code_and_description(client: TestClient) -> None:
     doctor_id = _register_doctor(client)
 
     r = client.post(
-        "/api/records",
+        "/api/consultations",
         json=valid_record_payload(
             patient_id,
             doctor_id,
@@ -262,21 +262,21 @@ def test_diagnosis_stores_code_and_description(client: TestClient) -> None:
 
 
 def test_icd10_search_matches_by_description(client: TestClient) -> None:
-    r = client.get("/api/records/icd10?q=hypertension")
+    r = client.get("/api/consultations/icd10?q=hypertension")
     assert r.status_code == 200
     codes = [entry["code"] for entry in r.json()]
     assert "I10" in codes
 
 
 def test_icd10_search_matches_by_code(client: TestClient) -> None:
-    r = client.get("/api/records/icd10?q=j00")
+    r = client.get("/api/consultations/icd10?q=j00")
     assert r.status_code == 200
     codes = [entry["code"] for entry in r.json()]
     assert "J00" in codes
 
 
 def test_icd10_search_with_blank_query_returns_empty(client: TestClient) -> None:
-    r = client.get("/api/records/icd10?q=")
+    r = client.get("/api/consultations/icd10?q=")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -289,13 +289,13 @@ def test_patient_history_lists_newest_first(client: TestClient) -> None:
     doctor_id = _register_doctor(client)
 
     first = client.post(
-        "/api/records", json=valid_record_payload(patient_id, doctor_id, notes="First visit")
+        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="First visit")
     ).json()
     second = client.post(
-        "/api/records", json=valid_record_payload(patient_id, doctor_id, notes="Second visit")
+        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="Second visit")
     ).json()
 
-    r = client.get(f"/api/records?patient_id={patient_id}")
+    r = client.get(f"/api/consultations?patient_id={patient_id}")
     assert r.status_code == 200
     body = r.json()
     assert body["total"] == 2
@@ -305,7 +305,7 @@ def test_patient_history_lists_newest_first(client: TestClient) -> None:
 
 
 def test_patient_history_unknown_patient_returns_404(client: TestClient) -> None:
-    r = client.get("/api/records?patient_id=P99999")
+    r = client.get("/api/consultations?patient_id=P99999")
     assert r.status_code == 404
 
 
@@ -313,7 +313,7 @@ def test_patient_history_search_by_diagnosis_keyword(client: TestClient) -> None
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
     client.post(
-        "/api/records",
+        "/api/consultations",
         json=valid_record_payload(
             patient_id,
             doctor_id,
@@ -322,7 +322,7 @@ def test_patient_history_search_by_diagnosis_keyword(client: TestClient) -> None
         ),
     )
     client.post(
-        "/api/records",
+        "/api/consultations",
         json=valid_record_payload(
             patient_id,
             doctor_id,
@@ -331,7 +331,7 @@ def test_patient_history_search_by_diagnosis_keyword(client: TestClient) -> None
         ),
     )
 
-    r = client.get(f"/api/records?patient_id={patient_id}&q=hypertension")
+    r = client.get(f"/api/consultations?patient_id={patient_id}&q=hypertension")
     assert r.status_code == 200
     body = r.json()
     assert body["total"] == 1
@@ -342,13 +342,13 @@ def test_patient_history_search_by_notes_keyword(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
     client.post(
-        "/api/records", json=valid_record_payload(patient_id, doctor_id, notes="Fever and cough")
+        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="Fever and cough")
     )
     client.post(
-        "/api/records", json=valid_record_payload(patient_id, doctor_id, notes="Sprained ankle")
+        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="Sprained ankle")
     )
 
-    r = client.get(f"/api/records?patient_id={patient_id}&q=ankle")
+    r = client.get(f"/api/consultations?patient_id={patient_id}&q=ankle")
     assert r.status_code == 200
     body = r.json()
     assert body["total"] == 1
@@ -358,9 +358,9 @@ def test_patient_history_search_by_notes_keyword(client: TestClient) -> None:
 def test_patient_history_search_no_match_returns_empty(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
-    client.post("/api/records", json=valid_record_payload(patient_id, doctor_id))
+    client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id))
 
-    r = client.get(f"/api/records?patient_id={patient_id}&q=nonexistentkeyword")
+    r = client.get(f"/api/consultations?patient_id={patient_id}&q=nonexistentkeyword")
     assert r.status_code == 200
     assert r.json()["total"] == 0
 
@@ -371,19 +371,19 @@ def test_patient_history_scoped_to_correct_patient(client: TestClient) -> None:
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
-    client.post("/api/records", json=valid_record_payload(patient_a, doctor_id, notes="Visit A"))
-    client.post("/api/records", json=valid_record_payload(patient_b, doctor_id, notes="Visit B"))
+    client.post("/api/consultations", json=valid_record_payload(patient_a, doctor_id, notes="Visit A"))
+    client.post("/api/consultations", json=valid_record_payload(patient_b, doctor_id, notes="Visit B"))
 
-    r = client.get(f"/api/records?patient_id={patient_a}")
+    r = client.get(f"/api/consultations?patient_id={patient_a}")
     body = r.json()
     assert body["total"] == 1
     assert body["items"][0]["notes"] == "Visit A"
 
 
 # --- 5. BDD-style tests with pytest-bdd --------------------------------------
-# Feature file: tests/features/records.feature
+# Feature file: tests/features/consultations.feature
 
-scenarios("features/records.feature")
+scenarios("features/consultations.feature")
 
 
 class Context:
@@ -414,7 +414,7 @@ def a_patient_and_doctor_exist(api_is_running: dict, context: Context) -> None:
 def document_consultation_step(api_is_running: dict, context: Context) -> None:
     client: TestClient = api_is_running["client"]
     context.last_response = client.post(
-        "/api/records", json=valid_record_payload(context.patient_id, context.doctor_id)
+        "/api/consultations", json=valid_record_payload(context.patient_id, context.doctor_id)
     )
 
 
@@ -422,7 +422,7 @@ def document_consultation_step(api_is_running: dict, context: Context) -> None:
 def document_consultation_without_diagnosis_step(api_is_running: dict, context: Context) -> None:
     client: TestClient = api_is_running["client"]
     context.last_response = client.post(
-        "/api/records",
+        "/api/consultations",
         json=valid_record_payload(context.patient_id, context.doctor_id, diagnoses=[]),
     )
 
