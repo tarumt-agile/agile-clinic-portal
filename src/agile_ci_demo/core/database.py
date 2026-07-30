@@ -54,6 +54,19 @@ def migrate_sqlite_database() -> None:
                         REFERENCES diagnoses(id)
                         """))
 
+            if "medication_id" not in prescription_columns:
+                connection.execute(text("""
+                        ALTER TABLE prescriptions
+                        ADD COLUMN medication_id INTEGER
+                        REFERENCES medications(id)
+                        """))
+
+            connection.execute(text("""
+                    CREATE INDEX IF NOT EXISTS
+                    ix_prescriptions_medication_id
+                    ON prescriptions (medication_id)
+                    """))
+
             # Link old prescriptions to the first diagnosis
             # belonging to the same consultation.
             connection.execute(text("""
@@ -178,6 +191,37 @@ def migrate_sqlite_database() -> None:
                     """))
 
 
+def backfill_prescription_medications() -> None:
+    """Link legacy prescription snapshots to matching catalogue records."""
+
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    with engine.begin() as connection:
+        table_names = set(
+            inspect(connection).get_table_names()
+        )
+        if not {
+            "medications",
+            "prescriptions",
+        }.issubset(table_names):
+            return
+
+        connection.execute(text("""
+                UPDATE prescriptions
+                SET medication_id = (
+                    SELECT medications.id
+                    FROM medications
+                    WHERE
+                        medications.prescription_value
+                        =
+                        prescriptions.medication
+                    LIMIT 1
+                )
+                WHERE medication_id IS NULL
+                """))
+
+
 def init_db() -> None:
     """Create all tables and update older SQLite tables."""
 
@@ -193,6 +237,9 @@ def init_db() -> None:
     from agile_ci_demo.patients import (
         models as _patients_models,  # noqa: F401
     )
+    from agile_ci_demo.pharmacy import (
+        models as _pharmacy_models,  # noqa: F401
+    )
     from agile_ci_demo.prescription import (
         models as _prescription_models,  # noqa: F401
     )
@@ -206,6 +253,15 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
     migrate_sqlite_database()
+
+    from agile_ci_demo.pharmacy.service import (
+        seed_default_medications,
+    )
+
+    with SessionLocal() as db:
+        seed_default_medications(db)
+
+    backfill_prescription_medications()
 
 
 def get_db() -> Generator[

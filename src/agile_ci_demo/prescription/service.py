@@ -12,6 +12,11 @@ from sqlalchemy.orm import (
 from agile_ci_demo.patients.service import (
     get_patient_by_patient_id,
 )
+from agile_ci_demo.pharmacy.service import (
+    MedicationNotFoundError,
+    get_medication_by_public_id,
+    list_medications,
+)
 from agile_ci_demo.prescription.models import (
     Prescription,
     PrescriptionHistory,
@@ -25,69 +30,6 @@ from agile_ci_demo.records.service import (
     get_consultation_note_by_record_id,
 )
 from agile_ci_demo.staff.models import Staff
-
-MEDICATION_OPTIONS = [
-    {
-        "value": "Amoxicillin 250 mg Capsule",
-        "label": "Amoxicillin 250 mg Capsule",
-    },
-    {
-        "value": "Amoxicillin 500 mg Capsule",
-        "label": "Amoxicillin 500 mg Capsule",
-    },
-    {
-        "value": "Azithromycin 250 mg Tablet",
-        "label": "Azithromycin 250 mg Tablet",
-    },
-    {
-        "value": "Cetirizine 10 mg Tablet",
-        "label": "Cetirizine 10 mg Tablet",
-    },
-    {
-        "value": "Chlorpheniramine 4 mg Tablet",
-        "label": "Chlorpheniramine 4 mg Tablet",
-    },
-    {
-        "value": "Diclofenac 50 mg Tablet",
-        "label": "Diclofenac 50 mg Tablet",
-    },
-    {
-        "value": "Ibuprofen 200 mg Tablet",
-        "label": "Ibuprofen 200 mg Tablet",
-    },
-    {
-        "value": "Ibuprofen 400 mg Tablet",
-        "label": "Ibuprofen 400 mg Tablet",
-    },
-    {
-        "value": "Loratadine 10 mg Tablet",
-        "label": "Loratadine 10 mg Tablet",
-    },
-    {
-        "value": "Metformin 500 mg Tablet",
-        "label": "Metformin 500 mg Tablet",
-    },
-    {
-        "value": "Omeprazole 20 mg Capsule",
-        "label": "Omeprazole 20 mg Capsule",
-    },
-    {
-        "value": "Paracetamol 500 mg Tablet",
-        "label": "Paracetamol 500 mg Tablet",
-    },
-    {
-        "value": "Salbutamol 100 mcg Inhaler",
-        "label": "Salbutamol 100 mcg Inhaler",
-    },
-    {
-        "value": "Cough Mixture",
-        "label": "Cough Mixture",
-    },
-    {
-        "value": "Oral Rehydration Salts",
-        "label": "Oral Rehydration Salts",
-    },
-]
 
 
 DOSAGE_OPTIONS = [
@@ -161,11 +103,19 @@ class PrescriptionOptions(TypedDict):
     durations: list[str]
 
 
-def get_prescription_options() -> PrescriptionOptions:
+def get_prescription_options(
+    db: Session,
+) -> PrescriptionOptions:
     """Return selectable prescription form options."""
 
     return {
-        "medications": MEDICATION_OPTIONS,
+        "medications": [
+            {
+                "value": item.prescription_value,
+                "label": item.prescription_value,
+            }
+            for item in list_medications(db)
+        ],
         "dosages": DOSAGE_OPTIONS,
         "frequencies": FREQUENCY_OPTIONS,
         "durations": DURATION_OPTIONS,
@@ -180,6 +130,7 @@ def _prescription_load_options():
         selectinload(Prescription.diagnosis),
         selectinload(Prescription.patient),
         selectinload(Prescription.prescribing_doctor),
+        selectinload(Prescription.medication_record),
         selectinload(Prescription.history).selectinload(PrescriptionHistory.changed_by_doctor),
     )
 
@@ -215,12 +166,22 @@ def create_prescription(
             "Only the doctor who created this " "consultation can add medication."
         )
 
+    medication = get_medication_by_public_id(
+        db,
+        data.medication_id,
+    )
+    if medication is None or not medication.is_active:
+        raise MedicationNotFoundError(
+            "The selected medication was not found or is inactive."
+        )
+
     prescription = Prescription(
         consultation_note_id=consultation.id,
         diagnosis_id=diagnosis.id,
         patient_id=consultation.patient_id,
         prescribing_doctor_id=doctor.id,
-        medication=data.medication,
+        medication_id=medication.id,
+        medication=medication.prescription_value,
         dosage=data.dosage,
         frequency=data.frequency,
         duration=data.duration,

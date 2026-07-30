@@ -17,6 +17,7 @@ from agile_ci_demo.attachments import models as _attachments_models  # noqa: F40
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
+from agile_ci_demo.pharmacy.service import seed_default_medications
 from agile_ci_demo.prescription import models as _prescription_models  # noqa: F401
 from agile_ci_demo.records import models as _records_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
@@ -35,6 +36,9 @@ def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
     )
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
+
+    with TestingSessionLocal() as db:
+        seed_default_medications(db)
 
     from agile_ci_demo.core.config import settings
 
@@ -990,12 +994,19 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
     record_id = note.json()["record_id"]
     diagnosis_id = note.json()["diagnoses"][0]["id"]
 
+    medication_search = client.get(
+        "/api/prescriptions/medications",
+        params={"q": "Amoxicillin 500 mg"},
+    )
+    assert medication_search.status_code == 200, medication_search.json()
+    medication_id = medication_search.json()[0]["medication_id"]
+
     prescription = client.post(
         "/api/prescriptions",
         json={
             "consultation_record_id": record_id,
             "diagnosis_id": diagnosis_id,
-            "medication": "Amoxicillin 500 mg Capsule",
+            "medication_id": medication_id,
             "dosage": "1 capsule",
             "frequency": "Three times daily",
             "duration": "7 days",

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Generator
+from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,15 +13,12 @@ from sqlalchemy.pool import StaticPool
 
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
+from agile_ci_demo.core.email import clear_outbox, get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
+from agile_ci_demo.pharmacy.service import seed_default_medications
 from agile_ci_demo.prescription import models as _prescription_models  # noqa: F401
 from agile_ci_demo.records import models as _records_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
-from agile_ci_demo.staff.service import get_staff_by_staff_id
-
-# =========================================================
-# TEST DATABASE
-# =========================================================
 
 
 @pytest.fixture
@@ -31,14 +30,15 @@ def client() -> Generator[TestClient, None, None]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-
     testing_session_local = sessionmaker(
         autocommit=False,
         autoflush=False,
         bind=engine,
     )
-
     Base.metadata.create_all(bind=engine)
+
+    with testing_session_local() as db:
+        seed_default_medications(db)
 
     def override_get_db() -> Generator[Session, None, None]:
         db = testing_session_local()
@@ -49,11 +49,26 @@ def client() -> Generator[TestClient, None, None]:
 
     app.dependency_overrides[get_db] = override_get_db
 
+    test_client = TestClient(app)
+
     try:
-        yield TestClient(app)
+        yield test_client
     finally:
+        test_client.close()
         app.dependency_overrides.pop(get_db, None)
         Base.metadata.drop_all(bind=engine)
+        clear_outbox()
+
+
+@dataclass(frozen=True)
+class PreparedConsultation:
+    patient_id: str
+    doctor_id: str
+    doctor_email: str
+    doctor_password: str
+    record_id: str
+    diagnosis_id: int
+    medication_id: str
 
 
 def valid_patient_payload(**overrides: object) -> dict[str, object]:
@@ -64,7 +79,7 @@ def valid_patient_payload(**overrides: object) -> dict[str, object]:
         "phone_number": "012-3456789",
         "email": "jane.tan@example.com",
         "ic_or_passport": "900520-10-1234",
-        "address": ("1 Jalan Testing, Kuala Lumpur"),
+        "address": "1 Jalan Testing, Kuala Lumpur",
     }
     payload.update(overrides)
     return payload
@@ -91,11 +106,11 @@ def valid_record_payload(
     payload: dict[str, object] = {
         "patient_id": patient_id,
         "doctor_id": doctor_id,
-        "notes": ("Patient presented with fever " "and cough for three days."),
+        "notes": "Patient presented with fever and cough for three days.",
         "diagnoses": [
             {
                 "icd10_code": "J00",
-                "description": ("Acute nasopharyngitis " "(common cold)"),
+                "description": "Acute nasopharyngitis (common cold)",
             }
         ],
     }
@@ -106,11 +121,13 @@ def valid_record_payload(
 def valid_prescription_payload(
     record_id: str,
     diagnosis_id: int,
+    medication_id: str,
     **overrides: object,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "consultation_record_id": record_id,
-        "medication": ("Amoxicillin 500 mg Capsule"),
+        "diagnosis_id": diagnosis_id,
+        "medication_id": medication_id,
         "dosage": "1 capsule",
         "frequency": "Three times daily",
         "duration": "7 days",
@@ -135,44 +152,45 @@ def register_patient(client: TestClient, **overrides: object) -> str:
         "/api/patients",
         json=valid_patient_payload(**overrides),
     )
-
     assert response.status_code == 201, response.json()
-
     return str(response.json()["patient_id"])
 
 
-def register_doctor(client: TestClient, **overrides: object) -> str:
-    response = client.post(
-        "/api/staff",
-        json=valid_doctor_payload(**overrides),
-    )
+def register_doctor(
+    client: TestClient,
+    **overrides: object,
+) -> tuple[str, str, str]:
+    payload = valid_doctor_payload(**overrides)
+    email = str(payload["email"])
 
+    clear_outbox()
+    response = client.post("/api/staff", json=payload)
     assert response.status_code == 201, response.json()
 
-    return str(response.json()["staff_id"])
-
-
-def _login_as_receptionist(client: TestClient) -> None:
-    from test_auth import _create_staff_and_get_temp_password
-
-    temp_password = _create_staff_and_get_temp_password(
-        client, email="receptionist@example.com", role="receptionist"
+    welcome_email = next(
+        message
+        for message in reversed(get_outbox())
+        if message.to == email
     )
-    client.post(
-        "/api/auth/login", json={"email": "receptionist@example.com", "password": temp_password}
-    )
-
-
-def _login_as_doctor(client: TestClient, email: str) -> None:
-    """Log in as a doctor using the temp password from their most recent welcome
-    email - the prescription endpoints now require a real doctor session rather
-    than just a registered account."""
-    from agile_ci_demo.core.email import get_outbox
-
-    body = get_outbox()[-1].body
-    match = re.search(r"temporary password is: (\S+)", body)
+    match = re.search(r"temporary password is: (\S+)", welcome_email.body)
     assert match is not None
-    client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
+
+    return str(response.json()["staff_id"]), email, match.group(1)
+
+
+def login_doctor(
+    client: TestClient,
+    email: str,
+    password: str,
+) -> None:
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "email": email,
+            "password": password,
+        },
+    )
+    assert response.status_code == 200, response.json()
 
 
 def create_consultation(
@@ -180,90 +198,174 @@ def create_consultation(
     patient_id: str,
     doctor_id: str,
     **overrides: object,
-) -> str:
+) -> dict[str, object]:
     response = client.post(
         "/api/records",
-        json=valid_record_payload(patient_id, doctor_id, **overrides),
+        json=valid_record_payload(
+            patient_id,
+            doctor_id,
+            **overrides,
+        ),
+    )
+    assert response.status_code == 201, response.json()
+    return response.json()
+
+
+def find_medication_id(
+    client: TestClient,
+    keyword: str,
+    standard_dosage: str,
+) -> str:
+    response = client.get(
+        "/api/prescriptions/medications",
+        params={"q": keyword},
+    )
+    assert response.status_code == 200, response.json()
+
+    item = next(
+        medication
+        for medication in response.json()
+        if medication["standard_dosage"]
+        == standard_dosage
+    )
+    return str(item["medication_id"])
+
+
+def prepare_consultation(client: TestClient) -> PreparedConsultation:
+    patient_id = register_patient(client)
+    doctor_id, email, password = register_doctor(client)
+    record = create_consultation(client, patient_id, doctor_id)
+    diagnoses = record["diagnoses"]
+    assert isinstance(diagnoses, list)
+    diagnosis_id = int(diagnoses[0]["id"])
+
+    login_doctor(client, email, password)
+    medication_id = find_medication_id(
+        client,
+        "Amoxicillin",
+        "500 mg",
     )
 
-    assert response.status_code == 201, response.json()
-
-    return str(response.json()["record_id"])
-
-
-def prepare_consultation(client: TestClient) -> tuple[str, str, str, int]:
-    patient_id = register_patient(client)
-    doctor_id = register_doctor(client)
-    record_id = create_consultation(client, patient_id, doctor_id)
-    diagnosis_id = get_diagnosis_ids(client, record_id)[0]
-    return patient_id, doctor_id, record_id, diagnosis_id
+    return PreparedConsultation(
+        patient_id=patient_id,
+        doctor_id=doctor_id,
+        doctor_email=email,
+        doctor_password=password,
+        record_id=str(record["record_id"]),
+        diagnosis_id=diagnosis_id,
+        medication_id=medication_id,
+    )
 
 
 def create_prescription(
     client: TestClient,
-    record_id: str,
-    diagnosis_id: int | None = None,
+    prepared: PreparedConsultation,
     **overrides: object,
 ) -> dict[str, object]:
-    if diagnosis_id is None:
-        diagnosis_id = get_diagnosis_ids(client, record_id)[0]
-
     response = client.post(
         "/api/prescriptions",
         json=valid_prescription_payload(
-            record_id,
-            diagnosis_id,
+            prepared.record_id,
+            prepared.diagnosis_id,
+            prepared.medication_id,
             **overrides,
         ),
     )
-
     assert response.status_code == 201, response.json()
-
     return response.json()
 
 
-# STORY 1: CREATE PRESCRIPTION
+# Medication search
 
 
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_create_prescription_success(
+def test_medication_search_endpoint_returns_required_fields(
     client: TestClient,
 ) -> None:
-    """
-    Given a consultation record
-    When the doctor creates a prescription
-    Then the medication details are saved.
-    """
+    prepared = prepare_consultation(client)
 
-    patient_id, doctor_id, record_id = prepare_consultation(client)
-
-    response = client.post(
-        "/api/prescriptions",
-        json=valid_prescription_payload(record_id),
+    response = client.get(
+        "/api/prescriptions/medications",
+        params={"q": "ibuprofen"},
     )
 
-    assert response.status_code == 201, response.json()
+    assert response.status_code == 200
+    items = response.json()
+    assert len(items) == 2
+    assert set(items[0]) == {
+        "medication_id",
+        "name",
+        "form",
+        "standard_dosage",
+        "prescription_value",
+    }
+    assert items[0]["name"] == "Ibuprofen"
+    assert prepared.doctor_id
+
+
+def test_medication_search_returns_empty_list_for_no_match(
+    client: TestClient,
+) -> None:
+    prepare_consultation(client)
+
+    response = client.get(
+        "/api/prescriptions/medications",
+        params={"q": "not-a-real-catalogue-item"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_medication_search_requires_doctor_session(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/api/prescriptions/medications",
+        params={"q": "amoxicillin"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login"
+
+
+def test_options_endpoint_remains_backward_compatible(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/prescriptions/options")
+
+    assert response.status_code == 200
     body = response.json()
+    assert {"value", "label"} <= set(body["medications"][0])
+    assert body["dosages"]
+    assert body["frequencies"]
+    assert body["durations"]
 
-    assert body["prescription_id"].startswith("RX")
 
-    assert body["consultation_record_id"] == record_id
+# Prescription creation and history
 
-    assert body["patient_id"] == patient_id
-    assert body["prescribing_doctor_id"] == (doctor_id)
 
-    assert body["medication"] == ("Amoxicillin 500 mg Capsule")
+def test_doctor_can_create_prescription(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
 
-    assert body["dosage"] == "1 capsule"
-
-    assert body["frequency"] == ("Three times daily")
-
-    assert body["duration"] == "7 days"
-    assert body["status"] == "active"
-    assert body["can_edit"] is True
+    assert str(prescription["prescription_id"]).startswith("RX")
+    assert prescription["consultation_record_id"] == prepared.record_id
+    assert prescription["diagnosis_id"] == prepared.diagnosis_id
+    assert prescription["patient_id"] == prepared.patient_id
+    assert prescription["prescribing_doctor_id"] == prepared.doctor_id
+    assert prescription["medication_id"] == prepared.medication_id
+    assert prescription["medication_name"] == "Amoxicillin"
+    assert prescription["medication_form"] == "Capsule"
+    assert prescription["medication_standard_dosage"] == "500 mg"
+    assert prescription["medication"] == "Amoxicillin 500 mg Capsule"
+    assert prescription["dosage"] == "1 capsule"
+    assert prescription["frequency"] == "Three times daily"
+    assert prescription["duration"] == "7 days"
+    assert prescription["status"] == "active"
+    assert prescription["can_edit"] is True
 
 
 @pytest.mark.parametrize(
@@ -271,7 +373,7 @@ def test_create_prescription_success(
     [
         "consultation_record_id",
         "diagnosis_id",
-        "medication",
+        "medication_id",
         "dosage",
         "frequency",
         "duration",
@@ -281,12 +383,12 @@ def test_create_prescription_requires_all_fields(
     client: TestClient,
     missing_field: str,
 ) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    _login_as_doctor(client, str(valid_doctor_payload()["email"]))
-
-    payload = valid_prescription_payload(record_id)
-
+    prepared = prepare_consultation(client)
+    payload = valid_prescription_payload(
+        prepared.record_id,
+        prepared.diagnosis_id,
+        prepared.medication_id,
+    )
     del payload[missing_field]
 
     response = client.post("/api/prescriptions", json=payload)
@@ -295,252 +397,132 @@ def test_create_prescription_requires_all_fields(
 
 @pytest.mark.parametrize(
     "field_name",
-    ["medication", "dosage", "frequency", "duration"],
+    ["medication_id", "dosage", "frequency", "duration"],
 )
-def test_create_prescription_rejects_blank_fields(
+def test_create_prescription_rejects_blank_text(
     client: TestClient,
     field_name: str,
 ) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    _login_as_doctor(client, str(valid_doctor_payload()["email"]))
-
-    payload = valid_prescription_payload(record_id)
-
+    prepared = prepare_consultation(client)
+    payload = valid_prescription_payload(
+        prepared.record_id,
+        prepared.diagnosis_id,
+        prepared.medication_id,
+    )
     payload[field_name] = "   "
 
     response = client.post("/api/prescriptions", json=payload)
     assert response.status_code == 422
 
 
-def test_prescription_links_to_consultation_and_diagnosis(
-    client: TestClient,
-) -> None:
-    _, _, record_id, diagnosis_id = prepare_consultation(client)
-    created = create_prescription(client, record_id, diagnosis_id)
-
-    response = client.get(
-        f"/api/prescriptions/consultation/{record_id}"
-    )
-
-    assert response.status_code == 422
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_prescription_links_to_consultation(
-    client: TestClient,
-) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    create_prescription(client, record_id, diagnosis_id)
-    create_prescription(
-        client,
-        record_id,
-        diagnosis_id,
-        medication="Paracetamol 500 mg Tablet",
-        dosage="2 tablets",
-        frequency="Every 6 hours",
-        duration="3 days",
-    )
-
-    response = client.get("/api/prescriptions/consultation/" f"{record_id}")
-
-    assert response.status_code == 200
-
-    body = response.json()
-
-    assert body["total"] == 1
-
-    assert body["items"][0]["prescription_id"] == created["prescription_id"]
-
-    assert body["items"][0]["consultation_record_id"] == record_id
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_create_prescription_for_unknown_record_returns_404(
-    client: TestClient,
-) -> None:
-    register_doctor(client)
-    response = client.post(
-        "/api/prescriptions",
-        json=valid_prescription_payload("R99999"),
-    )
-    assert response.status_code == 404
-
-
 def test_create_prescription_rejects_diagnosis_from_other_consultation(
     client: TestClient,
 ) -> None:
-    response = client.get("/api/prescriptions/options")
-
-    assert response.status_code == 200
-
-    body = response.json()
-
-    assert len(body["medications"]) > 0
-    assert len(body["dosages"]) > 0
-    assert len(body["frequencies"]) > 0
-    assert len(body["durations"]) > 0
-
-    assert {
-        "value",
-        "label",
-    }.issubset(body["medications"][0])
-
-
-# STORY 2: VIEW PRESCRIPTION HISTORY
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_patient_prescription_history_displays_details(
-    client: TestClient,
-) -> None:
-    patient_id, _, record_id = prepare_consultation(client)
-
-    create_prescription(
-        client,
-        record_id,
-    )
-
-    response = client.get("/api/prescriptions/patient/" f"{patient_id}")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total"] == 1
-
-    prescription = body["items"][0]
-
-    assert prescription["medication"] == ("Amoxicillin 500 mg Capsule")
-
-    assert prescription["dosage"] == ("1 capsule")
-
-    assert prescription["frequency"] == ("Three times daily")
-
-    assert prescription["duration"] == ("7 days")
-
-    assert prescription["status"] == "active"
-    assert prescription["issued_at"] is not None
-    assert prescription["updated_at"] is not None
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_patient_prescription_history_is_sorted_newest_first(
-    client: TestClient,
-) -> None:
-    patient_id, _, record_id = prepare_consultation(client)
-
-    first = create_prescription(
-        client,
-        record_id,
-        diagnosis_id,
-        medication="Paracetamol 500 mg Tablet",
-    )
-    second = create_prescription(
-        client,
-        record_id,
-        diagnosis_id,
-        medication="Cetirizine 10 mg Tablet",
-    )
-
-    response = client.get("/api/prescriptions/patient/" f"{patient_id}")
-
-    assert response.status_code == 200
-    items = response.json()["items"]
-
-    assert len(items) == 2
-
-    assert items[0]["prescription_id"] == (second["prescription_id"])
-
-    assert items[1]["prescription_id"] == (first["prescription_id"])
-
-    assert items[0]["medication"] == ("Cetirizine 10 mg Tablet")
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_patient_history_excludes_other_patients(
-    client: TestClient,
-) -> None:
-    patient_a = register_patient(client)
-    patient_b = register_patient(
+    prepared = prepare_consultation(client)
+    other_patient_id = register_patient(
         client,
         full_name="Mary Lee",
         email="mary.lee@example.com",
         phone_number="013-9876543",
         ic_or_passport="920315-08-5678",
+        date_of_birth="1992-03-15",
     )
-    doctor_id = register_doctor(client)
-    record_a = create_consultation(client, patient_a, doctor_id)
-    record_b = create_consultation(client, patient_b, doctor_id)
-
-    create_prescription(client, record_a)
-    create_prescription(
+    other_record = create_consultation(
         client,
-        record_b,
-        medication="Cetirizine 10 mg Tablet",
+        other_patient_id,
+        prepared.doctor_id,
     )
+    other_diagnosis_id = int(other_record["diagnoses"][0]["id"])
 
-    response = client.get("/api/prescriptions/patient/" f"{patient_a}")
-
-    assert response.status_code == 200
-    items = response.json()["items"]
-    assert len(items) == 1
-
-    assert items[0]["medication"] == ("Paracetamol 500 mg Tablet")
-
-    assert items[0]["patient_id"] == patient_a
-    assert items[0]["medication"] == "Amoxicillin 500 mg Capsule"
-
-
-def test_unknown_patient_prescription_history_returns_404(
-    client: TestClient,
-) -> None:
-    _login_as_receptionist(client)
-
-    response = client.get("/api/prescriptions/patient/P99999")
+    response = client.post(
+        "/api/prescriptions",
+        json=valid_prescription_payload(
+            prepared.record_id,
+            other_diagnosis_id,
+            prepared.medication_id,
+        ),
+    )
 
     assert response.status_code == 404
 
 
-# STORY 3: UPDATE PRESCRIPTION INSTRUCTIONS
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_prescribing_doctor_can_update_dosage(
+def test_patient_history_is_newest_first_and_patient_scoped(
     client: TestClient,
 ) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    prescription = create_prescription(
+    prepared = prepare_consultation(client)
+    paracetamol_id = find_medication_id(
         client,
-        record_id,
+        "Paracetamol",
+        "500 mg",
+    )
+    cetirizine_id = find_medication_id(
+        client,
+        "Cetirizine",
+        "10 mg",
+    )
+    first = create_prescription(
+        client,
+        prepared,
+        medication_id=paracetamol_id,
+    )
+    second = create_prescription(
+        client,
+        prepared,
+        medication_id=cetirizine_id,
     )
 
-    prescription_id = str(prescription["prescription_id"])
+    response = client.get(
+        f"/api/prescriptions/patient/{prepared.patient_id}"
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["prescription_id"] for item in items] == [
+        second["prescription_id"],
+        first["prescription_id"],
+    ]
+    assert all(item["patient_id"] == prepared.patient_id for item in items)
+
+
+def test_prescription_rejects_unknown_medication(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+
+    response = client.post(
+        "/api/prescriptions",
+        json=valid_prescription_payload(
+            prepared.record_id,
+            prepared.diagnosis_id,
+            "M99999",
+        ),
+    )
+
+    assert response.status_code == 404
+
+
+def test_unknown_patient_history_returns_404(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    assert prepared.patient_id
+
+    response = client.get("/api/prescriptions/patient/P99999")
+    assert response.status_code == 404
+
+
+# Instruction revision
+
+
+def test_prescribing_doctor_can_update_instructions(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
 
     response = client.patch(
-        "/api/prescriptions/" f"{prescription_id}/dosage",
-        json={
-            "dosage": "2 capsules",
-            "change_reason": ("Dosage corrected after review."),
-        },
+        f"/api/prescriptions/{prescription['prescription_id']}/instructions",
+        json=valid_instruction_update(),
     )
 
     assert response.status_code == 200, response.json()
@@ -551,292 +533,114 @@ def test_prescribing_doctor_can_update_dosage(
     assert len(body["history"]) == 1
 
     revision = body["history"][0]
-
-    assert revision["previous_dosage"] == ("1 capsule")
-
-    assert revision["new_dosage"] == ("2 capsules")
-
-    assert revision["change_reason"] == ("Dosage corrected after review.")
-
+    assert revision["previous_dosage"] == "1 capsule"
+    assert revision["new_dosage"] == "2 capsules"
+    assert revision["previous_frequency"] == "Three times daily"
+    assert revision["new_frequency"] == "Twice daily"
+    assert revision["change_reason"] == "Instructions corrected after review."
     assert revision["changed_by_doctor_name"] == "Dr. Alan Chua"
 
 
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_update_dosage_requires_change_reason(
+def test_update_requires_reason_and_all_instruction_fields(
     client: TestClient,
 ) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    prescription = create_prescription(
-        client,
-        record_id,
-    )
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
 
     response = client.patch(
-        "/api/prescriptions/" f"{prescription['prescription_id']}" "/dosage",
-        json={
-            "dosage": "2 capsules",
-        },
+        f"/api/prescriptions/{prescription['prescription_id']}/instructions",
+        json={"dosage": "2 capsules"},
     )
+
     assert response.status_code == 422
 
 
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_update_dosage_rejects_blank_reason(
+def test_update_rejects_when_nothing_changed(
     client: TestClient,
 ) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    prescription = create_prescription(
-        client,
-        record_id,
-    )
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
 
     response = client.patch(
-        "/api/prescriptions/" f"{prescription['prescription_id']}" "/dosage",
-        json={
-            "dosage": "2 capsules",
-            "change_reason": "   ",
-        },
-    )
-    assert response.status_code == 422
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_update_dosage_rejects_same_dosage(
-    client: TestClient,
-) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    prescription = create_prescription(
-        client,
-        record_id,
+        f"/api/prescriptions/{prescription['prescription_id']}/instructions",
+        json=valid_instruction_update(
+            dosage="1 capsule",
+            frequency="Three times daily",
+            duration="7 days",
+        ),
     )
 
-    response = client.patch(
-        "/api/prescriptions/" f"{prescription['prescription_id']}" "/dosage",
-        json={
-            "dosage": "1 capsule",
-            "change_reason": ("Attempted correction."),
-        },
-    )
     assert response.status_code == 409
 
 
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_unknown_prescription_update_returns_404(
+def test_non_prescribing_doctor_cannot_update(
     client: TestClient,
 ) -> None:
-    register_doctor(client)
-    response = client.patch(
-        "/api/prescriptions/RX99999/dosage",
-        json={
-            "dosage": "2 tablets",
-            "change_reason": ("Correcting dosage."),
-        },
-    )
-    assert response.status_code == 404
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
 
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_non_prescribing_doctor_cannot_update_dosage(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _, prescribing_doctor_id, record_id = prepare_consultation(client)
-
-    prescription = create_prescription(
-        client,
-        record_id,
-    )
-
-    other_doctor_id = register_doctor(
+    _, other_email, other_password = register_doctor(
         client,
         full_name="Dr. Betty Lim",
         email="betty.lim@example.com",
         license_number="MMC-67890",
     )
+    login_doctor(client, other_email, other_password)
 
-    assert other_doctor_id != prescribing_doctor_id
-
-    def use_other_doctor(db: Session):
-        return get_staff_by_staff_id(db, other_doctor_id)
-
-    monkeypatch.setattr(
-        "agile_ci_demo.prescription.service." "get_current_doctor",
-        use_other_doctor,
+    update_response = client.patch(
+        f"/api/prescriptions/{prescription['prescription_id']}/instructions",
+        json=valid_instruction_update(),
     )
-    monkeypatch.setattr(
-        "agile_ci_demo.prescription.router." "get_current_doctor",
-        use_other_doctor,
-    )
-
-    response = client.patch(
-        "/api/prescriptions/" f"{prescription['prescription_id']}" "/dosage",
-        json={
-            "dosage": "2 capsules",
-            "change_reason": ("Attempted change by another doctor."),
-        },
-    )
-    assert response.status_code == 403
+    assert update_response.status_code == 403
 
 
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_edit_permission_is_false_for_other_doctor(
+def test_other_doctor_cannot_edit_patient_history_item(
     client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    patient_id, _, record_id = prepare_consultation(client)
+    prepared = prepare_consultation(client)
+    create_prescription(client, prepared)
 
-    create_prescription(
-        client,
-        record_id,
-    )
-
-    other_doctor_id = register_doctor(
+    _, other_email, other_password = register_doctor(
         client,
         full_name="Dr. Betty Lim",
         email="betty.lim@example.com",
         license_number="MMC-67890",
     )
+    login_doctor(client, other_email, other_password)
 
-    def use_other_doctor(db: Session):
-        return get_staff_by_staff_id(db, other_doctor_id)
-
-    monkeypatch.setattr(
-        "agile_ci_demo.prescription.router." "get_current_doctor",
-        use_other_doctor,
+    response = client.get(
+        f"/api/prescriptions/patient/{prepared.patient_id}"
     )
-
-    response = client.get("/api/prescriptions/patient/" f"{patient_id}")
 
     assert response.status_code == 200
     assert response.json()["items"][0]["can_edit"] is False
 
 
-    assert item["can_edit"] is False
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_multiple_dosage_changes_save_all_versions(
+def test_consultation_page_has_medication_autocomplete(
     client: TestClient,
 ) -> None:
-    _, _, record_id = prepare_consultation(client)
+    prepared = prepare_consultation(client)
 
-    prescription = create_prescription(
-        client,
-        record_id,
-    )
-
-    prescription_id = str(prescription["prescription_id"])
-
-    first_update = client.patch(
-        "/api/prescriptions/" f"{prescription_id}/dosage",
-        json={
-            "dosage": "2 capsules",
-            "change_reason": ("First dosage correction."),
-        },
-    )
-
-    assert first_update.status_code == 200
-
-    second_update = client.patch(
-        "/api/prescriptions/" f"{prescription_id}/dosage",
-        json={
-            "dosage": "1 capsule at night",
-            "change_reason": ("Adjusted after patient feedback."),
-        },
-    )
-    assert second_update.status_code == 200, second_update.json()
-
-    body = second_update.json()
-
-    assert body["dosage"] == ("1 capsule at night")
-
-    assert len(body["history"]) == 2
-
-
-# FRONTEND PAGE TESTS
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_prescription_creation_page_renders(
-    client: TestClient,
-) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    response = client.get(
-        "/prescriptions/new",
-        params={
-            "record_id": record_id,
-        },
-    )
+    response = client.get(f"/records/{prepared.record_id}")
 
     assert response.status_code == 200
-    assert 'id="diagnosis-list"' in response.text
-    assert 'id="add-prescription-modal"' in response.text
-    assert 'id="add-prescription-form"' in response.text
+    assert 'type="search"' in response.text
     assert 'id="prescription-medication"' in response.text
-    assert 'id="prescription-dosage"' in response.text
-    assert 'id="prescription-frequency"' in response.text
-    assert 'id="prescription-duration"' in response.text
+    assert 'id="prescription-medication-suggestions"' in response.text
 
 
-def test_patient_page_contains_prescriptions_tab(
-    client: TestClient,
-) -> None:
-    _login_as_receptionist(client)
+def test_autocomplete_script_caches_search_results_client_side() -> None:
+    script_path = (
+        Path(__file__).resolve().parents[1]
+        / "static"
+        / "js"
+        / "record_detail.js"
+    )
+    script = script_path.read_text(encoding="utf-8")
 
-    patient_id = register_patient(client)
-
-    response = client.get(f"/patients/{patient_id}")
-
-    assert response.status_code == 200
-
-    assert 'id="prescriptions-tab-btn"' in response.text
-
-    assert 'id="prescriptions-list"' in response.text
-
-    assert 'id="edit-prescription-modal"' in response.text
-
-
-@pytest.mark.xfail(
-    reason="prescription module is unfinished on Cosmo's branch (see PR discussion) - tracked, not a regression",
-    strict=False,
-)
-def test_consultation_page_contains_create_prescription_action(
-    client: TestClient,
-) -> None:
-    _, _, record_id = prepare_consultation(client)
-
-    response = client.get(f"/records/{record_id}")
-
-    assert response.status_code == 200
-
-    assert 'id="create-prescription-link"' in response.text
-
-    assert 'id="record-prescription-list"' in response.text
+    assert "medicationSearchCache = new Map()" in script
+    assert "medicationSearchCache.has(cacheKey)" in script
+    assert "medicationSearchCache.set(" in script
+    assert '"/api/prescriptions/medications?"' in script
+    assert "medicationIdInput.value" in script
+    assert "medication_id:" in script

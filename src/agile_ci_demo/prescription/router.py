@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     status,
 )
 from sqlalchemy.orm import Session
@@ -9,11 +10,16 @@ from sqlalchemy.orm import Session
 from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
+from agile_ci_demo.pharmacy.service import (
+    MedicationNotFoundError,
+    search_active_medications,
+)
 from agile_ci_demo.prescription.models import (
     Prescription,
 )
 from agile_ci_demo.prescription.schemas import (
     MedicationOption,
+    MedicationSearchResultOut,
     PrescriptionCreate,
     PrescriptionHistoryOut,
     PrescriptionInstructionUpdate,
@@ -41,7 +47,6 @@ api_router = APIRouter(
     prefix="/api/prescriptions",
     tags=["prescriptions"],
 )
-
 
 def serialize_prescription(
     prescription: Prescription,
@@ -73,6 +78,26 @@ def serialize_prescription(
         patient_name=(prescription.patient.full_name),
         prescribing_doctor_id=(prescription.prescribing_doctor.staff_id or ""),
         prescribing_doctor_name=(prescription.prescribing_doctor.full_name),
+        medication_id=(
+            prescription.medication_record.medication_id
+            if prescription.medication_record is not None
+            else None
+        ),
+        medication_name=(
+            prescription.medication_record.name
+            if prescription.medication_record is not None
+            else None
+        ),
+        medication_form=(
+            prescription.medication_record.form
+            if prescription.medication_record is not None
+            else None
+        ),
+        medication_standard_dosage=(
+            prescription.medication_record.standard_dosage
+            if prescription.medication_record is not None
+            else None
+        ),
         medication=prescription.medication,
         dosage=prescription.dosage,
         frequency=prescription.frequency,
@@ -94,8 +119,10 @@ def serialize_prescription(
     "/options",
     response_model=PrescriptionOptionsOut,
 )
-def get_available_prescription_options() -> PrescriptionOptionsOut:
-    options = get_prescription_options()
+def get_available_prescription_options(
+    db: Session = Depends(get_db),
+) -> PrescriptionOptionsOut:
+    options = get_prescription_options(db)
 
     return PrescriptionOptionsOut(
         medications=[MedicationOption(**item) for item in options["medications"]],
@@ -103,6 +130,32 @@ def get_available_prescription_options() -> PrescriptionOptionsOut:
         frequencies=options["frequencies"],
         durations=options["durations"],
     )
+
+
+@api_router.get(
+    "/medications",
+    response_model=list[MedicationSearchResultOut],
+)
+def search_medication_catalogue(
+    q: str = Query(..., min_length=1, max_length=80),
+    limit: int = Query(default=8, ge=1, le=20),
+    db: Session = Depends(get_db),
+    _doctor: Staff = Depends(require_role(Role.DOCTOR)),
+) -> list[MedicationSearchResultOut]:
+    return [
+        MedicationSearchResultOut(
+            medication_id=item.medication_id or "",
+            name=item.name,
+            form=item.form,
+            standard_dosage=item.standard_dosage,
+            prescription_value=item.prescription_value,
+        )
+        for item in search_active_medications(
+            db,
+            q,
+            limit,
+        )
+    ]
 
 
 # This route creates a prescription for one diagnosis.
@@ -126,6 +179,7 @@ def create_prescription_endpoint(
     except (
         ConsultationRecordNotFoundError,
         DiagnosisNotFoundError,
+        MedicationNotFoundError,
     ) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
