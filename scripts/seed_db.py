@@ -29,7 +29,6 @@ PATIENTS = [
         "female",
         "012-3456789",
         "jane.tan@example.com",
-        "900520-10-1234",
         "1 Jalan Ampang, Kuala Lumpur",
     ),
     (
@@ -38,17 +37,15 @@ PATIENTS = [
         "male",
         "013-2345678",
         "john.lee@example.com",
-        "850311-14-5678",
         "12 Jalan Bukit Bintang, Kuala Lumpur",
     ),
-    ("Ah Kow", "1995-01-01", "male", "014-3456781", None, "950101-08-9012", None),
+    ("Ah Kow", "1995-01-01", "male", "014-3456781", None, None),
     (
         "Janet Wong",
         "1992-12-12",
         "female",
         "016-4567890",
         "janet.wong@example.com",
-        "921212-05-4321",
         "45 Jalan Sultan Ismail, Kuala Lumpur",
     ),
     (
@@ -57,7 +54,6 @@ PATIENTS = [
         "male",
         "017-5678901",
         "muthu.samy@example.com",
-        "780723-10-1111",
         "8 Jalan Klang Lama, Kuala Lumpur",
     ),
     (
@@ -66,17 +62,15 @@ PATIENTS = [
         "female",
         "018-6789012",
         "nurul.aisyah@example.com",
-        "000214-14-2222",
         "22 Jalan Tun Razak, Kuala Lumpur",
     ),
-    ("Kevin Tan", "1988-09-09", "male", "019-7890123", None, "880909-05-3333", None),
+    ("Kevin Tan", "1988-09-09", "male", "019-7890123", None, None),
     (
         "Priya Devi",
         "1993-06-30",
         "female",
         "012-8901234",
         "priya.devi@example.com",
-        "930630-08-4444",
         "5 Jalan Ipoh, Kuala Lumpur",
     ),
     (
@@ -85,17 +79,15 @@ PATIENTS = [
         "male",
         "013-9012345",
         "ahmad.firdaus@example.com",
-        "821118-10-5555",
         "17 Jalan Pudu, Kuala Lumpur",
     ),
-    ("Lim Wei Ling", "1975-04-25", "female", "014-0123456", None, "750425-14-6666", None),
+    ("Lim Wei Ling", "1975-04-25", "female", "014-0123456", None, None),
     (
         "Ravi Kumar",
         "1999-08-08",
         "male",
         "016-1234567",
         "ravi.kumar@example.com",
-        "990808-05-7777",
         "9 Jalan Cheras, Kuala Lumpur",
     ),
     (
@@ -104,17 +96,15 @@ PATIENTS = [
         "female",
         "017-2345678",
         "meiyee.chong@example.com",
-        "911010-08-8888",
         "31 Jalan Kepong, Kuala Lumpur",
     ),
-    ("Hafiz Rahman", "1987-05-05", "male", "018-3456789", None, "870505-10-9999", None),
+    ("Hafiz Rahman", "1987-05-05", "male", "018-3456789", None, None),
     (
         "Sarah Lim",
         "1996-03-03",
         "female",
         "019-4567890",
         "sarah.lim@example.com",
-        "960303-14-0001",
         "3 Jalan Damansara, Kuala Lumpur",
     ),
     (
@@ -123,15 +113,19 @@ PATIENTS = [
         "male",
         "012-5678901",
         "cheekeong.tan@example.com",
-        "831225-05-0002",
         "28 Jalan Segambut, Kuala Lumpur",
     ),
 ]
 
+# NOTE: "Siti Rahman" below still seeds role="receptionist", which the current
+# (narrowed) core.rbac.Role enum no longer accepts - seeding will fail on this
+# row until the team decides whether receptionist is restored as a role or
+# folded into "nurse". See appointment-module-status notes / ask the teammate
+# who refactored the staff module.
 STAFF = [
-    ("Dr. Alan Chua", "alan.chua@clinic.com", "doctor", "general_practice"),
-    ("Dr. Betty Lim", "betty.lim@clinic.com", "doctor", "pediatrics"),
-    ("Dr. Chandran Raj", "chandran.raj@clinic.com", "doctor", "cardiology"),
+    ("Dr. Alan Chua", "alan.chua@clinic.com", "doctor", "General Medicine"),
+    ("Dr. Betty Lim", "betty.lim@clinic.com", "doctor", "Paediatrics"),
+    ("Dr. Chandran Raj", "chandran.raj@clinic.com", "doctor", "Cardiology"),
     ("Nurse Amy Wong", "amy.wong@clinic.com", "nurse", None),
     ("Siti Rahman", "siti.rahman@clinic.com", "receptionist", None),
     ("Admin User", "admin@clinic.com", "admin", None),
@@ -172,7 +166,7 @@ def seed(force: bool) -> None:
 
         print(f"Seeding {len(PATIENTS)} patients...")
         patient_ids = []
-        for full_name, dob, gender, phone, email, ic, address in PATIENTS:
+        for full_name, dob, gender, phone, email, address in PATIENTS:
             patient = create_patient(
                 db,
                 PatientCreate(
@@ -181,7 +175,6 @@ def seed(force: bool) -> None:
                     gender=gender,
                     phone_number=phone,
                     email=email,
-                    ic_or_passport=ic,
                     address=address,
                 ),
             )

@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
 from agile_ci_demo.records.models import ConsultationNote
 from agile_ci_demo.records.schemas import (
@@ -99,11 +101,17 @@ def get_note(record_id: str, db: Session = Depends(get_db)) -> ConsultationNoteO
 
 @pages_router.get("/new", response_class=HTMLResponse)
 def new_note_page(
-    request: Request, patient_id: str = Query(..., description="Patient to document a visit for")
+    request: Request,
+    patient_id: str = Query(..., description="Patient to document a visit for"),
+    _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(request, "records/new.html", {"patient_id": patient_id})
 
 
 @pages_router.get("/{record_id}", response_class=HTMLResponse)
-def note_detail_page(request: Request, record_id: str) -> HTMLResponse:
+def note_detail_page(
+    request: Request,
+    record_id: str,
+    _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(request, "records/detail.html", {"record_id": record_id})

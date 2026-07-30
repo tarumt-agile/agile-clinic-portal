@@ -17,6 +17,8 @@
   const saveBtn = document.getElementById("save-btn");
   const successModalEl = document.getElementById("success-modal");
   const successModal = window.bootstrap ? new bootstrap.Modal(successModalEl) : null;
+  const editPhoneInput = document.getElementById("edit-phone_number");
+  if (editPhoneInput) window.PatientForm.autoDash(editPhoneInput, [3, 3, 4]);
 
   let currentPatient = null;
 

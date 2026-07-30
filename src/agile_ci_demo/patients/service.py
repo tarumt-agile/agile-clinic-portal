@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+import datetime as dt
+
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.appointments.models import Appointment
+from agile_ci_demo.attachments.models import Attachment
+from agile_ci_demo.core.config import settings
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.patients.schemas import PatientCreate, PatientUpdate
+from agile_ci_demo.prescription.models import Prescription, PrescriptionHistory
+from agile_ci_demo.records.models import ConsultationNote, Diagnosis
 
 
 class DuplicatePatientError(Exception):
@@ -18,14 +25,6 @@ class PatientNotFoundError(Exception):
 
 def create_patient(db: Session, data: PatientCreate) -> Patient:
     """Register a new patient and assign it a unique, sequential patient_id (e.g. P00001)."""
-    existing = db.execute(
-        select(Patient).where(Patient.ic_or_passport == data.ic_or_passport)
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise DuplicatePatientError(
-            f"A patient with IC/passport '{data.ic_or_passport}' is already registered"
-        )
-
     patient = Patient(
         full_name=data.full_name,
         date_of_birth=data.date_of_birth,
@@ -53,17 +52,40 @@ def get_patient_by_patient_id(db: Session, patient_id: str) -> Patient | None:
     return db.execute(select(Patient).where(Patient.patient_id == patient_id)).scalar_one_or_none()
 
 
-def get_current_patient(db: Session) -> Patient | None:
-    """Stand-in for real authentication: returns the first patient on record as "the
-    logged-in patient" for self-service booking. There is no session/token yet -
-    swap this for a real Depends(get_current_user) once patient login exists."""
-    return db.execute(select(Patient).order_by(Patient.id)).scalars().first()
+def get_patient_by_ic(db: Session, ic_or_passport: str) -> Patient | None:
+    """Look up a patient by their exact IC/passport number - used when front-desk
+    staff identify a patient from the IC the patient hands over in person."""
+    return db.execute(
+        select(Patient).where(Patient.ic_or_passport == ic_or_passport)
+    ).scalar_one_or_none()
+
+
+def search_patients_by_ic_prefix(db: Session, prefix: str, limit: int = 8) -> list[Patient]:
+    """Patients whose IC/passport number starts with the given digits/characters -
+    powers the autocomplete suggestions on the appointment booking form, so
+    front-desk staff don't need to type the full IC before anything resolves."""
+    prefix = prefix.strip()
+    if not prefix:
+        return []
+    stmt = (
+        select(Patient)
+        .where(Patient.ic_or_passport.like(f"{prefix}%"))
+        .order_by(Patient.ic_or_passport)
+        .limit(limit)
+    )
+    return list(db.execute(stmt).scalars().all())
 
 
 def search_patients(
-    db: Session, query: str | None, page: int, page_size: int
+    db: Session,
+    query: str | None,
+    page: int,
+    page_size: int,
+    registered_from: dt.date | None = None,
+    registered_to: dt.date | None = None,
 ) -> tuple[list[Patient], int]:
-    """Search patients by name or patient_id (case-insensitive, partial match).
+    """Search patients by name or patient_id (case-insensitive, partial match), optionally
+    narrowed to a registration date range.
 
     Returns (page of results ordered by registration order, total matching count).
     """
@@ -71,6 +93,10 @@ def search_patients(
     if query and query.strip():
         pattern = f"%{query.strip()}%"
         conditions.append(or_(Patient.full_name.ilike(pattern), Patient.patient_id.ilike(pattern)))
+    if registered_from is not None:
+        conditions.append(Patient.created_at >= dt.datetime.combine(registered_from, dt.time.min))
+    if registered_to is not None:
+        conditions.append(Patient.created_at <= dt.datetime.combine(registered_to, dt.time.max))
 
     count_stmt = select(func.count()).select_from(Patient)
     items_stmt = select(Patient).order_by(Patient.id)
@@ -85,35 +111,62 @@ def search_patients(
 
 
 def update_patient(db: Session, patient_id: str, data: PatientUpdate) -> Patient:
-    """Update every field of an existing patient. Re-validates uniqueness of IC/passport."""
+    """Update a patient's editable details. IC/passport is system-generated at
+    registration and is not editable."""
     patient = get_patient_by_patient_id(db, patient_id)
     if patient is None:
         raise PatientNotFoundError(f"No patient found with patient_id '{patient_id}'")
-
-    conflict = db.execute(
-        select(Patient).where(
-            Patient.ic_or_passport == data.ic_or_passport,
-            Patient.id != patient.id,
-        )
-    ).scalar_one_or_none()
-    if conflict is not None:
-        raise DuplicatePatientError(
-            f"A patient with IC/passport '{data.ic_or_passport}' is already registered"
-        )
 
     patient.full_name = data.full_name
     patient.date_of_birth = data.date_of_birth
     patient.gender = data.gender.value
     patient.phone_number = data.phone_number
     patient.email = data.email
-    patient.ic_or_passport = data.ic_or_passport
     patient.address = data.address
 
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise DuplicatePatientError("Patient could not be updated due to a conflict") from exc
-
+    db.commit()
     db.refresh(patient)
     return patient
+
+
+def delete_patient(db: Session, patient_id: str) -> None:
+    """Permanently remove a patient and all of their appointments, consultation
+    notes, diagnoses, and prescriptions (cascading hard delete)."""
+    patient = get_patient_by_patient_id(db, patient_id)
+    if patient is None:
+        raise PatientNotFoundError(f"No patient found with patient_id '{patient_id}'")
+
+    prescription_ids = (
+        db.execute(select(Prescription.id).where(Prescription.patient_id == patient.id))
+        .scalars()
+        .all()
+    )
+    if prescription_ids:
+        db.execute(
+            delete(PrescriptionHistory).where(
+                PrescriptionHistory.prescription_id.in_(prescription_ids)
+            )
+        )
+        db.execute(delete(Prescription).where(Prescription.id.in_(prescription_ids)))
+
+    note_ids = (
+        db.execute(select(ConsultationNote.id).where(ConsultationNote.patient_id == patient.id))
+        .scalars()
+        .all()
+    )
+    if note_ids:
+        attachments = (
+            db.execute(select(Attachment).where(Attachment.consultation_note_id.in_(note_ids)))
+            .scalars()
+            .all()
+        )
+        for attachment in attachments:
+            (settings.attachments_dir / attachment.stored_filename).unlink(missing_ok=True)
+        db.execute(delete(Attachment).where(Attachment.consultation_note_id.in_(note_ids)))
+
+        db.execute(delete(Diagnosis).where(Diagnosis.consultation_note_id.in_(note_ids)))
+        db.execute(delete(ConsultationNote).where(ConsultationNote.id.in_(note_ids)))
+
+    db.execute(delete(Appointment).where(Appointment.patient_id == patient.id))
+    db.delete(patient)
+    db.commit()

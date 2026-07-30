@@ -76,10 +76,10 @@
   async function loadDoctors() {
     doctorSelect.innerHTML = '<option value="" selected disabled>Loading doctors...</option>';
     try {
-      const response = await fetch("/api/staff");
+      const response = await fetch("/api/staff/doctor");
       if (!response.ok) throw new Error("Request failed");
-      const staff = await response.json();
-      const doctors = staff.filter((s) => s.role === "doctor" && s.is_active);
+      const allDoctors = await response.json();
+      const doctors = allDoctors.filter((d) => d.status === "active");
 
       if (doctors.length === 0) {
         doctorSelect.innerHTML = '<option value="" selected disabled>No doctors available</option>';

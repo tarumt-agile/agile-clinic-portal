@@ -32,9 +32,7 @@ class DiagnosisIn(BaseModel):
         value = value.strip().upper()
 
         if not value:
-            raise ValueError(
-                "ICD-10 code is required."
-            )
+            raise ValueError("ICD-10 code is required.")
 
         return value
 
@@ -44,14 +42,10 @@ class DiagnosisIn(BaseModel):
         cls,
         value: str,
     ) -> str:
-        value = " ".join(
-            value.strip().split()
-        )
+        value = " ".join(value.strip().split())
 
         if not value:
-            raise ValueError(
-                "Diagnosis description is required."
-            )
+            raise ValueError("Diagnosis description is required.")
 
         return value
 
@@ -96,9 +90,7 @@ class ConsultationNoteCreate(BaseModel):
         value = value.strip()
 
         if not value:
-            raise ValueError(
-                "Consultation notes are required."
-            )
+            raise ValueError("Consultation notes are required.")
 
         return value
 
