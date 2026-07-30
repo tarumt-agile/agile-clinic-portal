@@ -156,9 +156,7 @@ def delete_patient(db: Session, patient_id: str) -> None:
     )
     if note_ids:
         attachments = (
-            db.execute(
-                select(Attachment).where(Attachment.consultation_note_id.in_(note_ids))
-            )
+            db.execute(select(Attachment).where(Attachment.consultation_note_id.in_(note_ids)))
             .scalars()
             .all()
         )

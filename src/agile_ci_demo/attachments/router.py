@@ -47,7 +47,9 @@ def upload_attachment(
     except ConsultationNoteNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except InvalidAttachmentError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     return _serialize(attachment)
 
 
@@ -76,7 +78,9 @@ def download_attachment(
 
     file_path = attachment_file_path(attachment)
     if not file_path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found"
+        )
 
     return FileResponse(
         path=file_path,

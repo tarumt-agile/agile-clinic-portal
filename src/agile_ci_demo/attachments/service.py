@@ -53,6 +53,7 @@ def save_attachment(
     contents = upload.file.read()
     _validate_upload(upload, len(contents))
 
+    assert upload.content_type is not None  # guaranteed by _validate_upload above
     extension = ALLOWED_CONTENT_TYPES[upload.content_type]
     stored_filename = f"{uuid.uuid4().hex}{extension}"
 

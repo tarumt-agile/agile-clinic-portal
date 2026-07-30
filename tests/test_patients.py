@@ -937,7 +937,8 @@ def _login_as(client: TestClient, email: str) -> None:
 
 def _login_as_admin(client: TestClient) -> None:
     r = client.post(
-        "/api/staff", json={"full_name": "Admin User", "email": "admin@example.com", "role": "admin"}
+        "/api/staff",
+        json={"full_name": "Admin User", "email": "admin@example.com", "role": "admin"},
     )
     assert r.status_code == 201, r.json()
     _login_as(client, "admin@example.com")
@@ -980,7 +981,9 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
             "patient_id": patient_id,
             "doctor_id": doctor_id,
             "notes": "Patient presented with fever and cough for 3 days.",
-            "diagnoses": [{"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}],
+            "diagnoses": [
+                {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+            ],
         },
     )
     assert note.status_code == 201, note.json()
@@ -1033,9 +1036,7 @@ def test_delete_patient_cascades_to_all_history(client: TestClient) -> None:
 
     assert client.get(f"/api/patients/{patient_id}").status_code == 404
 
-    history = client.get(
-        "/api/records", params={"patient_id": patient_id}
-    )
+    history = client.get("/api/records", params={"patient_id": patient_id})
     # get_patient_history requires the patient to exist - it's gone now, so a
     # direct history lookup 404s. The important assertion is that nothing
     # referencing the deleted patient is left orphaned in the DB, which the

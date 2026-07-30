@@ -66,7 +66,9 @@ def authenticate_patient(db: Session, ic_or_passport: str, phone_number: str) ->
     same punctuation, even with the correct number.
     """
     patient = get_patient_by_ic(db, ic_or_passport)
-    if patient is None or re.sub(r"\D", "", patient.phone_number) != re.sub(r"\D", "", phone_number):
+    if patient is None or re.sub(r"\D", "", patient.phone_number) != re.sub(
+        r"\D", "", phone_number
+    ):
         raise InvalidCredentialsError("Invalid IC/passport number or phone number")
     return patient
 
