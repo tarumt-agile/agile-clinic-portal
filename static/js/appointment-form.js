@@ -8,8 +8,10 @@
   const submitBtn = document.getElementById("submit-btn");
   const dateInput = document.getElementById("appointment_date");
   const patientIdInput = document.getElementById("patient_id");
+  const patientIcInput = document.getElementById("patient_ic");
   const patientFeedback = document.getElementById("patient-lookup-feedback");
   const patientDisplay = document.getElementById("patient-display");
+  const patientIcSuggestions = document.getElementById("patient-ic-suggestions");
   const specialtySelect = document.getElementById("specialty");
   const doctorSelect = document.getElementById("doctor_id");
   const slotGrid = document.getElementById("slot-grid");
@@ -18,10 +20,12 @@
   const confirmationModalEl = document.getElementById("confirmation-modal");
   const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
 
-  // The receptionist form has a free-text Patient ID field (type="text") the
-  // receptionist looks up. The patient self-booking form locks it (type="hidden")
-  // and auto-fills it from "the current patient" - see loadCurrentPatient().
-  const isSelfBooking = patientIdInput.type === "hidden";
+  // The receptionist/nurse form has a Patient IC field the staff member looks up
+  // (the patient hands over their IC in person) - a hidden patient_id field is
+  // resolved from that lookup and is what actually gets submitted. The patient
+  // self-booking form has no IC field at all: it auto-fills patient_id from "the
+  // current patient" - see loadCurrentPatient().
+  const isSelfBooking = !patientIcInput;
   let allDoctors = [];
   let currentPatientId = "";
 
@@ -85,10 +89,10 @@
   async function loadDoctors() {
     doctorSelect.innerHTML = '<option value="" selected disabled>Loading doctors...</option>';
     try {
-      const response = await fetch("/api/staff");
+      const response = await fetch("/api/staff/doctor");
       if (!response.ok) throw new Error("Request failed");
-      const staff = await response.json();
-      allDoctors = staff.filter((s) => s.role === "doctor" && s.is_active);
+      const doctors = await response.json();
+      allDoctors = doctors.filter((d) => d.status === "active");
 
       const specialties = [...new Set(allDoctors.map((d) => d.specialty))].sort();
       specialtySelect.innerHTML =
@@ -192,27 +196,128 @@
     slotError.classList.remove("d-block");
   }
 
+  // Reformats digits-only input into dash-separated groups as the user types,
+  // e.g. groupSizes [6, 2, 4] turns "900520101234" into "900520-10-1234". Skips
+  // reformatting if the field has any letters in it - the IC field also accepts
+  // passport numbers, which aren't digits-only and shouldn't be touched.
+  function autoDash(input, groupSizes) {
+    input.addEventListener("input", () => {
+      if (/[a-zA-Z]/.test(input.value)) {
+        input.value = input.value.replace(/-/g, "");
+        return;
+      }
+      const digits = input.value.replace(/\D/g, "");
+      const groups = [];
+      let start = 0;
+      for (const size of groupSizes) {
+        if (start >= digits.length) break;
+        groups.push(digits.slice(start, start + size));
+        start += size;
+      }
+      input.value = groups.join("-");
+    });
+  }
+
+  const IC_PATTERN = /^\d{6}-\d{2}-\d{4}$/;
+
   async function lookupPatient() {
-    const patientId = patientIdInput.value.trim();
+    const ic = patientIcInput.value.trim();
     patientFeedback.textContent = "";
     patientFeedback.classList.remove("text-danger", "text-success");
-    if (!patientId) return;
+    patientIcInput.classList.remove("is-invalid");
+    patientIdInput.value = "";
+    if (!ic) return;
+
+    if (!IC_PATTERN.test(ic)) {
+      patientIcInput.classList.add("is-invalid");
+      patientFeedback.textContent = "Enter a valid IC in the format xxxxxx-xx-xxxx.";
+      patientFeedback.classList.add("text-danger");
+      return;
+    }
 
     try {
-      const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`);
+      const response = await fetch(`/api/patients/by-ic/${encodeURIComponent(ic)}`);
       if (response.status === 404) {
-        patientFeedback.textContent = "No patient found with this ID.";
+        patientFeedback.textContent = "No patient found with this IC.";
         patientFeedback.classList.add("text-danger");
         return;
       }
       if (!response.ok) throw new Error("Request failed");
       const patient = await response.json();
-      patientFeedback.textContent = `✓ ${patient.full_name}`;
+      patientIdInput.value = patient.patient_id;
+      patientFeedback.textContent = `✓ ${patient.full_name} (${patient.patient_id})`;
       patientFeedback.classList.add("text-success");
     } catch (err) {
-      patientFeedback.textContent = "Unable to verify patient ID right now.";
+      patientFeedback.textContent = "Unable to verify this IC right now.";
       patientFeedback.classList.add("text-danger");
     }
+  }
+
+  // --- IC autocomplete ------------------------------------------------------
+  // Shows matching patients as soon as the first few IC digits are typed,
+  // instead of requiring the full formatted IC before anything resolves (the
+  // blur-triggered lookupPatient() above still runs as the final check).
+
+  let icSuggestDebounceTimer = null;
+
+  function hideIcSuggestions() {
+    patientIcSuggestions.classList.add("d-none");
+    patientIcSuggestions.innerHTML = "";
+  }
+
+  function pickIcSuggestion(patient) {
+    patientIcInput.value = patient.ic_or_passport;
+    patientIdInput.value = patient.patient_id;
+    patientIcInput.classList.remove("is-invalid");
+    patientFeedback.textContent = `✓ ${patient.full_name} (${patient.patient_id})`;
+    patientFeedback.classList.remove("text-danger");
+    patientFeedback.classList.add("text-success");
+    hideIcSuggestions();
+  }
+
+  async function searchIcSuggestions() {
+    const prefix = patientIcInput.value.replace(/[^a-zA-Z0-9]/g, "");
+    if (prefix.length < 3) {
+      hideIcSuggestions();
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/patients/search-ic?q=${encodeURIComponent(prefix)}`);
+      if (!response.ok) throw new Error("Request failed");
+      const matches = await response.json();
+
+      if (matches.length === 0) {
+        hideIcSuggestions();
+        return;
+      }
+
+      patientIcSuggestions.innerHTML = matches
+        .map(
+          (patient, i) =>
+            `<button type="button" class="list-group-item list-group-item-action" data-index="${i}">` +
+            `<strong>${patient.ic_or_passport}</strong> - ${patient.full_name}</button>`
+        )
+        .join("");
+      patientIcSuggestions.classList.remove("d-none");
+
+      patientIcSuggestions.querySelectorAll("button").forEach((btn, i) => {
+        // Without this, clicking a suggestion first blurs the input (mousedown
+        // moves focus to the button before click fires), which runs the
+        // blur-triggered lookupPatient() against the still-partial IC, flags it
+        // as invalid, and reflows the invalid-feedback text into view - shifting
+        // this dropdown out from under the click before it registers.
+        btn.addEventListener("mousedown", (event) => event.preventDefault());
+        btn.addEventListener("click", () => pickIcSuggestion(matches[i]));
+      });
+    } catch (err) {
+      hideIcSuggestions();
+    }
+  }
+
+  function onPatientIcInput() {
+    clearTimeout(icSuggestDebounceTimer);
+    icSuggestDebounceTimer = setTimeout(searchIcSuggestions, 250);
   }
 
   async function loadCurrentPatient() {
@@ -235,9 +340,11 @@
     clearFieldErrors();
 
     const slotMissing = !startTimeInput.value;
-    if (!form.checkValidity() || slotMissing) {
+    const patientUnresolved = !isSelfBooking && !patientIdInput.value;
+    if (!form.checkValidity() || slotMissing || patientUnresolved) {
       form.classList.add("was-validated");
       if (slotMissing) slotError.classList.add("d-block");
+      if (patientUnresolved) patientIcInput.classList.add("is-invalid");
       return;
     }
 
@@ -321,7 +428,14 @@
   if (isSelfBooking) {
     loadCurrentPatient();
   } else {
-    patientIdInput.addEventListener("blur", lookupPatient);
+    patientIcInput.addEventListener("blur", lookupPatient);
+    autoDash(patientIcInput, [6, 2, 4]);
+    patientIcInput.addEventListener("input", onPatientIcInput);
+    document.addEventListener("click", (event) => {
+      if (!patientIcInput.contains(event.target) && !patientIcSuggestions.contains(event.target)) {
+        hideIcSuggestions();
+      }
+    });
   }
   form.addEventListener("submit", handleSubmit);
   loadDoctors();

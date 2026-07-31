@@ -15,9 +15,13 @@ class Settings:
     """Application settings, sourced from environment variables with sane defaults."""
 
     app_name: str = "Agile Clinic Portal"
+    clinic_name: str = os.getenv("CLINIC_NAME", "Agile Clinic Portal")
+    clinic_address: str = os.getenv("CLINIC_ADDRESS", "")
+    clinic_phone: str = os.getenv("CLINIC_PHONE", "")
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./clinic.db")
     templates_dir: Path = BASE_DIR / "templates"
     static_dir: Path = BASE_DIR / "static"
+    attachments_dir: Path = BASE_DIR / "uploads" / "consultation_attachments"
 
     # SMTP is optional. When unset, welcome emails are only recorded in the in-memory
     # outbox (see core/email.py) instead of actually being sent.
@@ -27,6 +31,11 @@ class Settings:
     smtp_password: str | None = os.getenv("SMTP_PASSWORD")
     smtp_from: str | None = os.getenv("SMTP_FROM")
     smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
+
+    # Signs the login session cookie. Falls back to a fixed dev value so local
+    # runs and tests work with no .env entry - set a real SECRET_KEY in
+    # production.
+    secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 
 settings = Settings()

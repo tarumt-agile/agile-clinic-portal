@@ -23,7 +23,7 @@
         <div class="col-md-4">
           <label for="date_of_birth" class="form-label">Date of birth *</label>
           <input type="date" class="form-control" id="date_of_birth" name="date_of_birth" required>
-          <div class="invalid-feedback">A valid date of birth (not in the future) is required.</div>
+          <div class="invalid-feedback">Enter a date of birth that is not in the future and not more than 100 years ago.</div>
         </div>
 
         <div class="col-md-4">
@@ -41,19 +41,20 @@
           <label for="phone_number" class="form-label">Phone number *</label>
           <input type="tel" class="form-control" id="phone_number" name="phone_number" required
                  placeholder="e.g. 012-3456789" pattern="^\+?\d[\d\s\-]{6,19}$">
-          <div class="invalid-feedback">Enter a valid phone number (7-20 digits).</div>
+          <div class="invalid-feedback">Enter a valid phone number (7-20 characters).</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="ic_or_passport" class="form-label">IC / Passport number *</label>
+          <input type="text" class="form-control" id="ic_or_passport" name="ic_or_passport" required
+                 placeholder="e.g. xxxxxx-xx-xxxx">
+          <div id="ic-or-passport-error" class="invalid-feedback">Enter a valid IC number matching the date of birth and gender, or a passport number.</div>
         </div>
 
         <div class="col-md-4">
           <label for="email" class="form-label">Email</label>
           <input type="email" class="form-control" id="email" name="email" placeholder="optional">
           <div class="invalid-feedback">Enter a valid email address.</div>
-        </div>
-
-        <div class="col-md-6">
-          <label for="ic_or_passport" class="form-label">IC / Passport number *</label>
-          <input type="text" class="form-control" id="ic_or_passport" name="ic_or_passport" required minlength="5" maxlength="30">
-          <div class="invalid-feedback">IC / passport number is required.</div>
         </div>
 
         <div class="col-md-6">
@@ -85,6 +86,8 @@
           <dd class="col-sm-8"><span id="confirm-patient-id" class="fw-bold"></span></dd>
           <dt class="col-sm-4">Full name</dt>
           <dd class="col-sm-8" id="confirm-full-name"></dd>
+          <dt class="col-sm-4">IC number</dt>
+          <dd class="col-sm-8"><span id="confirm-ic" class="fw-bold"></span></dd>
           <dt class="col-sm-4">Phone</dt>
           <dd class="col-sm-8" id="confirm-phone"></dd>
         </dl>
@@ -98,6 +101,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/patient-form.js"></script>
-<script src="/static/js/patients.js"></script>
+<script src="/static/js/patient-form.js?v=1"></script>
+<script src="/static/js/patients.js?v=1"></script>
 {% endblock %}

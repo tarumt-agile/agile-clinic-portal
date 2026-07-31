@@ -1,119 +1,401 @@
 (function () {
   "use strict";
 
-  const tableBody = document.getElementById("staff-table-body");
-  if (!tableBody) return;
+  const tableBody = document.getElementById(
+    "staff-table-body"
+  );
 
-  const alertBox = document.getElementById("list-alert");
-  const deactivateModalEl = document.getElementById("deactivate-modal");
-  const deactivateModal = window.bootstrap ? new bootstrap.Modal(deactivateModalEl) : null;
-  const deactivateTargetName = document.getElementById("deactivate-target-name");
-  const confirmDeactivateBtn = document.getElementById("confirm-deactivate-btn");
-
-  let pendingStaffId = null;
-
-  function escapeHtml(value) {
-    const div = document.createElement("div");
-    div.textContent = value ?? "";
-    return div.innerHTML;
+  if (!tableBody) {
+    return;
   }
 
-  function showAlert(message) {
-    alertBox.textContent = message;
-    alertBox.classList.remove("d-none");
+  const mobileList = document.getElementById(
+    "staff-mobile-list"
+  );
+
+  const searchInput = document.getElementById(
+    "staff-search"
+  );
+
+  const roleFilter = document.getElementById(
+    "role-filter"
+  );
+
+  const specialtyFilter = document.getElementById(
+    "specialty-filter"
+  );
+
+  const statusFilter = document.getElementById(
+    "staff-status-filter"
+  );
+
+  const clearButton = document.getElementById(
+    "clear-staff-filters"
+  );
+
+  const alertBox = document.getElementById(
+    "staff-list-alert"
+  );
+
+  const roleLabels = {
+    admin: "Administration",
+    doctor: "Doctor",
+    nurse: "Nurse",
+    receptionist: "Receptionist"
+  };
+
+  let staffAccounts = [];
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function formatRole(role) {
+    return (
+      roleLabels[role] ||
+      role ||
+      "Unknown"
+    );
+  }
+
+  function getRoleClass(role) {
+    const validRoles = [
+      "admin",
+      "doctor",
+      "nurse",
+      "receptionist"
+    ];
+
+    if (!validRoles.includes(role)) {
+      return "";
+    }
+
+    return "staff-role-" + role;
+  }
+
+  function createStatusBadge(staff) {
+    const statusClass = staff.is_active
+      ? "staff-status-active"
+      : "staff-status-inactive";
+
+    const statusText = staff.is_active
+      ? "Active"
+      : "Inactive";
+
+    return `
+      <span
+        class="staff-status-badge ${statusClass}"
+      >
+        ${statusText}
+      </span>
+    `;
+  }
+
+  function createViewButton(staff) {
+    const staffId = encodeURIComponent(
+      staff.staff_id
+    );
+
+    return `
+      <a
+        class="btn btn-sm btn-outline-primary
+          staff-view-button"
+        href="/staff/${staffId}"
+      >
+        View
+      </a>
+    `;
+  }
+
+  function updateSummary() {
+    const activeCount = staffAccounts.filter(
+      function (staff) {
+        return staff.is_active;
+      }
+    ).length;
+
+    document.getElementById(
+      "total-staff"
+    ).textContent = String(
+      staffAccounts.length
+    );
+
+    document.getElementById(
+      "active-staff"
+    ).textContent = String(
+      activeCount
+    );
+
+    document.getElementById(
+      "inactive-staff"
+    ).textContent = String(
+      staffAccounts.length - activeCount
+    );
+
+    document.getElementById(
+      "all-staff-count"
+    ).textContent = String(
+      staffAccounts.length
+    );
+  }
+
+  function getFilteredStaff() {
+    const searchTerm = searchInput.value
+      .trim()
+      .toLowerCase();
+
+    const selectedRole = roleFilter.value;
+    const selectedSpecialty = specialtyFilter.value;
+    const selectedStatus =
+      statusFilter.value;
+
+    return staffAccounts.filter(
+      function (staff) {
+        const searchableText = [
+          staff.staff_id,
+          staff.full_name,
+          staff.email,
+          staff.role
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        const matchesSearch =
+          !searchTerm ||
+          searchableText.includes(
+            searchTerm
+          );
+
+        const matchesRole =
+          !selectedRole ||
+          staff.role === selectedRole;
+
+        const staffStatus = staff.is_active
+          ? "active"
+          : "inactive";
+
+        const matchesStatus =
+          !selectedStatus ||
+          staffStatus === selectedStatus;
+
+        const matchesSpecialty =
+          !selectedSpecialty ||
+          staff.specialty === selectedSpecialty;
+
+        return (
+          matchesSearch &&
+          matchesRole &&
+          matchesSpecialty &&
+          matchesStatus
+        );
+      }
+    );
+  }
+
+  function renderStaff() {
+    const filteredStaff =
+      getFilteredStaff();
+
+    document.getElementById(
+      "visible-staff-count"
+    ).textContent = String(
+      filteredStaff.length
+    );
+
+    if (filteredStaff.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td
+            colspan="5"
+            class="staff-table-message"
+          >
+            No staff accounts match the
+            selected filters.
+          </td>
+        </tr>
+      `;
+
+      mobileList.innerHTML = `
+        <p class="staff-table-message">
+          No staff accounts match the
+          selected filters.
+        </p>
+      `;
+
+      return;
+    }
+
+    tableBody.innerHTML = filteredStaff
+      .map(function (staff) {
+        return `
+          <tr>
+            <td>
+              <span class="staff-id">
+                ${escapeHtml(staff.staff_id)}
+              </span>
+            </td>
+
+            <td>
+              <div class="staff-member-cell">
+                <strong>
+                  ${escapeHtml(staff.full_name)}
+                </strong>
+
+                <span>
+                  ${escapeHtml(staff.email)}
+                </span>
+              </div>
+            </td>
+
+            <td>
+              <span
+                class="staff-role-badge
+                  ${getRoleClass(staff.role)}"
+              >
+                ${escapeHtml(
+                  formatRole(staff.role)
+                )}
+              </span>
+            </td>
+
+            <td>
+              ${createStatusBadge(staff)}
+            </td>
+
+            <td class="staff-action-cell">
+              ${createViewButton(staff)}
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    mobileList.innerHTML = filteredStaff
+      .map(function (staff) {
+        return `
+          <article class="staff-mobile-card">
+            <div
+              class="staff-mobile-card-header"
+            >
+              <div>
+                <h3>
+                  ${escapeHtml(staff.full_name)}
+                </h3>
+
+                <p
+                  class="staff-mobile-card-id"
+                >
+                  ${escapeHtml(staff.staff_id)}
+                </p>
+              </div>
+
+              ${createStatusBadge(staff)}
+            </div>
+
+            <p
+              class="staff-mobile-card-email"
+            >
+              ${escapeHtml(staff.email)}
+            </p>
+
+            <div
+              class="staff-mobile-card-badges"
+            >
+              <span
+                class="staff-role-badge
+                  ${getRoleClass(staff.role)}"
+              >
+                ${escapeHtml(
+                  formatRole(staff.role)
+                )}
+              </span>
+            </div>
+
+            <div
+              class="staff-mobile-card-action"
+            >
+              ${createViewButton(staff)}
+            </div>
+          </article>
+        `;
+      })
+      .join("");
   }
 
   async function loadStaff() {
     alertBox.classList.add("d-none");
-    tableBody.innerHTML =
-      '<tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr>';
 
     try {
-      const response = await fetch("/api/staff");
-      if (!response.ok) throw new Error("Request failed");
-      renderTable(await response.json());
-    } catch (err) {
-      tableBody.innerHTML = "";
-      showAlert("Unable to load staff. Please try again.");
+      const response = await fetch(
+        "/api/staff"
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          "Staff accounts could not be loaded."
+        );
+      }
+
+      const payload = await response.json();
+
+      staffAccounts = Array.isArray(payload)
+        ? payload
+        : [];
+
+      updateSummary();
+      renderStaff();
+
+    } catch (error) {
+      staffAccounts = [];
+
+      updateSummary();
+      renderStaff();
+
+      alertBox.textContent =
+        error.message ||
+        "Unable to connect to the server.";
+
+      alertBox.classList.remove("d-none");
     }
   }
 
-  function formatSpecialty(specialty) {
-    if (!specialty) return "-";
-    return specialty
-      .split("_")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  }
+  searchInput.addEventListener(
+    "input",
+    renderStaff
+  );
 
-  function renderTable(items) {
-    if (items.length === 0) {
-      tableBody.innerHTML =
-        '<tr><td colspan="7" class="text-center text-muted py-4">No staff accounts yet.</td></tr>';
-      return;
+  roleFilter.addEventListener(
+    "change",
+    renderStaff
+  );
+
+  specialtyFilter.addEventListener(
+    "change",
+    renderStaff
+  );
+
+  statusFilter.addEventListener(
+    "change",
+    renderStaff
+  );
+
+  clearButton.addEventListener(
+    "click",
+    function () {
+      searchInput.value = "";
+      roleFilter.value = "";
+      specialtyFilter.value = "";
+      statusFilter.value = "";
+
+      renderStaff();
+      searchInput.focus();
     }
-
-    tableBody.innerHTML = items
-      .map((s) => {
-        const statusBadge = s.is_active
-          ? '<span class="badge bg-success">Active</span>'
-          : '<span class="badge bg-secondary">Inactive</span>';
-        const actionBtn = s.is_active
-          ? `<button type="button" class="btn btn-sm btn-outline-danger deactivate-btn" data-staff-id="${escapeHtml(s.staff_id)}" data-staff-name="${escapeHtml(s.full_name)}">Deactivate</button>`
-          : `<button type="button" class="btn btn-sm btn-outline-success activate-btn" data-staff-id="${escapeHtml(s.staff_id)}">Activate</button>`;
-
-        return `
-      <tr>
-        <td class="fw-semibold">${escapeHtml(s.staff_id)}</td>
-        <td>${escapeHtml(s.full_name)}</td>
-        <td>${escapeHtml(s.email)}</td>
-        <td class="text-capitalize">${escapeHtml(s.role)}</td>
-        <td>${escapeHtml(formatSpecialty(s.specialty))}</td>
-        <td>${statusBadge}</td>
-        <td>${actionBtn}</td>
-      </tr>`;
-      })
-      .join("");
-
-    tableBody.querySelectorAll(".deactivate-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        pendingStaffId = btn.dataset.staffId;
-        deactivateTargetName.textContent = btn.dataset.staffName;
-        if (deactivateModal) {
-          deactivateModal.show();
-        } else if (window.confirm(`Deactivate ${btn.dataset.staffName}?`)) {
-          setStaffStatus(pendingStaffId, false);
-        }
-      });
-    });
-
-    tableBody.querySelectorAll(".activate-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        setStaffStatus(btn.dataset.staffId, true);
-      });
-    });
-  }
-
-  async function setStaffStatus(staffId, isActive) {
-    alertBox.classList.add("d-none");
-    try {
-      const response = await fetch(`/api/staff/${encodeURIComponent(staffId)}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_active: isActive }),
-      });
-      if (!response.ok) throw new Error("Request failed");
-      await loadStaff();
-    } catch (err) {
-      showAlert("Unable to update this staff account. Please try again.");
-    }
-  }
-
-  confirmDeactivateBtn.addEventListener("click", () => {
-    if (deactivateModal) deactivateModal.hide();
-    if (pendingStaffId) setStaffStatus(pendingStaffId, false);
-    pendingStaffId = null;
-  });
+  );
 
   loadStaff();
 })();

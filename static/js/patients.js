@@ -7,6 +7,58 @@
   const { showAlert, hideAlert, clearFieldErrors, applyValidationErrors, collectPayload } =
     window.PatientForm;
 
+  const dobInput = document.getElementById("date_of_birth");
+  const genderInput = document.getElementById("gender");
+  const icInput = document.getElementById("ic_or_passport");
+  const phoneInput = document.getElementById("phone_number");
+
+  const IC_PATTERN = /^\d{6}-\d{2}-\d{4}$/;
+
+  function checkIcConsistency() {
+    const ic = icInput.value.trim();
+    icInput.classList.remove("is-invalid");
+    document.getElementById("ic-or-passport-error").textContent = "";
+    if (!ic) return;
+
+    if (!IC_PATTERN.test(ic)) {
+      if (/^[A-Za-z]/.test(ic)) return; // passport-shaped - nothing to cross-check
+      icInput.classList.add("is-invalid");
+      document.getElementById("ic-or-passport-error").textContent =
+        "Enter a valid IC number (xxxxxx-xx-xxxx) or passport number.";
+      return;
+    }
+
+    const dob = dobInput.value; // "YYYY-MM-DD"
+    if (dob) {
+      const dobDigits = dob.slice(2, 4) + dob.slice(5, 7) + dob.slice(8, 10);
+      if (ic.slice(0, 6) !== dobDigits) {
+        icInput.classList.add("is-invalid");
+        document.getElementById("ic-or-passport-error").textContent =
+          "This IC number does not match the date of birth.";
+        return;
+      }
+    }
+
+    const gender = genderInput.value;
+    const lastDigit = Number(ic.slice(-1));
+    if (gender === "male" && lastDigit % 2 === 0) {
+      icInput.classList.add("is-invalid");
+      document.getElementById("ic-or-passport-error").textContent =
+        "This IC number's last digit does not match a male patient.";
+    } else if (gender === "female" && lastDigit % 2 !== 0) {
+      icInput.classList.add("is-invalid");
+      document.getElementById("ic-or-passport-error").textContent =
+        "This IC number's last digit does not match a female patient.";
+    }
+  }
+
+  window.PatientForm.autoDash(icInput, [6, 2, 4]);
+  window.PatientForm.autoDash(phoneInput, [3, 7]);
+  window.PatientForm.setDobRange(dobInput);
+  icInput.addEventListener("input", checkIcConsistency);
+  dobInput.addEventListener("change", checkIcConsistency);
+  genderInput.addEventListener("change", checkIcConsistency);
+
   const alertBox = document.getElementById("form-alert");
   const submitBtn = document.getElementById("submit-btn");
   const confirmationModalEl = document.getElementById("confirmation-modal");
@@ -16,8 +68,9 @@
     event.preventDefault();
     hideAlert(alertBox);
     clearFieldErrors(form);
+    checkIcConsistency();
 
-    if (!form.checkValidity()) {
+    if (!form.checkValidity() || icInput.classList.contains("is-invalid")) {
       form.classList.add("was-validated");
       return;
     }
@@ -40,8 +93,9 @@
 
       if (response.status === 422) {
         const body = await response.json();
-        if (!applyValidationErrors(form, body)) {
-          showAlert(alertBox, "Please check the form for errors.");
+        const { hadFieldError, message } = applyValidationErrors(form, body);
+        if (!hadFieldError) {
+          showAlert(alertBox, message || "Please check the form for errors.");
         }
         return;
       }
@@ -63,6 +117,7 @@
   function showConfirmation(patient) {
     document.getElementById("confirm-patient-id").textContent = patient.patient_id;
     document.getElementById("confirm-full-name").textContent = patient.full_name;
+    document.getElementById("confirm-ic").textContent = patient.ic_or_passport;
     document.getElementById("confirm-phone").textContent = patient.phone_number;
     if (confirmationModal) {
       confirmationModal.show();

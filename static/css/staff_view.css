@@ -1,0 +1,218 @@
+.staff-detail-page {
+  max-width: 1050px;
+  margin: 0 auto;
+}
+
+.staff-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.staff-back-link {
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.staff-detail-breadcrumb {
+  margin: 0.5rem 0 0.2rem;
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+.staff-detail-header h1 {
+  margin: 0;
+}
+
+.staff-profile-card,
+.staff-detail-card,
+.staff-edit-card {
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 0.8rem;
+  box-shadow:
+    0 0.25rem 1rem
+    rgba(0, 0, 0, 0.04);
+}
+
+.staff-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.4rem;
+  margin-bottom: 1.2rem;
+}
+
+.staff-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #e7f1ff;
+  color: #0d6efd;
+  font-weight: 800;
+  font-size: 1.25rem;
+}
+
+.staff-profile-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.staff-profile-title-row h2 {
+  margin: 0;
+}
+
+.staff-profile-card p {
+  margin: 0.2rem 0;
+  color: #6c757d;
+}
+
+.staff-status-badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.staff-status-badge.active {
+  background: #d1e7dd;
+  color: #146c43;
+}
+
+.staff-status-badge.inactive {
+  background: #e2e3e5;
+  color: #5c636a;
+}
+
+.staff-detail-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+}
+
+.staff-detail-card {
+  padding: 1.3rem;
+}
+
+.staff-detail-card h2,
+.staff-edit-card h2 {
+  font-size: 1.15rem;
+  margin: 0 0 1rem;
+}
+
+.staff-detail-card dl {
+  margin: 0;
+}
+
+.staff-detail-card dl div {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom:
+    1px solid #edf0f2;
+}
+
+.staff-detail-card dl div:last-child {
+  border-bottom: 0;
+}
+
+.staff-detail-card dt {
+  color: #6c757d;
+  font-weight: 600;
+}
+
+.staff-detail-card dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.staff-edit-card {
+  padding: 1.4rem;
+  margin-top: 1.2rem;
+}
+
+.staff-edit-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.staff-edit-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-edit-wide {
+  grid-column: 1 / -1;
+}
+
+.staff-edit-field label {
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.staff-edit-field input,
+.staff-edit-field select {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 0.4rem;
+}
+
+.staff-doctor-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.staff-edit-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.2rem;
+}
+
+.staff-field-error {
+  min-height: 1.2rem;
+  color: #dc3545;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.is-invalid {
+  border-color: #dc3545 !important;
+}
+
+.is-valid {
+  border-color: #198754 !important;
+}
+
+@media (max-width: 760px) {
+  .staff-detail-header {
+    flex-direction: column;
+  }
+
+  .staff-detail-grid,
+  .staff-edit-grid,
+  .staff-doctor-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-detail-card dl div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .staff-edit-wide {
+    grid-column: auto;
+  }
+}
