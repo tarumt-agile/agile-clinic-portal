@@ -36,9 +36,17 @@ class PatientCreate(BaseModel):
 
     @field_validator("date_of_birth")
     @classmethod
-    def date_of_birth_not_in_future(cls, v: dt.date) -> dt.date:
-        if v > dt.date.today():
+    def date_of_birth_in_valid_range(cls, v: dt.date) -> dt.date:
+        today = dt.date.today()
+        if v > today:
             raise ValueError("Date of birth cannot be in the future")
+        try:
+            earliest = today.replace(year=today.year - 100)
+        except ValueError:
+            # today is Feb 29 and (today.year - 100) isn't a leap year.
+            earliest = today.replace(year=today.year - 100, day=28)
+        if v < earliest:
+            raise ValueError("Date of birth cannot be more than 100 years ago")
         return v
 
     @field_validator("phone_number")
@@ -46,7 +54,7 @@ class PatientCreate(BaseModel):
     def phone_number_is_valid(cls, v: str) -> str:
         v = v.strip()
         if not _PHONE_RE.fullmatch(v):
-            raise ValueError("Phone number must be 7-20 digits, optionally starting with '+'")
+            raise ValueError("Phone number must be 7-20 characters, optionally starting with '+'")
         return v
 
     @field_validator("address")

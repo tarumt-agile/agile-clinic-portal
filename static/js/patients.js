@@ -53,7 +53,8 @@
   }
 
   window.PatientForm.autoDash(icInput, [6, 2, 4]);
-  window.PatientForm.autoDash(phoneInput, [3, 3, 4]);
+  window.PatientForm.autoDash(phoneInput, [3, 7]);
+  window.PatientForm.setDobRange(dobInput);
   icInput.addEventListener("input", checkIcConsistency);
   dobInput.addEventListener("change", checkIcConsistency);
   genderInput.addEventListener("change", checkIcConsistency);
@@ -67,8 +68,9 @@
     event.preventDefault();
     hideAlert(alertBox);
     clearFieldErrors(form);
+    checkIcConsistency();
 
-    if (!form.checkValidity()) {
+    if (!form.checkValidity() || icInput.classList.contains("is-invalid")) {
       form.classList.add("was-validated");
       return;
     }
@@ -91,8 +93,9 @@
 
       if (response.status === 422) {
         const body = await response.json();
-        if (!applyValidationErrors(form, body)) {
-          showAlert(alertBox, "Please check the form for errors.");
+        const { hadFieldError, message } = applyValidationErrors(form, body);
+        if (!hadFieldError) {
+          showAlert(alertBox, message || "Please check the form for errors.");
         }
         return;
       }

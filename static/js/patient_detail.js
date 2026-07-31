@@ -18,7 +18,9 @@
   const successModalEl = document.getElementById("success-modal");
   const successModal = window.bootstrap ? new bootstrap.Modal(successModalEl) : null;
   const editPhoneInput = document.getElementById("edit-phone_number");
-  if (editPhoneInput) window.PatientForm.autoDash(editPhoneInput, [3, 3, 4]);
+  if (editPhoneInput) window.PatientForm.autoDash(editPhoneInput, [3, 7]);
+  const editDobInput = document.getElementById("edit-date_of_birth");
+  if (editDobInput) window.PatientForm.setDobRange(editDobInput);
 
   let currentPatient = null;
 
@@ -94,8 +96,9 @@
 
       if (response.status === 422) {
         const body = await response.json();
-        if (!applyValidationErrors(editForm, body)) {
-          showAlert(alertBox, "Please check the form for errors.");
+        const { hadFieldError, message } = applyValidationErrors(editForm, body);
+        if (!hadFieldError) {
+          showAlert(alertBox, message || "Please check the form for errors.");
         }
         return;
       }
