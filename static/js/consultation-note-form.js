@@ -316,7 +316,9 @@
     window.location.href = `/patients/${encodeURIComponent(patientId)}`;
   });
   cancelBtn.addEventListener("click", () => {
-    window.location.href = `/patients/${encodeURIComponent(patientId)}`;
+    // Same destination as the "Back" link above - wherever this note was
+    // opened from, not the patient details page.
+    window.location.href = backLink.href;
   });
   addDiagnosisBtn.addEventListener("click", () => addDiagnosisRow());
   form.addEventListener("submit", handleSubmit);
