@@ -75,6 +75,14 @@ class ConsultationNoteCreate(BaseModel):
         min_length=1,
     )
 
+    # The appointment this consultation was started from, if any - lets ending
+    # the consultation mark that appointment completed instead of leaving it
+    # "scheduled" forever. Optional since not every consultation has one.
+    appointment_reference: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+
     notes: str = Field(
         min_length=2,
     )

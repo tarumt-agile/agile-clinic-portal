@@ -6,6 +6,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.appointments.models import Appointment
+from agile_ci_demo.appointments.service import get_appointment_by_reference
 from agile_ci_demo.patients.service import get_patient_by_patient_id
 from agile_ci_demo.consultations.models import ConsultationNote, Diagnosis
 from agile_ci_demo.consultations.schemas import ConsultationNoteCreate
@@ -98,10 +100,20 @@ def create_consultation_note(
     if patient is None:
         raise PatientNotFoundError(f"No patient found with patient_id '{data.patient_id}'")
 
+    # Best-effort link back to the appointment this was started from, so ending
+    # the consultation can mark that appointment completed. An unknown/missing
+    # reference just means no link - it never blocks documenting the visit.
+    appointment_id = None
+    if data.appointment_reference:
+        appointment = get_appointment_by_reference(db, data.appointment_reference)
+        if appointment is not None:
+            appointment_id = appointment.id
+
     now = dt.datetime.utcnow()
     note = ConsultationNote(
         patient_id=patient.id,
         doctor_id=doctor.id,
+        appointment_id=appointment_id,
         visit_date=now,
         notes=data.notes,
         started_at=now,
@@ -140,6 +152,12 @@ def end_consultation(db: Session, record_id: str, doctor: Staff) -> Consultation
 
     note.ended_at = dt.datetime.utcnow()
     note.status = "completed"
+
+    if note.appointment_id is not None:
+        appointment = db.get(Appointment, note.appointment_id)
+        if appointment is not None and appointment.status == "scheduled":
+            appointment.status = "completed"
+
     db.commit()
     db.refresh(note)
     return note

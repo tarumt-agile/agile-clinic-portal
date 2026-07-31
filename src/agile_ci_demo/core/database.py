@@ -214,6 +214,13 @@ def migrate_sqlite_database() -> None:
                         ADD COLUMN status VARCHAR(20)
                         """))
 
+            if "appointment_id" not in note_columns:
+                connection.execute(text("""
+                        ALTER TABLE consultation_notes
+                        ADD COLUMN appointment_id INTEGER
+                        REFERENCES appointments(id)
+                        """))
+
             # Older notes were fully written up in one step under the old flow -
             # treat them as already completed rather than in_progress, since
             # there's no real start/end to retroactively assign.

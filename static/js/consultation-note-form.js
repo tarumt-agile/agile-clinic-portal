@@ -5,6 +5,9 @@
   if (!root) return;
 
   const patientId = root.dataset.patientId;
+  const appointmentReference = new URLSearchParams(window.location.search).get(
+    "appointment_reference"
+  );
   const form = document.getElementById("record-form");
   const alertBox = document.getElementById("form-alert");
   const diagnosesAlert = document.getElementById("diagnoses-alert");
@@ -177,6 +180,7 @@
   function collectPayload() {
     return {
       patient_id: patientId,
+      appointment_reference: appointmentReference || null,
       notes: document.getElementById("notes").value.trim(),
       diagnoses: collectDiagnoses(),
     };

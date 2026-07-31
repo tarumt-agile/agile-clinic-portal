@@ -24,6 +24,11 @@ class ConsultationNote(Base):
 
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     doctor_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), index=True)
+    # The appointment this consultation was started from, if any (nullable - not
+    # every consultation necessarily originates from a scheduled appointment).
+    appointment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("appointments.id"), nullable=True, index=True
+    )
 
     visit_date: Mapped[dt.datetime] = mapped_column(
         DateTime, default=dt.datetime.utcnow, index=True

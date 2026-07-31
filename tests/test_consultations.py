@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import re
 from collections.abc import Generator
 
@@ -13,9 +14,12 @@ from sqlalchemy.pool import StaticPool
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
+from agile_ci_demo.appointments import models as _appointments_models  # noqa: F401
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+
+TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -114,6 +118,21 @@ def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
     assert login.status_code == 200, login.json()
 
     return str(body["staff_id"])
+
+
+def _book_appointment(client: TestClient, patient_id: str, doctor_id: str, **overrides: object) -> str:
+    """Book an appointment and return its reference_number."""
+    payload: dict[str, object] = {
+        "patient_id": patient_id,
+        "doctor_id": doctor_id,
+        "appointment_date": TOMORROW,
+        "start_time": "10:00",
+        "reason": "Fever and cough",
+    }
+    payload.update(overrides)
+    r = client.post("/api/appointments", json=payload)
+    assert r.status_code == 201, r.json()
+    return str(r.json()["reference_number"])
 
 
 def valid_record_payload(patient_id: str, **overrides: object) -> dict[str, object]:
@@ -470,6 +489,59 @@ def test_end_consultation_by_a_different_doctor_returns_403(client: TestClient) 
     )
     r = client.patch(f"/api/consultations/{created['record_id']}/end")
     assert r.status_code == 403
+
+
+def test_ending_a_consultation_marks_its_appointment_completed(client: TestClient) -> None:
+    """
+    Scenario: The appointment schedule reflects a finished consultation
+      Given an appointment and a consultation started from it
+      When I end that consultation
+      Then the appointment's status becomes "completed", not left "scheduled"
+    """
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    appointment_reference = _book_appointment(client, patient_id, doctor_id)
+
+    created = client.post(
+        "/api/consultations",
+        json=valid_record_payload(patient_id, appointment_reference=appointment_reference),
+    ).json()
+
+    # Still scheduled while the consultation is only in_progress.
+    schedule = client.get(f"/api/appointments/schedule?date={TOMORROW}").json()
+    appt = next(a for a in schedule["appointments"] if a["reference_number"] == appointment_reference)
+    assert appt["status"] == "scheduled"
+
+    client.patch(f"/api/consultations/{created['record_id']}/end")
+
+    schedule = client.get(f"/api/appointments/schedule?date={TOMORROW}").json()
+    appt = next(a for a in schedule["appointments"] if a["reference_number"] == appointment_reference)
+    assert appt["status"] == "completed"
+
+
+def test_create_with_unknown_appointment_reference_is_ignored(client: TestClient) -> None:
+    """An unknown appointment_reference doesn't block documenting the visit - it's a
+    best-effort link, not a required one."""
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+
+    r = client.post(
+        "/api/consultations",
+        json=valid_record_payload(patient_id, appointment_reference="A99999"),
+    )
+    assert r.status_code == 201
+
+
+def test_ending_a_consultation_with_no_linked_appointment_still_works(client: TestClient) -> None:
+    """A consultation created without an appointment_reference has nothing to sync,
+    but ending it must not error."""
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    r = client.patch(f"/api/consultations/{created['record_id']}/end")
+    assert r.status_code == 200
+    assert r.json()["status"] == "completed"
 
 
 def test_end_consultation_requires_login(client: TestClient) -> None:

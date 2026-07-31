@@ -10,6 +10,7 @@
 
   const STATUS_BADGE = {
     scheduled: "text-bg-primary",
+    completed: "text-bg-success",
     cancelled: "text-bg-secondary",
   };
 
@@ -72,7 +73,7 @@
         const badgeClass = STATUS_BADGE[a.status] || "text-bg-light";
         const action =
           a.status === "scheduled"
-            ? `<a href="/consultations/new?patient_id=${encodeURIComponent(a.patient_id)}" class="btn btn-sm btn-primary">Start Consultation</a>`
+            ? `<a href="/consultations/new?patient_id=${encodeURIComponent(a.patient_id)}&appointment_reference=${encodeURIComponent(a.reference_number)}" class="btn btn-sm btn-primary">Start Consultation</a>`
             : "-";
         return `
       <tr>
