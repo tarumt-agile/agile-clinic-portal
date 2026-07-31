@@ -6,11 +6,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import get_patient_by_patient_id
 from agile_ci_demo.consultations.models import ConsultationNote, Diagnosis
 from agile_ci_demo.consultations.schemas import ConsultationNoteCreate
-from agile_ci_demo.staff.service import get_staff_by_staff_id
+from agile_ci_demo.staff.models import Staff
 
 # A small curated reference list of common ICD-10 codes, used to power the diagnosis
 # autocomplete search. Not exhaustive - a teaching-app stand-in for a real ICD-10 API.
@@ -56,16 +55,20 @@ class PatientNotFoundError(Exception):
     """Raised when a patient_id does not match any stored patient."""
 
 
-class DoctorNotFoundError(Exception):
-    """Raised when a staff_id does not match an active doctor account."""
-
-
 class ConsultationNoteNotFoundError(Exception):
     """Raised when a record_id does not match any stored consultation note."""
 
 
 class ConsultationNoteConflictError(Exception):
     """Raised when a consultation note cannot be created due to a database conflict."""
+
+
+class ConsultationAlreadyEndedError(Exception):
+    """Raised when trying to end a consultation that's already completed."""
+
+
+class NotYourConsultationError(Exception):
+    """Raised when a doctor tries to end a consultation that belongs to another doctor."""
 
 
 def search_icd10_codes(query: str, limit: int = 10) -> list[dict[str, str]]:
@@ -81,21 +84,28 @@ def search_icd10_codes(query: str, limit: int = 10) -> list[dict[str, str]]:
     return matches[:limit]
 
 
-def create_consultation_note(db: Session, data: ConsultationNoteCreate) -> ConsultationNote:
-    """Document a consultation with its diagnoses and assign it a record_id (e.g. R00001)."""
+def create_consultation_note(
+    db: Session, data: ConsultationNoteCreate, doctor: Staff
+) -> ConsultationNote:
+    """Document a consultation with its diagnoses and assign it a record_id (e.g. R00001).
+
+    The doctor is always the logged-in session (require_role(Role.DOCTOR) on the
+    endpoint already guarantees it's a real, active doctor) - saving the note is
+    the "start" of the consultation; ended_at/status are finalised later by
+    end_consultation.
+    """
     patient = get_patient_by_patient_id(db, data.patient_id)
     if patient is None:
         raise PatientNotFoundError(f"No patient found with patient_id '{data.patient_id}'")
 
-    doctor = get_staff_by_staff_id(db, data.doctor_id)
-    if doctor is None or doctor.role != Role.DOCTOR.value:
-        raise DoctorNotFoundError(f"No doctor found with staff_id '{data.doctor_id}'")
-
+    now = dt.datetime.utcnow()
     note = ConsultationNote(
         patient_id=patient.id,
         doctor_id=doctor.id,
-        visit_date=dt.datetime.utcnow(),
+        visit_date=now,
         notes=data.notes,
+        started_at=now,
+        status="in_progress",
         diagnoses=[
             Diagnosis(icd10_code=d.icd10_code, description=d.description) for d in data.diagnoses
         ],
@@ -112,6 +122,25 @@ def create_consultation_note(db: Session, data: ConsultationNoteCreate) -> Consu
             "Consultation note could not be created due to a conflict"
         ) from exc
 
+    db.refresh(note)
+    return note
+
+
+def end_consultation(db: Session, record_id: str, doctor: Staff) -> ConsultationNote:
+    """Mark a consultation as ended - only the doctor who documented it can end it."""
+    note = get_consultation_note_by_record_id(db, record_id)
+    if note is None:
+        raise ConsultationNoteNotFoundError(f"No consultation note found with record_id '{record_id}'")
+
+    if note.doctor_id != doctor.id:
+        raise NotYourConsultationError("You can only end your own consultations")
+
+    if note.status == "completed":
+        raise ConsultationAlreadyEndedError("This consultation has already ended")
+
+    note.ended_at = dt.datetime.utcnow()
+    note.status = "completed"
+    db.commit()
     db.refresh(note)
     return note
 

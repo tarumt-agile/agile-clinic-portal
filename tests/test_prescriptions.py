@@ -235,12 +235,16 @@ def find_medication_id(
 def prepare_consultation(client: TestClient) -> PreparedConsultation:
     patient_id = register_patient(client)
     doctor_id, email, password = register_doctor(client)
+
+    # Creating a consultation is doctor-only and the doctor is always taken from
+    # the session, so login must happen before create_consultation, not after.
+    login_doctor(client, email, password)
+
     record = create_consultation(client, patient_id, doctor_id)
     diagnoses = record["diagnoses"]
     assert isinstance(diagnoses, list)
     diagnosis_id = int(diagnoses[0]["id"])
 
-    login_doctor(client, email, password)
     medication_id = find_medication_id(
         client,
         "Amoxicillin",

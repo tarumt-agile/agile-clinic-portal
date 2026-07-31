@@ -30,6 +30,11 @@ class ConsultationNote(Base):
     )
     notes: Mapped[str] = mapped_column(Text)
 
+    started_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    # "in_progress" | "completed"
+    status: Mapped[str] = mapped_column(String(20), default="in_progress")
+
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow

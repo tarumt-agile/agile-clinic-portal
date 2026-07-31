@@ -397,6 +397,7 @@ Patient Details - Agile Clinic Portal
               autocomplete="off"
             >
 
+            {% if role == "doctor" %}
             <a
               href="#"
               id="new-record-link"
@@ -404,6 +405,7 @@ Patient Details - Agile Clinic Portal
             >
               + New Consultation Note
             </a>
+            {% endif %}
           </div>
 
           <div

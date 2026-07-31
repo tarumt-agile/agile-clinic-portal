@@ -10,7 +10,6 @@
   const diagnosesAlert = document.getElementById("diagnoses-alert");
   const submitBtn = document.getElementById("submit-btn");
   const cancelBtn = document.getElementById("cancel-btn");
-  const doctorSelect = document.getElementById("doctor_id");
   const patientNameLabel = document.getElementById("patient-name-label");
   const diagnosisRows = document.getElementById("diagnosis-rows");
   const rowTemplate = document.getElementById("diagnosis-row-template");
@@ -41,7 +40,7 @@
   }
 
   // Maps Pydantic 422 errors for nested diagnoses (loc like ["body", "diagnoses", 0, "icd10_code"])
-  // onto the matching row's input. Falls back to top-level fields (doctor_id, notes).
+  // onto the matching row's input. Falls back to top-level fields (notes).
   function applyValidationErrors(errorBody) {
     if (!Array.isArray(errorBody.detail)) return false;
     let hadFieldError = false;
@@ -71,27 +70,6 @@
       }
     }
     return hadFieldError;
-  }
-
-  async function loadDoctors() {
-    doctorSelect.innerHTML = '<option value="" selected disabled>Loading doctors...</option>';
-    try {
-      const response = await fetch("/api/staff/doctor");
-      if (!response.ok) throw new Error("Request failed");
-      const allDoctors = await response.json();
-      const doctors = allDoctors.filter((d) => d.status === "active");
-
-      if (doctors.length === 0) {
-        doctorSelect.innerHTML = '<option value="" selected disabled>No doctors available</option>';
-        return;
-      }
-
-      doctorSelect.innerHTML =
-        '<option value="" selected disabled>Choose...</option>' +
-        doctors.map((d) => `<option value="${d.staff_id}">${d.full_name}</option>`).join("");
-    } catch (err) {
-      doctorSelect.innerHTML = '<option value="" selected disabled>Unable to load doctors</option>';
-    }
   }
 
   async function loadPatientName() {
@@ -199,7 +177,6 @@
   function collectPayload() {
     return {
       patient_id: patientId,
-      doctor_id: doctorSelect.value,
       notes: document.getElementById("notes").value.trim(),
       diagnoses: collectDiagnoses(),
     };
@@ -283,7 +260,6 @@
   addDiagnosisBtn.addEventListener("click", addDiagnosisRow);
   form.addEventListener("submit", handleSubmit);
 
-  loadDoctors();
   loadPatientName();
   addDiagnosisRow();
 })();

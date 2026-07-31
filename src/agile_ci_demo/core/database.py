@@ -190,6 +190,45 @@ def migrate_sqlite_database() -> None:
                     WHERE end_time IS NULL
                     """))
 
+        # Add consultation timer columns to old consultation_notes table.
+        if "consultation_notes" in table_names:
+            note_columns = {
+                column["name"] for column in inspector.get_columns("consultation_notes")
+            }
+
+            if "started_at" not in note_columns:
+                connection.execute(text("""
+                        ALTER TABLE consultation_notes
+                        ADD COLUMN started_at DATETIME
+                        """))
+
+            if "ended_at" not in note_columns:
+                connection.execute(text("""
+                        ALTER TABLE consultation_notes
+                        ADD COLUMN ended_at DATETIME
+                        """))
+
+            if "status" not in note_columns:
+                connection.execute(text("""
+                        ALTER TABLE consultation_notes
+                        ADD COLUMN status VARCHAR(20)
+                        """))
+
+            # Older notes were fully written up in one step under the old flow -
+            # treat them as already completed rather than in_progress, since
+            # there's no real start/end to retroactively assign.
+            connection.execute(text("""
+                    UPDATE consultation_notes
+                    SET started_at = visit_date
+                    WHERE started_at IS NULL
+                    """))
+
+            connection.execute(text("""
+                    UPDATE consultation_notes
+                    SET status = 'completed'
+                    WHERE status IS NULL
+                    """))
+
 
 def backfill_prescription_medications() -> None:
     """Link legacy prescription snapshots to matching catalogue records."""

@@ -16,14 +16,18 @@ from agile_ci_demo.consultations.schemas import (
     PatientHistory,
 )
 from agile_ci_demo.consultations.service import (
+    ConsultationAlreadyEndedError,
     ConsultationNoteConflictError,
-    DoctorNotFoundError,
+    ConsultationNoteNotFoundError,
+    NotYourConsultationError,
     PatientNotFoundError,
     create_consultation_note,
+    end_consultation,
     get_consultation_note_by_record_id,
     get_patient_history,
     search_icd10_codes,
 )
+from agile_ci_demo.staff.models import Staff
 
 # JSON API used by the frontend's JavaScript.
 api_router = APIRouter(prefix="/api/consultations", tags=["consultations"])
@@ -42,6 +46,9 @@ def _serialize(note: ConsultationNote) -> ConsultationNoteOut:
         visit_date=note.visit_date,
         notes=note.notes,
         diagnoses=[DiagnosisOut.model_validate(d) for d in note.diagnoses],
+        started_at=note.started_at,
+        ended_at=note.ended_at,
+        status=note.status,
         created_at=note.created_at,
     )
 
@@ -53,19 +60,44 @@ def _serialize_summary(note: ConsultationNote) -> ConsultationNoteSummary:
         doctor_name=note.doctor.full_name,
         notes=note.notes,
         diagnoses=[DiagnosisOut.model_validate(d) for d in note.diagnoses],
+        status=note.status,
     )
 
 
 @api_router.post("", response_model=ConsultationNoteOut, status_code=status.HTTP_201_CREATED)
 def create_note(
-    payload: ConsultationNoteCreate, db: Session = Depends(get_db)
+    payload: ConsultationNoteCreate,
+    db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
 ) -> ConsultationNoteOut:
-    """Document a consultation. At least one diagnosis is required (enforced by the schema)."""
+    """Document a consultation. At least one diagnosis is required (enforced by the schema).
+
+    Saving the note is the "start" of the consultation - it's created in_progress
+    and finalised later via PATCH /{record_id}/end.
+    """
     try:
-        note = create_consultation_note(db, payload)
-    except (PatientNotFoundError, DoctorNotFoundError) as exc:
+        note = create_consultation_note(db, payload, doctor)
+    except PatientNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ConsultationNoteConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return _serialize(note)
+
+
+@api_router.patch("/{record_id}/end", response_model=ConsultationNoteOut)
+def end_consultation_endpoint(
+    record_id: str,
+    db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+) -> ConsultationNoteOut:
+    """End a consultation - only the doctor who documented it can end it."""
+    try:
+        note = end_consultation(db, record_id, doctor)
+    except ConsultationNoteNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NotYourConsultationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ConsultationAlreadyEndedError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _serialize(note)
 
@@ -103,12 +135,12 @@ def get_note(record_id: str, db: Session = Depends(get_db)) -> ConsultationNoteO
 def new_note_page(
     request: Request,
     patient_id: str = Query(..., description="Patient to document a visit for"),
-    _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "consultations/consultation_form.html",
-        {"patient_id": patient_id},
+        {"patient_id": patient_id, "doctor_name": doctor.full_name},
     )
 
 
