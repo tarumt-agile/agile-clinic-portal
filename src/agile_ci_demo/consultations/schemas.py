@@ -154,6 +154,30 @@ class PatientHistory(BaseModel):
     total: int
 
 
+class ConsultationQueueEntry(BaseModel):
+    """One of a doctor's non-cancelled appointments for today, paired with its
+    linked consultation note's state (if any) - lets the Start Consultation page
+    decide whether to offer "Start Consultation", "Continue Consultation", or "Ended"."""
+
+    reference_number: str
+    patient_id: str
+    patient_name: str
+    start_time: dt.time
+    end_time: dt.time
+    reason: str
+    appointment_status: str
+    consultation_record_id: str | None
+    consultation_status: str | None
+
+
+class DoctorConsultationQueue(BaseModel):
+    """A doctor's today's consultation queue, ordered by appointment start time."""
+
+    doctor_id: str
+    doctor_name: str
+    appointments: list[ConsultationQueueEntry]
+
+
 class Icd10Entry(BaseModel):
     """An ICD-10 search result."""
 

@@ -11,7 +11,9 @@ from agile_ci_demo.consultations.schemas import (
     ConsultationNoteCreate,
     ConsultationNoteOut,
     ConsultationNoteSummary,
+    ConsultationQueueEntry,
     DiagnosisOut,
+    DoctorConsultationQueue,
     Icd10Entry,
     PatientHistory,
 )
@@ -25,6 +27,7 @@ from agile_ci_demo.consultations.service import (
     end_consultation,
     get_consultation_note_by_record_id,
     get_patient_history,
+    get_todays_consultation_queue,
     search_icd10_codes,
 )
 from agile_ci_demo.staff.models import Staff
@@ -107,6 +110,34 @@ def autocomplete_icd10(
     q: str = Query(default="", description="Search term matched against code or description"),
 ) -> list[Icd10Entry]:
     return [Icd10Entry(**entry) for entry in search_icd10_codes(q)]
+
+
+@api_router.get("/today-queue", response_model=DoctorConsultationQueue)
+def get_todays_queue(
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    db: Session = Depends(get_db),
+) -> DoctorConsultationQueue:
+    """The logged-in doctor's non-cancelled appointments for today, each paired with
+    its consultation state - powers the Start Consultation page's work queue."""
+    entries = get_todays_consultation_queue(db, doctor.id)
+    return DoctorConsultationQueue(
+        doctor_id=doctor.staff_id or "",
+        doctor_name=doctor.full_name,
+        appointments=[
+            ConsultationQueueEntry(
+                reference_number=appointment.reference_number or "",
+                patient_id=appointment.patient.patient_id or "",
+                patient_name=appointment.patient.full_name,
+                start_time=appointment.start_time,
+                end_time=appointment.end_time,
+                reason=appointment.reason,
+                appointment_status=appointment.status,
+                consultation_record_id=note.record_id if note else None,
+                consultation_status=note.status if note else None,
+            )
+            for appointment, note in entries
+        ],
+    )
 
 
 @api_router.get("", response_model=PatientHistory)

@@ -165,6 +165,43 @@ def end_consultation(db: Session, record_id: str, doctor: Staff) -> Consultation
     return note
 
 
+def get_todays_consultation_queue(
+    db: Session, doctor_id: int
+) -> list[tuple[Appointment, ConsultationNote | None]]:
+    """Today's non-cancelled appointments for a doctor, ordered by start time, each
+    paired with its linked consultation note if one has been started. Powers the
+    Start Consultation page's queue - the note (or lack of one) is what tells the
+    page whether to offer "Start Consultation", "Continue Consultation", or "Ended"."""
+    today = dt.date.today()
+    appointments = list(
+        db.execute(
+            select(Appointment)
+            .where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date == today,
+                Appointment.status != "cancelled",
+            )
+            .order_by(Appointment.start_time)
+        )
+        .scalars()
+        .all()
+    )
+    if not appointments:
+        return []
+
+    notes_by_appointment = {
+        note.appointment_id: note
+        for note in db.execute(
+            select(ConsultationNote).where(
+                ConsultationNote.appointment_id.in_([a.id for a in appointments])
+            )
+        )
+        .scalars()
+        .all()
+    }
+    return [(appointment, notes_by_appointment.get(appointment.id)) for appointment in appointments]
+
+
 def get_consultation_note_by_record_id(db: Session, record_id: str) -> ConsultationNote | None:
     return db.execute(
         select(ConsultationNote).where(ConsultationNote.record_id == record_id)

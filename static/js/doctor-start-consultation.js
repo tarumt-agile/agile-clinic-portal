@@ -5,7 +5,6 @@
   if (!tableBody) return;
 
   const heading = document.getElementById("consultation-heading");
-  const dateInput = document.getElementById("consultation-date");
   const alertBox = document.getElementById("consultation-alert");
 
   const STATUS_BADGE = {
@@ -30,20 +29,26 @@
     alertBox.textContent = "";
   }
 
-  async function loadSchedule(dateValue) {
+  // "HH:MM:SS" (or "HH:MM") -> minutes since midnight, for comparing against
+  // the current local time without pulling in a date library.
+  function timeToMinutes(value) {
+    const [hours, minutes] = value.split(":").map(Number);
+    return hours * 60 + minutes;
+  }
+
+  function nowMinutes() {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }
+
+  async function loadQueue() {
     hideAlert();
     tableBody.innerHTML =
       '<tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>';
 
     try {
-      const response = await fetch(`/api/appointments/schedule?date=${dateValue}`);
+      const response = await fetch("/api/consultations/today-queue");
       const body = await response.json();
-
-      if (response.status === 422) {
-        tableBody.innerHTML = "";
-        showAlert(body.detail || "Please choose today or a future date.");
-        return;
-      }
 
       if (response.status === 404) {
         tableBody.innerHTML = "";
@@ -61,46 +66,73 @@
     }
   }
 
+  // Turns the full day's queue into what the doctor should actually see and
+  // act on: a not-yet-started appointment whose slot has already gone by is
+  // dropped (it's no longer something to "start"), while anything with a
+  // consultation already on it - started or finished - always stays visible
+  // so the doctor can get back into it or confirm it's done.
+  function visibleEntries(appointments) {
+    const now = nowMinutes();
+    return appointments.filter((a) => {
+      if (a.consultation_status) return true;
+      return timeToMinutes(a.end_time) > now;
+    });
+  }
+
+  // An appointment is locked from starting if any earlier appointment today
+  // is still open (appointment_status stays "scheduled" until its
+  // consultation is ended) - one patient at a time, in order.
+  function isLocked(appointments, index) {
+    for (let i = 0; i < index; i++) {
+      if (appointments[i].appointment_status === "scheduled") return true;
+    }
+    return false;
+  }
+
+  function actionCell(appointment, locked) {
+    if (appointment.consultation_status === "completed") {
+      return '<span class="text-muted">Ended</span>';
+    }
+
+    if (appointment.consultation_status === "in_progress") {
+      return `<a href="/consultations/${encodeURIComponent(appointment.consultation_record_id)}" class="btn btn-sm btn-warning">Continue Consultation</a>`;
+    }
+
+    if (appointment.appointment_status !== "scheduled") {
+      return "-";
+    }
+
+    if (locked) {
+      return '<button type="button" class="btn btn-sm btn-primary" disabled title="Finish the earlier appointment first">Start Consultation</button>';
+    }
+
+    return `<a href="/consultations/new?patient_id=${encodeURIComponent(appointment.patient_id)}&appointment_reference=${encodeURIComponent(appointment.reference_number)}" class="btn btn-sm btn-primary">Start Consultation</a>`;
+  }
+
   function renderTable(appointments) {
-    if (appointments.length === 0) {
+    const entries = visibleEntries(appointments);
+
+    if (entries.length === 0) {
       tableBody.innerHTML =
-        '<tr><td colspan="5" class="text-center text-muted py-4">No appointments for this date.</td></tr>';
+        '<tr><td colspan="5" class="text-center text-muted py-4">No appointments left for today.</td></tr>';
       return;
     }
 
-    tableBody.innerHTML = appointments
+    tableBody.innerHTML = entries
       .map((a) => {
-        const badgeClass = STATUS_BADGE[a.status] || "text-bg-light";
-        const action =
-          a.status === "scheduled"
-            ? `<a href="/consultations/new?patient_id=${encodeURIComponent(a.patient_id)}&appointment_reference=${encodeURIComponent(a.reference_number)}" class="btn btn-sm btn-primary">Start Consultation</a>`
-            : "-";
+        const badgeClass = STATUS_BADGE[a.appointment_status] || "text-bg-light";
+        const locked = isLocked(appointments, appointments.indexOf(a));
         return `
       <tr>
         <td>${escapeHtml(a.start_time.slice(0, 5))} - ${escapeHtml(a.end_time.slice(0, 5))}</td>
         <td>${escapeHtml(a.patient_name)} (${escapeHtml(a.patient_id)})</td>
         <td>${escapeHtml(a.reason)}</td>
-        <td><span class="badge ${badgeClass} text-capitalize">${escapeHtml(a.status)}</span></td>
-        <td>${action}</td>
+        <td><span class="badge ${badgeClass} text-capitalize">${escapeHtml(a.appointment_status)}</span></td>
+        <td>${actionCell(a, locked)}</td>
       </tr>`;
       })
       .join("");
   }
 
-  // Local date, not UTC - toISOString() converts to UTC and can be a day off from
-  // the server's dt.date.today() (which uses local time), especially near midnight.
-  function todayLocalISODate() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  const today = todayLocalISODate();
-  dateInput.min = today;
-  dateInput.value = today;
-
-  dateInput.addEventListener("change", () => loadSchedule(dateInput.value));
-  loadSchedule(today);
+  loadQueue();
 })();
