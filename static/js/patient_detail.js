@@ -42,13 +42,13 @@
     hideAlert(alertBox);
     viewMode.classList.add("d-none");
     editForm.classList.remove("d-none");
-    editBtn.classList.add("d-none");
+    if (editBtn) editBtn.classList.add("d-none");
   }
 
   function exitEditMode() {
     editForm.classList.add("d-none");
     viewMode.classList.remove("d-none");
-    editBtn.classList.remove("d-none");
+    if (editBtn) editBtn.classList.remove("d-none");
   }
 
   async function loadPatient() {
@@ -56,7 +56,7 @@
       const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`);
       if (response.status === 404) {
         notFoundAlert.classList.remove("d-none");
-        editBtn.classList.add("d-none");
+        if (editBtn) editBtn.classList.add("d-none");
         viewMode.classList.add("d-none");
         return;
       }
@@ -123,7 +123,7 @@
     }
   }
 
-  editBtn.addEventListener("click", enterEditMode);
+  if (editBtn) editBtn.addEventListener("click", enterEditMode);
   cancelBtn.addEventListener("click", exitEditMode);
   editForm.addEventListener("submit", handleSave);
 

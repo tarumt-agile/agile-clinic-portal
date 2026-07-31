@@ -8,7 +8,10 @@
     <div class="col-lg-9">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h3 mb-0">New Consultation Note</h1>
-        <a href="/patients/{{ patient_id }}" class="btn btn-outline-secondary">Back to patient</a>
+        <div class="d-flex gap-2">
+          <a href="/patients/{{ patient_id }}" target="_blank" rel="noopener" class="btn btn-outline-secondary">View Patient Details</a>
+          <a href="/appointments/schedule" id="back-link" class="btn btn-outline-secondary">Back to My Schedule</a>
+        </div>
       </div>
 
       <p class="text-muted mb-4">
@@ -100,5 +103,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/consultation-note-form.js?v=2"></script>
+<script src="/static/js/consultation-note-form.js?v=3"></script>
 {% endblock %}

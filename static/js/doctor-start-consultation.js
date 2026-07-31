@@ -90,7 +90,11 @@
     return false;
   }
 
-  function actionCell(appointment, locked) {
+  function viewPatientButton(patientId) {
+    return `<a href="/patients/${encodeURIComponent(patientId)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">View Patient Details</a>`;
+  }
+
+  function consultationAction(appointment, locked) {
     if (appointment.consultation_status === "completed") {
       return '<span class="text-muted">Ended</span>';
     }
@@ -100,7 +104,7 @@
     }
 
     if (appointment.appointment_status !== "scheduled") {
-      return "-";
+      return "";
     }
 
     if (locked) {
@@ -108,6 +112,10 @@
     }
 
     return `<a href="/consultations/new?patient_id=${encodeURIComponent(appointment.patient_id)}&appointment_reference=${encodeURIComponent(appointment.reference_number)}" class="btn btn-sm btn-primary">Start Consultation</a>`;
+  }
+
+  function actionCell(appointment, locked) {
+    return `<div class="d-flex gap-1">${viewPatientButton(appointment.patient_id)}${consultationAction(appointment, locked)}</div>`;
   }
 
   function renderTable(appointments) {

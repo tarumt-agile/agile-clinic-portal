@@ -9,6 +9,7 @@
     "appointment_reference"
   );
   const form = document.getElementById("record-form");
+  const backLink = document.getElementById("back-link");
   const alertBox = document.getElementById("form-alert");
   const diagnosesAlert = document.getElementById("diagnoses-alert");
   const submitBtn = document.getElementById("submit-btn");
@@ -263,6 +264,14 @@
   });
   addDiagnosisBtn.addEventListener("click", addDiagnosisRow);
   form.addEventListener("submit", handleSubmit);
+
+  // If this note was started from the Start Consultation queue, "back" should
+  // return there (where the doctor will see this appointment's updated
+  // state) rather than to the general My Schedule page.
+  if (appointmentReference) {
+    backLink.href = "/appointments/consultations";
+    backLink.textContent = "Back to Start Consultation";
+  }
 
   loadPatientName();
   addDiagnosisRow();
