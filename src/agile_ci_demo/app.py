@@ -28,6 +28,8 @@ from agile_ci_demo.prescriptions.router import (
     api_router as prescription_api_router,
     pages_router as prescription_pages_router,
 )
+from agile_ci_demo.reports.router import api_router as reports_api_router
+from agile_ci_demo.reports.router import pages_router as reports_pages_router
 
 
 @asynccontextmanager
@@ -62,6 +64,8 @@ app.include_router(consultations_api_router)
 app.include_router(consultations_pages_router)
 app.include_router(prescription_api_router)
 app.include_router(prescription_pages_router)
+app.include_router(reports_api_router)
+app.include_router(reports_pages_router)
 app.include_router(attachments_api_router)
 
 
