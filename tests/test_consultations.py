@@ -558,6 +558,242 @@ def test_end_consultation_requires_login(client: TestClient) -> None:
     assert r.status_code == 303
 
 
+# --- 5b. Start/resume and update consultation notes ----------------------------
+
+
+def test_start_consultation_creates_empty_in_progress_note(client: TestClient) -> None:
+    """
+    Scenario: Doctor opens a new consultation
+      Given a registered patient and a logged-in doctor
+      When I POST /api/consultations/start
+      Then it's created in_progress with no notes or diagnoses yet
+    """
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+
+    r = client.post("/api/consultations/start", json={"patient_id": patient_id})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["record_id"].startswith("R")
+    assert body["status"] == "in_progress"
+    assert body["notes"] == ""
+    assert body["diagnoses"] == []
+    assert body["started_at"] is not None
+    assert body["ended_at"] is None
+
+
+def test_start_consultation_unknown_patient_returns_404(client: TestClient) -> None:
+    _register_and_login_doctor(client)
+    r = client.post("/api/consultations/start", json={"patient_id": "P99999"})
+    assert r.status_code == 404
+
+
+def test_starting_a_consultation_twice_for_the_same_appointment_resumes_the_draft(
+    client: TestClient,
+) -> None:
+    """Reopening the note for an appointment that was already started must return
+    the existing draft, not create a second one - otherwise leaving and coming
+    back would silently orphan the first draft."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    appointment_reference = _book_appointment(client, patient_id, doctor_id)
+
+    first = client.post(
+        "/api/consultations/start",
+        json={"patient_id": patient_id, "appointment_reference": appointment_reference},
+    ).json()
+    second = client.post(
+        "/api/consultations/start",
+        json={"patient_id": patient_id, "appointment_reference": appointment_reference},
+    ).json()
+
+    assert second["record_id"] == first["record_id"]
+
+
+def test_starting_without_an_appointment_reference_always_creates_a_new_draft(
+    client: TestClient,
+) -> None:
+    """An ad-hoc consultation (no appointment_reference) has nothing to key an
+    existing-draft lookup on, so each start is a fresh note."""
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+
+    first = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+    second = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+
+    assert second["record_id"] != first["record_id"]
+
+
+def test_starting_a_consultation_does_not_complete_its_appointment(client: TestClient) -> None:
+    """Only ending a consultation marks its appointment completed - merely opening
+    the note (even repeatedly) must leave the appointment scheduled, so the Start
+    Consultation queue's one-at-a-time locking still works correctly."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    appointment_reference = _book_appointment(client, patient_id, doctor_id)
+
+    client.post(
+        "/api/consultations/start",
+        json={"patient_id": patient_id, "appointment_reference": appointment_reference},
+    )
+
+    schedule = client.get(f"/api/appointments/schedule?date={TOMORROW}").json()
+    appt = next(
+        a for a in schedule["appointments"] if a["reference_number"] == appointment_reference
+    )
+    assert appt["status"] == "scheduled"
+
+
+def test_update_consultation_note_success(client: TestClient) -> None:
+    """
+    Scenario: Doctor fills in a started consultation
+      Given a consultation that was started but not yet written up
+      When I PUT /api/consultations/{record_id} with notes and a diagnosis
+      Then the note is updated with that content
+    """
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+
+    r = client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "Patient presented with fever and cough.",
+            "diagnoses": [
+                {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+            ],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["notes"] == "Patient presented with fever and cough."
+    assert body["diagnoses"] == [
+        {"id": 1, "icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+    ]
+    assert body["status"] == "in_progress"
+
+
+def test_update_consultation_note_replaces_diagnoses_rather_than_appending(
+    client: TestClient,
+) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+
+    client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "First pass.",
+            "diagnoses": [
+                {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+            ],
+        },
+    )
+    r = client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "Revised after further exam.",
+            "diagnoses": [{"icd10_code": "I10", "description": "Essential hypertension"}],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["diagnoses"]) == 1
+    assert body["diagnoses"][0]["icd10_code"] == "I10"
+
+
+def test_update_consultation_note_unknown_record_returns_404(client: TestClient) -> None:
+    _register_and_login_doctor(client)
+    r = client.put(
+        "/api/consultations/R99999",
+        json={
+            "notes": "Some notes.",
+            "diagnoses": [
+                {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+            ],
+        },
+    )
+    assert r.status_code == 404
+
+
+def test_update_consultation_note_by_a_different_doctor_returns_403(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client, email="alan.chua@example.com")
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+
+    _register_and_login_doctor(
+        client,
+        full_name="Dr. Beth Ong",
+        email="beth.ong@example.com",
+        license_number="MMC-54321",
+    )
+    r = client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "Some notes.",
+            "diagnoses": [
+                {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+            ],
+        },
+    )
+    assert r.status_code == 403
+
+
+def test_update_consultation_note_after_ended_returns_409(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+    client.patch(f"/api/consultations/{started['record_id']}/end")
+
+    r = client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "Too late.",
+            "diagnoses": [
+                {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+            ],
+        },
+    )
+    assert r.status_code == 409
+
+
+def test_update_consultation_note_requires_notes(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+
+    r = client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "   ",
+            "diagnoses": [
+                {"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
+            ],
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_update_consultation_note_requires_at_least_one_diagnosis(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+
+    r = client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={"notes": "Some notes.", "diagnoses": []},
+    )
+    assert r.status_code == 422
+
+
+def test_start_consultation_requires_login(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    r = client.post(
+        "/api/consultations/start", json={"patient_id": patient_id}, follow_redirects=False
+    )
+    assert r.status_code == 303
+
+
 # --- 6. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/consultations.feature
 

@@ -11,7 +11,9 @@ from agile_ci_demo.consultations.schemas import (
     ConsultationNoteCreate,
     ConsultationNoteOut,
     ConsultationNoteSummary,
+    ConsultationNoteUpdate,
     ConsultationQueueEntry,
+    ConsultationStart,
     DiagnosisOut,
     DoctorConsultationQueue,
     Icd10Entry,
@@ -29,6 +31,8 @@ from agile_ci_demo.consultations.service import (
     get_patient_history,
     get_todays_consultation_queue,
     search_icd10_codes,
+    start_consultation,
+    update_consultation_note,
 )
 from agile_ci_demo.staff.models import Staff
 
@@ -83,6 +87,44 @@ def create_note(
     except PatientNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ConsultationNoteConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return _serialize(note)
+
+
+@api_router.post("/start", response_model=ConsultationNoteOut)
+def start_consultation_endpoint(
+    payload: ConsultationStart,
+    db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+) -> ConsultationNoteOut:
+    """Open (or resume) a consultation. Creates an empty in_progress note right
+    away, before any notes/diagnoses are written - see start_consultation for why."""
+    try:
+        note, _created = start_consultation(
+            db, payload.patient_id, payload.appointment_reference, doctor
+        )
+    except PatientNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConsultationNoteConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return _serialize(note)
+
+
+@api_router.put("/{record_id}", response_model=ConsultationNoteOut)
+def update_note(
+    record_id: str,
+    payload: ConsultationNoteUpdate,
+    db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+) -> ConsultationNoteOut:
+    """Fill in or revise an in-progress consultation's notes and diagnoses."""
+    try:
+        note = update_consultation_note(db, record_id, payload.notes, payload.diagnoses, doctor)
+    except ConsultationNoteNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NotYourConsultationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ConsultationAlreadyEndedError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _serialize(note)
 

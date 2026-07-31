@@ -8,6 +8,7 @@
   const appointmentReference = new URLSearchParams(window.location.search).get(
     "appointment_reference"
   );
+  const formHeading = document.getElementById("form-heading");
   const form = document.getElementById("record-form");
   const backLink = document.getElementById("back-link");
   const viewPatientLink = document.getElementById("view-patient-link");
@@ -23,7 +24,9 @@
   const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
 
   let searchDebounceTimer = null;
-  let lastCreatedRecordId = null;
+  // The record this page is writing to - set once /start resolves. Saving is
+  // disabled until then, since there's nothing to save to yet.
+  let recordId = null;
 
   function showAlert(box, message) {
     box.textContent = message;
@@ -90,10 +93,15 @@
 
   // --- Diagnosis rows -----------------------------------------------------
 
-  function addDiagnosisRow() {
+  function addDiagnosisRow(icd10Code, description) {
     const fragment = rowTemplate.content.cloneNode(true);
     const row = fragment.querySelector(".diagnosis-row");
     wireRow(row);
+    if (icd10Code) row.querySelector(".diagnosis-code").value = icd10Code;
+    if (description) row.querySelector(".diagnosis-description").value = description;
+    if (icd10Code && description) {
+      row.querySelector(".diagnosis-search").value = `${icd10Code} - ${description}`;
+    }
     diagnosisRows.appendChild(row);
     hideAlert(diagnosesAlert);
   }
@@ -181,11 +189,55 @@
 
   function collectPayload() {
     return {
-      patient_id: patientId,
-      appointment_reference: appointmentReference || null,
       notes: document.getElementById("notes").value.trim(),
       diagnoses: collectDiagnoses(),
     };
+  }
+
+  // --- Starting/resuming ------------------------------------------------------
+
+  // Opens (or resumes) the consultation the instant this page loads, before the
+  // doctor has written anything - so leaving the page without ever clicking Save
+  // still leaves a draft the doctor can get back to, instead of losing the visit.
+  // Idempotent server-side: reopening the same appointment's note resumes the
+  // same draft rather than creating a duplicate.
+  async function startConsultation() {
+    submitBtn.disabled = true;
+    try {
+      const response = await fetch("/api/consultations/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: patientId,
+          appointment_reference: appointmentReference || null,
+        }),
+      });
+
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        showAlert(
+          alertBox,
+          typeof body.detail === "string" ? body.detail : "Unable to start this consultation."
+        );
+        return;
+      }
+
+      recordId = body.record_id;
+      document.getElementById("notes").value = body.notes || "";
+
+      diagnosisRows.innerHTML = "";
+      if (Array.isArray(body.diagnoses) && body.diagnoses.length > 0) {
+        body.diagnoses.forEach((d) => addDiagnosisRow(d.icd10_code, d.description));
+        formHeading.textContent = "Continue Consultation Note";
+      } else {
+        addDiagnosisRow();
+      }
+
+      submitBtn.disabled = false;
+    } catch (err) {
+      showAlert(alertBox, "Unable to reach the server. Please check your connection and try again.");
+    }
   }
 
   // --- Submission -----------------------------------------------------------
@@ -195,6 +247,11 @@
     hideAlert(alertBox);
     hideAlert(diagnosesAlert);
     clearFieldErrors();
+
+    if (!recordId) {
+      showAlert(alertBox, "This consultation hasn't finished starting yet. Please try again.");
+      return;
+    }
 
     const diagnoses = collectDiagnoses();
     const formValid = form.checkValidity();
@@ -212,15 +269,13 @@
 
     submitBtn.disabled = true;
     try {
-      const response = await fetch("/api/consultations", {
-        method: "POST",
+      const response = await fetch(`/api/consultations/${encodeURIComponent(recordId)}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(collectPayload()),
       });
 
-      if (response.status === 201) {
-        const note = await response.json();
-        lastCreatedRecordId = note.record_id;
+      if (response.status === 200) {
         if (confirmationModal) {
           confirmationModal.show();
         } else {
@@ -231,7 +286,7 @@
 
       const body = await response.json().catch(() => ({}));
 
-      if (response.status === 404 || response.status === 409) {
+      if (response.status === 404 || response.status === 403 || response.status === 409) {
         showAlert(alertBox, body.detail || "This consultation note could not be saved.");
         return;
       }
@@ -255,7 +310,7 @@
   }
 
   document.getElementById("view-record-btn").addEventListener("click", () => {
-    if (lastCreatedRecordId) window.location.href = `/consultations/${encodeURIComponent(lastCreatedRecordId)}`;
+    if (recordId) window.location.href = `/consultations/${encodeURIComponent(recordId)}`;
   });
   document.getElementById("back-to-patient-btn").addEventListener("click", () => {
     window.location.href = `/patients/${encodeURIComponent(patientId)}`;
@@ -263,7 +318,7 @@
   cancelBtn.addEventListener("click", () => {
     window.location.href = `/patients/${encodeURIComponent(patientId)}`;
   });
-  addDiagnosisBtn.addEventListener("click", addDiagnosisRow);
+  addDiagnosisBtn.addEventListener("click", () => addDiagnosisRow());
   form.addEventListener("submit", handleSubmit);
 
   // If this note was started from the Start Consultation queue, "back" should
@@ -283,5 +338,5 @@
     `&label=${encodeURIComponent("Back to Consultation Note")}`;
 
   loadPatientName();
-  addDiagnosisRow();
+  startConsultation();
 })();

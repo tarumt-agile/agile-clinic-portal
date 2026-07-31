@@ -105,6 +105,46 @@ class ConsultationNoteCreate(BaseModel):
         return value
 
 
+class ConsultationStart(BaseModel):
+    """Payload to open (or resume) a consultation. No notes/diagnoses yet - those
+    are filled in later via ConsultationNoteUpdate, so a doctor who opens this
+    page and leaves before writing anything still has a draft to come back to."""
+
+    patient_id: str = Field(
+        min_length=1,
+    )
+
+    appointment_reference: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+
+class ConsultationNoteUpdate(BaseModel):
+    """Payload used to fill in or revise an in-progress consultation's content."""
+
+    notes: str = Field(
+        min_length=2,
+    )
+
+    diagnoses: list[DiagnosisIn] = Field(
+        min_length=1,
+    )
+
+    @field_validator("notes")
+    @classmethod
+    def notes_not_blank(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Consultation notes are required.")
+
+        return value
+
+
 class ConsultationNoteOut(BaseModel):
     """A complete consultation record."""
 

@@ -10,7 +10,7 @@ from agile_ci_demo.appointments.models import Appointment
 from agile_ci_demo.appointments.service import get_appointment_by_reference
 from agile_ci_demo.patients.service import get_patient_by_patient_id
 from agile_ci_demo.consultations.models import ConsultationNote, Diagnosis
-from agile_ci_demo.consultations.schemas import ConsultationNoteCreate
+from agile_ci_demo.consultations.schemas import ConsultationNoteCreate, DiagnosisIn
 from agile_ci_demo.staff.models import Staff
 
 # A small curated reference list of common ICD-10 codes, used to power the diagnosis
@@ -84,6 +84,89 @@ def search_icd10_codes(query: str, limit: int = 10) -> list[dict[str, str]]:
         if q in entry["code"].lower() or q in entry["description"].lower()
     ]
     return matches[:limit]
+
+
+def start_consultation(
+    db: Session, patient_id: str, appointment_reference: str | None, doctor: Staff
+) -> tuple[ConsultationNote, bool]:
+    """Start (or resume) documenting a consultation - creates an empty in_progress
+    note the moment a doctor opens the note page, before they've written anything,
+    so leaving the page early still leaves a draft to come back to instead of
+    losing the visit entirely.
+
+    Idempotent by appointment_reference: reopening the note for the same
+    appointment returns the existing draft (second element False) instead of
+    creating a duplicate. Without an appointment_reference (an ad-hoc visit),
+    every call starts a fresh note (second element True) since there is nothing
+    to key the lookup on.
+    """
+    patient = get_patient_by_patient_id(db, patient_id)
+    if patient is None:
+        raise PatientNotFoundError(f"No patient found with patient_id '{patient_id}'")
+
+    appointment_id = None
+    if appointment_reference:
+        appointment = get_appointment_by_reference(db, appointment_reference)
+        if appointment is not None:
+            appointment_id = appointment.id
+            existing = db.execute(
+                select(ConsultationNote).where(ConsultationNote.appointment_id == appointment_id)
+            ).scalar_one_or_none()
+            if existing is not None:
+                return existing, False
+
+    now = dt.datetime.utcnow()
+    note = ConsultationNote(
+        patient_id=patient.id,
+        doctor_id=doctor.id,
+        appointment_id=appointment_id,
+        visit_date=now,
+        notes="",
+        started_at=now,
+        status="in_progress",
+        diagnoses=[],
+    )
+    db.add(note)
+
+    try:
+        db.flush()  # assigns note.id (autoincrement) without committing
+        note.record_id = f"R{note.id:05d}"
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConsultationNoteConflictError(
+            "Consultation could not be started due to a conflict"
+        ) from exc
+
+    db.refresh(note)
+    return note, True
+
+
+def update_consultation_note(
+    db: Session, record_id: str, notes: str, diagnoses: list[DiagnosisIn], doctor: Staff
+) -> ConsultationNote:
+    """Fill in or revise an in-progress consultation's notes and diagnoses - only
+    the doctor who started it can edit it, and only before it's ended."""
+    note = get_consultation_note_by_record_id(db, record_id)
+    if note is None:
+        raise ConsultationNoteNotFoundError(
+            f"No consultation note found with record_id '{record_id}'"
+        )
+
+    if note.doctor_id != doctor.id:
+        raise NotYourConsultationError("You can only edit your own consultations")
+
+    if note.status == "completed":
+        raise ConsultationAlreadyEndedError("This consultation has already ended")
+
+    note.notes = notes
+    note.diagnoses = [
+        Diagnosis(icd10_code=d.icd10_code, description=d.description) for d in diagnoses
+    ]
+
+    db.commit()
+    db.refresh(note)
+    return note
 
 
 def create_consultation_note(

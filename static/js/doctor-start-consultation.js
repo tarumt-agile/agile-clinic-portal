@@ -102,7 +102,10 @@
     }
 
     if (appointment.consultation_status === "in_progress") {
-      return `<a href="/consultations/${encodeURIComponent(appointment.consultation_record_id)}" class="btn btn-sm btn-warning">Continue Consultation</a>`;
+      // Back to the note form, not the read-only detail page - a draft
+      // consultation may still have no notes/diagnoses written yet, which is
+      // only editable from the form.
+      return `<a href="/consultations/new?patient_id=${encodeURIComponent(appointment.patient_id)}&appointment_reference=${encodeURIComponent(appointment.reference_number)}" class="btn btn-sm btn-warning">Continue Consultation</a>`;
     }
 
     if (appointment.appointment_status !== "scheduled") {
