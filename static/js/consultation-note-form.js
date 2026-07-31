@@ -10,6 +10,7 @@
   );
   const form = document.getElementById("record-form");
   const backLink = document.getElementById("back-link");
+  const viewPatientLink = document.getElementById("view-patient-link");
   const alertBox = document.getElementById("form-alert");
   const diagnosesAlert = document.getElementById("diagnoses-alert");
   const submitBtn = document.getElementById("submit-btn");
@@ -272,6 +273,14 @@
     backLink.href = "/appointments/consultations";
     backLink.textContent = "Back to Start Consultation";
   }
+
+  // "View Patient Details" opens in a new tab so an in-progress draft note
+  // isn't lost - its own Back button should return to this exact page
+  // (including appointment_reference), not somewhere generic.
+  viewPatientLink.href =
+    `/patients/${encodeURIComponent(patientId)}?` +
+    `from=${encodeURIComponent(window.location.pathname + window.location.search)}` +
+    `&label=${encodeURIComponent("Back to Consultation Note")}`;
 
   loadPatientName();
   addDiagnosisRow();

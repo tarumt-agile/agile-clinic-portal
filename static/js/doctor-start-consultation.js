@@ -91,7 +91,9 @@
   }
 
   function viewPatientButton(patientId) {
-    return `<a href="/patients/${encodeURIComponent(patientId)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">View Patient Details</a>`;
+    const from = encodeURIComponent(window.location.pathname + window.location.search);
+    const label = encodeURIComponent("Back to Start Consultation");
+    return `<a href="/patients/${encodeURIComponent(patientId)}?from=${from}&label=${label}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">View Patient Details</a>`;
   }
 
   function consultationAction(appointment, locked) {
