@@ -30,7 +30,7 @@
             <a class="nav-link" href="/appointments/create">Book Appointment</a>
             <a class="nav-link" href="/appointments/doctor-schedule">Doctor Schedule</a>
           {% endif %}
-          {% if role in ["nurse", "admin"] %}
+          {% if role in ["receptionist", "admin"] %}
             <a class="nav-link" href="/pharmacy">Pharmacy</a>
           {% endif %}
           {% if role == "doctor" %}

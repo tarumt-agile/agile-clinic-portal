@@ -166,8 +166,10 @@
               )}
             </td>
             <td class="${stockClass(item)}">
-              ${item.stock_quantity}
-              ${escapeHtml(item.unit)}
+              <span class="pharmacy-stock-quantity">
+                ${item.stock_quantity}
+                ${escapeHtml(item.unit)}
+              </span>
               <span
                 class="d-block small
                   text-muted fw-normal"

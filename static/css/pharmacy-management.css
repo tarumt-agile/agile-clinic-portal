@@ -9,6 +9,11 @@
   font-weight: 700;
 }
 
+.pharmacy-stock-empty .pharmacy-stock-quantity {
+  color: var(--bs-danger);
+  font-weight: 800;
+}
+
 .stock-history {
   max-height: 16rem;
   overflow-y: auto;

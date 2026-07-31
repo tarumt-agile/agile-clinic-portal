@@ -18,6 +18,9 @@ from agile_ci_demo.pharmacy.models import (
     StockTransaction,
 )
 from agile_ci_demo.pharmacy.schemas import (
+    MEDICATION_FORM_OPTIONS,
+    STANDARD_DOSAGE_OPTIONS,
+    STOCK_UNIT_OPTIONS,
     MedicationCreate,
     MedicationList,
     MedicationOut,
@@ -51,7 +54,7 @@ pages_router = APIRouter(
 )
 
 _PHARMACY_ROLES = (
-    Role.NURSE,
+    Role.RECEPTIONIST,
     Role.ADMIN,
 )
 
@@ -86,12 +89,8 @@ def serialize_transaction(
         quantity_change=transaction.quantity_change,
         balance_after=transaction.balance_after,
         reason=transaction.reason,
-        performed_by_staff_id=(
-            transaction.performed_by_staff_public_id
-        ),
-        performed_by_staff_name=(
-            transaction.performed_by_staff_name
-        ),
+        performed_by_staff_id=(transaction.performed_by_staff_public_id),
+        performed_by_staff_name=(transaction.performed_by_staff_name),
         created_at=transaction.created_at,
     )
 
@@ -112,10 +111,7 @@ def get_medications(
         include_inactive,
     )
     return MedicationList(
-        items=[
-            serialize_medication(item)
-            for item in medications
-        ],
+        items=[serialize_medication(item) for item in medications],
         total=len(medications),
     )
 
@@ -277,5 +273,9 @@ def pharmacy_page(
     return templates.TemplateResponse(
         request,
         "pharmacy/pharmacy_management.html",
-        {},
+        {
+            "medication_form_options": MEDICATION_FORM_OPTIONS,
+            "standard_dosage_options": STANDARD_DOSAGE_OPTIONS,
+            "stock_unit_options": STOCK_UNIT_OPTIONS,
+        },
     )

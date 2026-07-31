@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -75,7 +76,7 @@ def staff_payload(
 
 def create_staff_and_login(
     client: TestClient,
-    role: str = "nurse",
+    role: str = "receptionist",
     **overrides: object,
 ) -> str:
     payload = staff_payload(role, **overrides)
@@ -88,11 +89,7 @@ def create_staff_and_login(
     )
     assert create_response.status_code == 201, create_response.json()
 
-    welcome_email = next(
-        message
-        for message in reversed(get_outbox())
-        if message.to == email
-    )
+    welcome_email = next(message for message in reversed(get_outbox()) if message.to == email)
     match = re.search(
         r"temporary password is: (\S+)",
         welcome_email.body,
@@ -138,7 +135,7 @@ def create_medication(
     return response.json()
 
 
-def test_seeded_catalogue_is_visible_to_nurse(
+def test_seeded_catalogue_is_visible_to_receptionist(
     client: TestClient,
 ) -> None:
     create_staff_and_login(client)
@@ -148,14 +145,10 @@ def test_seeded_catalogue_is_visible_to_nurse(
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 15
-    assert any(
-        item["prescription_value"]
-        == "Paracetamol 500 mg Tablet"
-        for item in body["items"]
-    )
+    assert any(item["prescription_value"] == "Paracetamol 500 mg Tablet" for item in body["items"])
 
 
-def test_nurse_can_create_medication_with_initial_stock(
+def test_receptionist_can_create_medication_with_initial_stock(
     client: TestClient,
 ) -> None:
     staff_id = create_staff_and_login(client)
@@ -168,8 +161,7 @@ def test_nurse_can_create_medication_with_initial_stock(
     assert medication["low_stock"] is False
 
     history_response = client.get(
-        "/api/pharmacy/medications/"
-        f"{medication['medication_id']}/transactions"
+        "/api/pharmacy/medications/" f"{medication['medication_id']}/transactions"
     )
     assert history_response.status_code == 200
     history = history_response.json()
@@ -190,7 +182,7 @@ def test_duplicate_medication_is_rejected(
         "/api/pharmacy/medications",
         json=new_medication_payload(
             name="  amlodipine  ",
-            form="tablet",
+            form="Tablet",
         ),
     )
 
@@ -213,17 +205,16 @@ def test_medication_search_uses_catalogue_fields(
     assert body["items"][0]["name"] == "Salbutamol"
 
 
-def test_nurse_can_edit_and_deactivate_medication(
+def test_receptionist_can_edit_and_deactivate_medication(
     client: TestClient,
 ) -> None:
     create_staff_and_login(client)
     medication = create_medication(client)
 
     response = client.patch(
-        "/api/pharmacy/medications/"
-        f"{medication['medication_id']}",
+        "/api/pharmacy/medications/" f"{medication['medication_id']}",
         json={
-            "unit": "boxes",
+            "unit": "packs",
             "reorder_level": 30,
             "is_active": False,
         },
@@ -231,7 +222,7 @@ def test_nurse_can_edit_and_deactivate_medication(
 
     assert response.status_code == 200
     updated = response.json()
-    assert updated["unit"] == "boxes"
+    assert updated["unit"] == "packs"
     assert updated["reorder_level"] == 30
     assert updated["is_active"] is False
     assert updated["low_stock"] is True
@@ -292,9 +283,7 @@ def test_stock_adjustments_update_balance_and_audit_history(
     assert stock_out.status_code == 200
     assert stock_out.json()["stock_quantity"] == 31
 
-    history_response = client.get(
-        f"/api/pharmacy/medications/{medication_id}/transactions"
-    )
+    history_response = client.get(f"/api/pharmacy/medications/{medication_id}/transactions")
     history = history_response.json()
     assert [item["quantity_change"] for item in history] == [
         -4,
@@ -302,10 +291,7 @@ def test_stock_adjustments_update_balance_and_audit_history(
         25,
     ]
     assert history[0]["balance_after"] == 31
-    assert all(
-        item["performed_by_staff_id"] == staff_id
-        for item in history
-    )
+    assert all(item["performed_by_staff_id"] == staff_id for item in history)
 
 
 def test_stock_cannot_be_reduced_below_zero(
@@ -315,8 +301,7 @@ def test_stock_cannot_be_reduced_below_zero(
     medication = create_medication(client)
 
     response = client.post(
-        "/api/pharmacy/medications/"
-        f"{medication['medication_id']}/stock-adjustments",
+        "/api/pharmacy/medications/" f"{medication['medication_id']}/stock-adjustments",
         json={
             "quantity_change": -26,
             "reason": "Invalid excessive reduction.",
@@ -325,25 +310,20 @@ def test_stock_cannot_be_reduced_below_zero(
 
     assert response.status_code == 409
 
-    detail_response = client.get(
-        "/api/pharmacy/medications/"
-        f"{medication['medication_id']}"
-    )
+    detail_response = client.get("/api/pharmacy/medications/" f"{medication['medication_id']}")
     assert detail_response.json()["stock_quantity"] == 25
 
 
 @pytest.mark.parametrize(
     "role",
-    ["doctor", "receptionist"],
+    ["doctor", "nurse"],
 )
 def test_non_pharmacy_roles_cannot_manage_inventory(
     client: TestClient,
     role: str,
 ) -> None:
     overrides: dict[str, object] = {
-        "full_name": "Dr. David Lee"
-        if role == "doctor"
-        else "Rina Lee",
+        "full_name": "Dr. David Lee" if role == "doctor" else "Rina Lee",
         "email": f"{role}@example.com",
     }
     if role == "doctor":
@@ -364,10 +344,19 @@ def test_non_pharmacy_roles_cannot_manage_inventory(
     assert response.headers["location"] == "/auth/login"
 
 
-def test_nurse_can_open_pharmacy_page(
+@pytest.mark.parametrize(
+    "role",
+    ["receptionist", "admin"],
+)
+def test_receptionist_and_admin_can_open_pharmacy_page(
     client: TestClient,
+    role: str,
 ) -> None:
-    create_staff_and_login(client)
+    create_staff_and_login(
+        client,
+        role,
+        email=f"{role}@example.com",
+    )
 
     response = client.get("/pharmacy")
 
@@ -376,6 +365,63 @@ def test_nurse_can_open_pharmacy_page(
     assert 'id="add-medication-button"' in response.text
     assert 'id="stock-modal"' in response.text
     assert "/static/js/pharmacy-management.js" in response.text
+    assert '<a class="nav-link" href="/pharmacy">Pharmacy</a>' in response.text
+
+
+def test_pharmacy_form_uses_controlled_dropdowns(
+    client: TestClient,
+) -> None:
+    create_staff_and_login(client)
+
+    response = client.get("/pharmacy")
+
+    assert response.status_code == 200
+    assert 'id="medication-form-type"' in response.text
+    assert 'id="medication-standard-dosage"' in response.text
+    assert 'id="medication-unit"' in response.text
+    assert response.text.count('class="form-select"') >= 3
+    assert '<option value="Tablet">' in response.text
+    assert '<option value="250 mg">' in response.text
+    assert 'value="tablets"' in response.text
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("form", "Hand-typed form"),
+        ("standard_dosage", "Hand-typed dosage"),
+        ("unit", "Hand-typed unit"),
+    ],
+)
+def test_medication_rejects_values_outside_dropdown_options(
+    client: TestClient,
+    field_name: str,
+    invalid_value: str,
+) -> None:
+    create_staff_and_login(client)
+
+    response = client.post(
+        "/api/pharmacy/medications",
+        json=new_medication_payload(
+            **{field_name: invalid_value},
+        ),
+    )
+
+    assert response.status_code == 422
+
+
+def test_out_of_stock_quantity_has_bold_red_style() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    script = (project_root / "static" / "js" / "pharmacy-management.js").read_text(encoding="utf-8")
+    stylesheet = (project_root / "static" / "css" / "pharmacy-management.css").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'class="pharmacy-stock-quantity"' in script
+    assert 'return "pharmacy-stock-empty"' in script
+    assert ".pharmacy-stock-empty .pharmacy-stock-quantity" in stylesheet
+    assert "color: var(--bs-danger)" in stylesheet
+    assert "font-weight: 800" in stylesheet
 
 
 def test_pharmacy_page_requires_login(

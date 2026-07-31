@@ -224,14 +224,18 @@ Pharmacy - Agile Clinic Portal
               >
                 Form *
               </label>
-              <input
-                type="text"
+              <select
                 id="medication-form-type"
-                class="form-control"
-                placeholder="Tablet, capsule..."
-                maxlength="80"
+                class="form-select"
                 required
               >
+                <option value="">Select form</option>
+                {% for option in medication_form_options %}
+                  <option value="{{ option }}">
+                    {{ option }}
+                  </option>
+                {% endfor %}
+              </select>
             </div>
 
             <div class="col-sm-6">
@@ -241,14 +245,18 @@ Pharmacy - Agile Clinic Portal
               >
                 Standard dosage *
               </label>
-              <input
-                type="text"
+              <select
                 id="medication-standard-dosage"
-                class="form-control"
-                placeholder="500 mg"
-                maxlength="80"
+                class="form-select"
                 required
               >
+                <option value="">Select dosage</option>
+                {% for option in standard_dosage_options %}
+                  <option value="{{ option }}">
+                    {{ option }}
+                  </option>
+                {% endfor %}
+              </select>
             </div>
           </div>
 
@@ -260,14 +268,20 @@ Pharmacy - Agile Clinic Portal
               >
                 Stock unit *
               </label>
-              <input
-                type="text"
+              <select
                 id="medication-unit"
-                class="form-control"
-                value="units"
-                maxlength="40"
+                class="form-select"
                 required
               >
+                {% for option in stock_unit_options %}
+                  <option
+                    value="{{ option }}"
+                    {% if option == "units" %}selected{% endif %}
+                  >
+                    {{ option }}
+                  </option>
+                {% endfor %}
+              </select>
             </div>
 
             <div class="col-sm-6">
