@@ -6,6 +6,7 @@
 
   const heading = document.getElementById("consultation-heading");
   const alertBox = document.getElementById("consultation-alert");
+  const currentDatetimeEl = document.getElementById("current-datetime");
 
   const STATUS_BADGE = {
     scheduled: "text-bg-primary",
@@ -133,6 +134,26 @@
       })
       .join("");
   }
+
+  // Shows the browser's own idea of "now" next to the heading, so it's obvious
+  // whether the future-timeslot filtering and locking above are working off the
+  // date/time you expect - useful given past-vs-future here depends entirely on
+  // this local clock, not the server's.
+  function updateCurrentDatetime() {
+    const now = new Date();
+    currentDatetimeEl.textContent = `Now: ${now.toLocaleString(undefined, {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })}`;
+  }
+
+  updateCurrentDatetime();
+  setInterval(updateCurrentDatetime, 1000);
 
   loadQueue();
 })();
