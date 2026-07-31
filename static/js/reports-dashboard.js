@@ -17,8 +17,8 @@
   const toInput = document.getElementById(
     "report-to-date"
   );
-  const applyButton = document.getElementById(
-    "apply-report-range-button"
+  const quickRangeInput = document.getElementById(
+    "report-quick-range"
   );
   const exportButton = document.getElementById(
     "export-report-button"
@@ -86,6 +86,122 @@
       from: fromInput.value,
       to: toInput.value
     });
+  }
+
+  function parseInputDate(value) {
+    const parts = value.split("-").map(Number);
+    return new Date(
+      parts[0],
+      parts[1] - 1,
+      parts[2],
+      12
+    );
+  }
+
+  function formatInputDate(value) {
+    const year = value.getFullYear();
+    const month = String(
+      value.getMonth() + 1
+    ).padStart(2, "0");
+    const day = String(
+      value.getDate()
+    ).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function addDays(value, numberOfDays) {
+    const result = new Date(value);
+    result.setDate(
+      result.getDate() + numberOfDays
+    );
+    return result;
+  }
+
+  function startOfWeek(value) {
+    const daysSinceMonday =
+      (value.getDay() + 6) % 7;
+    return addDays(value, -daysSinceMonday);
+  }
+
+  function rangeForPreset(preset) {
+    const today = parseInputDate(
+      root.dataset.today
+    );
+    const monday = startOfWeek(today);
+
+    if (preset === "today") {
+      return [today, today];
+    }
+    if (preset === "yesterday") {
+      const yesterday = addDays(today, -1);
+      return [yesterday, yesterday];
+    }
+    if (preset === "tomorrow") {
+      const tomorrow = addDays(today, 1);
+      return [tomorrow, tomorrow];
+    }
+    if (preset === "this_week") {
+      return [monday, addDays(monday, 6)];
+    }
+    if (preset === "last_week") {
+      return [
+        addDays(monday, -7),
+        addDays(monday, -1)
+      ];
+    }
+    if (preset === "next_week") {
+      return [
+        addDays(monday, 7),
+        addDays(monday, 13)
+      ];
+    }
+    if (preset === "this_month") {
+      return [
+        new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          1,
+          12
+        ),
+        new Date(
+          today.getFullYear(),
+          today.getMonth() + 1,
+          0,
+          12
+        )
+      ];
+    }
+    if (preset === "last_month") {
+      return [
+        new Date(
+          today.getFullYear(),
+          today.getMonth() - 1,
+          1,
+          12
+        ),
+        new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          0,
+          12
+        )
+      ];
+    }
+    return null;
+  }
+
+  function applyQuickRange() {
+    const range = rangeForPreset(
+      quickRangeInput.value
+    );
+    if (!range) {
+      return;
+    }
+
+    fromInput.value = formatInputDate(range[0]);
+    toInput.value = formatInputDate(range[1]);
+    rangeForm.classList.remove("was-validated");
+    refreshReports();
   }
 
   function validateRange() {
@@ -311,7 +427,6 @@
       "d-none",
       !isLoading
     );
-    applyButton.disabled = isLoading;
     if (isLoading) {
       exportButton.disabled = true;
     }
@@ -419,11 +534,17 @@
 
   [fromInput, toInput].forEach(function (input) {
     input.addEventListener("change", function () {
+      quickRangeInput.value = "custom";
       if (fromInput.value && toInput.value) {
         refreshReports();
       }
     });
   });
+
+  quickRangeInput.addEventListener(
+    "change",
+    applyQuickRange
+  );
 
   exportButton.addEventListener(
     "click",
@@ -446,5 +567,6 @@
     root.dataset.defaultFrom || fromInput.value;
   toInput.value =
     root.dataset.defaultTo || toInput.value;
+  quickRangeInput.value = "this_week";
   refreshReports();
 })();

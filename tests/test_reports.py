@@ -184,6 +184,17 @@ def test_admin_reports_dashboard_uses_current_week(
     assert 'id="reports-dashboard-root"' in response.text
     assert f'data-default-from="{monday.isoformat()}"' in response.text
     assert (f'data-default-to="' f'{(monday + dt.timedelta(days=6)).isoformat()}"') in response.text
+    assert f'data-today="{dt.date.today().isoformat()}"' in response.text
+    assert 'id="report-quick-range"' in response.text
+    assert 'value="today"' in response.text
+    assert 'value="yesterday"' in response.text
+    assert 'value="tomorrow"' in response.text
+    assert 'value="this_week"' in response.text
+    assert 'value="last_week"' in response.text
+    assert 'value="next_week"' in response.text
+    assert 'value="this_month"' in response.text
+    assert 'value="last_month"' in response.text
+    assert 'id="apply-report-range-button"' not in response.text
     assert "/static/css/reports-dashboard.css" in response.text
     assert "/static/js/reports-dashboard.js" in response.text
 
@@ -321,6 +332,18 @@ def test_reports_javascript_refreshes_and_downloads_pdf() -> None:
     assert "/api/reports/appointments/daily?" in script
     assert "/api/reports/appointments/daily/export.pdf?" in script
     assert 'input.addEventListener("change"' in script
+    assert "quickRangeInput.addEventListener(" in script
+    assert '"change",\n    applyQuickRange' in script
+    assert 'quickRangeInput.value = "custom"' in script
+    assert 'preset === "today"' in script
+    assert 'preset === "yesterday"' in script
+    assert 'preset === "tomorrow"' in script
+    assert 'preset === "this_week"' in script
+    assert 'preset === "last_week"' in script
+    assert 'preset === "next_week"' in script
+    assert 'preset === "this_month"' in script
+    assert 'preset === "last_month"' in script
+    assert "apply-report-range-button" not in script
     assert "response.blob()" in script
     assert "downloadLink.click()" in script
 

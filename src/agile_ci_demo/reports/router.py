@@ -124,5 +124,6 @@ def reports_dashboard_page(
         {
             "default_from_date": date_range.from_date.isoformat(),
             "default_to_date": date_range.to_date.isoformat(),
+            "today_date": dt.date.today().isoformat(),
         },
     )

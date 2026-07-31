@@ -13,6 +13,7 @@ Reports Dashboard - Agile Clinic Portal
   id="reports-dashboard-root"
   data-default-from="{{ default_from_date }}"
   data-default-to="{{ default_to_date }}"
+  data-today="{{ today_date }}"
 >
   <header
     class="d-flex flex-column flex-lg-row
@@ -49,7 +50,27 @@ Reports Dashboard - Agile Clinic Portal
         class="row g-3 align-items-end"
         novalidate
       >
-        <div class="col-md-4">
+        <div class="col-lg-4">
+          <label for="report-quick-range" class="form-label">
+            Quick range
+          </label>
+          <select
+            id="report-quick-range"
+            class="form-select"
+          >
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="tomorrow">Tomorrow</option>
+            <option value="this_week" selected>This Week</option>
+            <option value="last_week">Last Week</option>
+            <option value="next_week">Next Week</option>
+            <option value="this_month">This Month</option>
+            <option value="last_month">Last Month</option>
+            <option value="custom">Custom Range</option>
+          </select>
+        </div>
+
+        <div class="col-sm-6 col-lg-4">
           <label for="report-from-date" class="form-label">
             From
           </label>
@@ -63,7 +84,7 @@ Reports Dashboard - Agile Clinic Portal
           >
         </div>
 
-        <div class="col-md-4">
+        <div class="col-sm-6 col-lg-4">
           <label for="report-to-date" class="form-label">
             To
           </label>
@@ -77,15 +98,6 @@ Reports Dashboard - Agile Clinic Portal
           >
         </div>
 
-        <div class="col-md-4">
-          <button
-            type="submit"
-            id="apply-report-range-button"
-            class="btn btn-primary w-100"
-          >
-            Apply Date Range
-          </button>
-        </div>
       </form>
     </div>
   </section>
