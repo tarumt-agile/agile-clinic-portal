@@ -168,11 +168,7 @@ def register_doctor(
     response = client.post("/api/staff", json=payload)
     assert response.status_code == 201, response.json()
 
-    welcome_email = next(
-        message
-        for message in reversed(get_outbox())
-        if message.to == email
-    )
+    welcome_email = next(message for message in reversed(get_outbox()) if message.to == email)
     match = re.search(r"temporary password is: (\S+)", welcome_email.body)
     assert match is not None
 
@@ -226,8 +222,7 @@ def find_medication_id(
     item = next(
         medication
         for medication in response.json()
-        if medication["standard_dosage"]
-        == standard_dosage
+        if medication["standard_dosage"] == standard_dosage
     )
     return str(item["medication_id"])
 
@@ -263,15 +258,13 @@ def create_prescription(
     prepared: PreparedConsultation,
     **overrides: object,
 ) -> dict[str, object]:
-    response = client.post(
-        "/api/prescriptions",
-        json=valid_prescription_payload(
-            prepared.record_id,
-            prepared.diagnosis_id,
-            prepared.medication_id,
-            **overrides,
-        ),
+    payload = valid_prescription_payload(
+        prepared.record_id,
+        prepared.diagnosis_id,
+        prepared.medication_id,
     )
+    payload.update(overrides)
+    response = client.post("/api/prescriptions", json=payload)
     assert response.status_code == 201, response.json()
     return response.json()
 
@@ -472,9 +465,7 @@ def test_patient_history_is_newest_first_and_patient_scoped(
         medication_id=cetirizine_id,
     )
 
-    response = client.get(
-        f"/api/prescriptions/patient/{prepared.patient_id}"
-    )
+    response = client.get(f"/api/prescriptions/patient/{prepared.patient_id}")
 
     assert response.status_code == 200
     items = response.json()["items"]
@@ -592,9 +583,7 @@ def test_non_prescribing_doctor_cannot_update_or_print(
         f"/api/prescriptions/{prescription['prescription_id']}/instructions",
         json=valid_instruction_update(),
     )
-    print_response = client.get(
-        f"/prescriptions/{prescription['prescription_id']}"
-    )
+    print_response = client.get(f"/prescriptions/{prescription['prescription_id']}")
 
     assert update_response.status_code == 403
     assert print_response.status_code == 403
@@ -614,9 +603,7 @@ def test_other_doctor_cannot_edit_patient_history_item(
     )
     login_doctor(client, other_email, other_password)
 
-    response = client.get(
-        f"/api/prescriptions/patient/{prepared.patient_id}"
-    )
+    response = client.get(f"/api/prescriptions/patient/{prepared.patient_id}")
 
     assert response.status_code == 200
     assert response.json()["items"][0]["can_edit"] is False
@@ -631,9 +618,7 @@ def test_prescription_detail_api_contains_print_fields(
     prepared = prepare_consultation(client)
     prescription = create_prescription(client, prepared)
 
-    response = client.get(
-        f"/api/prescriptions/{prescription['prescription_id']}"
-    )
+    response = client.get(f"/api/prescriptions/{prescription['prescription_id']}")
 
     assert response.status_code == 200
     body = response.json()
@@ -651,9 +636,7 @@ def test_prescribing_doctor_can_open_print_page(
     prepared = prepare_consultation(client)
     prescription = create_prescription(client, prepared)
 
-    response = client.get(
-        f"/prescriptions/{prescription['prescription_id']}"
-    )
+    response = client.get(f"/prescriptions/{prescription['prescription_id']}")
 
     assert response.status_code == 200
     assert 'id="print-prescription-button"' in response.text
@@ -706,12 +689,7 @@ def test_consultation_page_has_medication_autocomplete(
 
 
 def test_autocomplete_script_caches_search_results_client_side() -> None:
-    script_path = (
-        Path(__file__).resolve().parents[1]
-        / "static"
-        / "js"
-        / "consultation-detail.js"
-    )
+    script_path = Path(__file__).resolve().parents[1] / "static" / "js" / "consultation-detail.js"
     script = script_path.read_text(encoding="utf-8")
 
     assert "medicationSearchCache = new Map()" in script
@@ -724,12 +702,12 @@ def test_autocomplete_script_caches_search_results_client_side() -> None:
 
 def test_existing_prescription_cards_link_to_print_page() -> None:
     project_root = Path(__file__).resolve().parents[1]
-    record_script = (
-        project_root / "static" / "js" / "consultation-detail.js"
-    ).read_text(encoding="utf-8")
-    history_script = (
-        project_root / "static" / "js" / "patient-prescription-history.js"
-    ).read_text(encoding="utf-8")
+    record_script = (project_root / "static" / "js" / "consultation-detail.js").read_text(
+        encoding="utf-8"
+    )
+    history_script = (project_root / "static" / "js" / "patient-prescription-history.js").read_text(
+        encoding="utf-8"
+    )
 
     assert "View / Print" in record_script
     assert "View / Print" in history_script
@@ -739,10 +717,7 @@ def test_existing_prescription_cards_link_to_print_page() -> None:
 
 def test_print_styles_define_print_media_and_a4_page() -> None:
     stylesheet_path = (
-        Path(__file__).resolve().parents[1]
-        / "static"
-        / "css"
-        / "prescription-print.css"
+        Path(__file__).resolve().parents[1] / "static" / "css" / "prescription-print.css"
     )
     stylesheet = stylesheet_path.read_text(encoding="utf-8")
 

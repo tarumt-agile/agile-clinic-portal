@@ -129,7 +129,9 @@ def test_create_consultation_note_success(client: TestClient) -> None:
 def test_create_consultation_note_then_fetch_by_record_id(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
-    created = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id)).json()
+    created = client.post(
+        "/api/consultations", json=valid_record_payload(patient_id, doctor_id)
+    ).json()
 
     r = client.get(f"/api/consultations/{created['record_id']}")
     assert r.status_code == 200
@@ -200,7 +202,9 @@ def test_create_with_no_diagnoses_returns_422(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
 
-    r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id, diagnoses=[]))
+    r = client.post(
+        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, diagnoses=[])
+    )
     assert r.status_code == 422
 
 
@@ -208,7 +212,9 @@ def test_create_with_blank_notes_returns_422(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
 
-    r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="   "))
+    r = client.post(
+        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="   ")
+    )
     assert r.status_code == 422
 
 
@@ -342,10 +348,12 @@ def test_patient_history_search_by_notes_keyword(client: TestClient) -> None:
     patient_id = _register_patient(client)
     doctor_id = _register_doctor(client)
     client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="Fever and cough")
+        "/api/consultations",
+        json=valid_record_payload(patient_id, doctor_id, notes="Fever and cough"),
     )
     client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="Sprained ankle")
+        "/api/consultations",
+        json=valid_record_payload(patient_id, doctor_id, notes="Sprained ankle"),
     )
 
     r = client.get(f"/api/consultations?patient_id={patient_id}&q=ankle")
@@ -371,8 +379,12 @@ def test_patient_history_scoped_to_correct_patient(client: TestClient) -> None:
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
-    client.post("/api/consultations", json=valid_record_payload(patient_a, doctor_id, notes="Visit A"))
-    client.post("/api/consultations", json=valid_record_payload(patient_b, doctor_id, notes="Visit B"))
+    client.post(
+        "/api/consultations", json=valid_record_payload(patient_a, doctor_id, notes="Visit A")
+    )
+    client.post(
+        "/api/consultations", json=valid_record_payload(patient_b, doctor_id, notes="Visit B")
+    )
 
     r = client.get(f"/api/consultations?patient_id={patient_a}")
     body = r.json()
