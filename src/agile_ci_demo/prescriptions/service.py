@@ -31,7 +31,6 @@ from agile_ci_demo.consultations.service import (
 )
 from agile_ci_demo.staff.models import Staff
 
-
 DOSAGE_OPTIONS = [
     "Half tablet",
     "1 tablet",
@@ -171,9 +170,7 @@ def create_prescription(
         data.medication_id,
     )
     if medication is None or not medication.is_active:
-        raise MedicationNotFoundError(
-            "The selected medication was not found or is inactive."
-        )
+        raise MedicationNotFoundError("The selected medication was not found or is inactive.")
 
     prescription = Prescription(
         consultation_note_id=consultation.id,

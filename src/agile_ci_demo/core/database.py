@@ -244,9 +244,7 @@ def backfill_prescription_medications() -> None:
         return
 
     with engine.begin() as connection:
-        table_names = set(
-            inspect(connection).get_table_names()
-        )
+        table_names = set(inspect(connection).get_table_names())
         if not {
             "medications",
             "prescriptions",

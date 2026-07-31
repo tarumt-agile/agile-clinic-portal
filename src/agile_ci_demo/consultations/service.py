@@ -142,7 +142,9 @@ def end_consultation(db: Session, record_id: str, doctor: Staff) -> Consultation
     """Mark a consultation as ended - only the doctor who documented it can end it."""
     note = get_consultation_note_by_record_id(db, record_id)
     if note is None:
-        raise ConsultationNoteNotFoundError(f"No consultation note found with record_id '{record_id}'")
+        raise ConsultationNoteNotFoundError(
+            f"No consultation note found with record_id '{record_id}'"
+        )
 
     if note.doctor_id != doctor.id:
         raise NotYourConsultationError("You can only end your own consultations")

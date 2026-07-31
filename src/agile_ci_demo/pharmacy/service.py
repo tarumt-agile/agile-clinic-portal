@@ -63,9 +63,7 @@ def build_prescription_value(
 def seed_default_medications(db: Session) -> None:
     """Insert the bundled medication catalogue without overwriting managed data."""
 
-    existing_values = set(
-        db.execute(select(Medication.prescription_value)).scalars().all()
-    )
+    existing_values = set(db.execute(select(Medication.prescription_value)).scalars().all())
     created: list[Medication] = []
 
     for name, form, standard_dosage in DEFAULT_MEDICATIONS:
@@ -194,8 +192,7 @@ def create_medication(
 
     duplicate = db.execute(
         select(Medication).where(
-            func.lower(Medication.prescription_value)
-            == prescription_value.casefold()
+            func.lower(Medication.prescription_value) == prescription_value.casefold()
         )
     ).scalar_one_or_none()
 
@@ -262,9 +259,7 @@ def update_medication(
     name = data.name if data.name is not None else medication.name
     form = data.form if data.form is not None else medication.form
     dosage = (
-        data.standard_dosage
-        if data.standard_dosage is not None
-        else medication.standard_dosage
+        data.standard_dosage if data.standard_dosage is not None else medication.standard_dosage
     )
     prescription_value = build_prescription_value(
         name,
@@ -274,10 +269,7 @@ def update_medication(
 
     duplicate = db.execute(
         select(Medication)
-        .where(
-            func.lower(Medication.prescription_value)
-            == prescription_value.casefold()
-        )
+        .where(func.lower(Medication.prescription_value) == prescription_value.casefold())
         .where(Medication.id != medication.id)
     ).scalar_one_or_none()
     if duplicate is not None:
@@ -316,27 +308,19 @@ def adjust_stock(
     staff: Staff,
 ) -> tuple[Medication, StockTransaction]:
     medication = db.execute(
-        select(Medication)
-        .where(Medication.medication_id == medication_id)
-        .with_for_update()
+        select(Medication).where(Medication.medication_id == medication_id).with_for_update()
     ).scalar_one_or_none()
     if medication is None:
         raise MedicationNotFoundError("Medication not found.")
 
     balance_after = medication.stock_quantity + data.quantity_change
     if balance_after < 0:
-        raise InvalidStockAdjustmentError(
-            "Stock cannot be reduced below zero."
-        )
+        raise InvalidStockAdjustmentError("Stock cannot be reduced below zero.")
 
     medication.stock_quantity = balance_after
     transaction = StockTransaction(
         medication_id=medication.id,
-        transaction_type=(
-            "stock_in"
-            if data.quantity_change > 0
-            else "stock_out"
-        ),
+        transaction_type=("stock_in" if data.quantity_change > 0 else "stock_out"),
         quantity_change=data.quantity_change,
         balance_after=balance_after,
         reason=data.reason,
@@ -354,9 +338,7 @@ def adjust_stock(
         db.refresh(transaction)
     except IntegrityError as exc:
         db.rollback()
-        raise InvalidStockAdjustmentError(
-            "The stock adjustment could not be saved."
-        ) from exc
+        raise InvalidStockAdjustmentError("The stock adjustment could not be saved.") from exc
 
     return medication, transaction
 

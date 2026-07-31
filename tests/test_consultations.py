@@ -120,7 +120,9 @@ def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
     return str(body["staff_id"])
 
 
-def _book_appointment(client: TestClient, patient_id: str, doctor_id: str, **overrides: object) -> str:
+def _book_appointment(
+    client: TestClient, patient_id: str, doctor_id: str, **overrides: object
+) -> str:
     """Book an appointment and return its reference_number."""
     payload: dict[str, object] = {
         "patient_id": patient_id,
@@ -401,9 +403,7 @@ def test_patient_history_search_by_notes_keyword(client: TestClient) -> None:
     client.post(
         "/api/consultations", json=valid_record_payload(patient_id, notes="Fever and cough")
     )
-    client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, notes="Sprained ankle")
-    )
+    client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Sprained ankle"))
 
     r = client.get(f"/api/consultations?patient_id={patient_id}&q=ankle")
     assert r.status_code == 200
@@ -509,13 +509,17 @@ def test_ending_a_consultation_marks_its_appointment_completed(client: TestClien
 
     # Still scheduled while the consultation is only in_progress.
     schedule = client.get(f"/api/appointments/schedule?date={TOMORROW}").json()
-    appt = next(a for a in schedule["appointments"] if a["reference_number"] == appointment_reference)
+    appt = next(
+        a for a in schedule["appointments"] if a["reference_number"] == appointment_reference
+    )
     assert appt["status"] == "scheduled"
 
     client.patch(f"/api/consultations/{created['record_id']}/end")
 
     schedule = client.get(f"/api/appointments/schedule?date={TOMORROW}").json()
-    appt = next(a for a in schedule["appointments"] if a["reference_number"] == appointment_reference)
+    appt = next(
+        a for a in schedule["appointments"] if a["reference_number"] == appointment_reference
+    )
     assert appt["status"] == "completed"
 
 
@@ -550,9 +554,7 @@ def test_end_consultation_requires_login(client: TestClient) -> None:
     created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
     client.post("/api/auth/logout")
 
-    r = client.patch(
-        f"/api/consultations/{created['record_id']}/end", follow_redirects=False
-    )
+    r = client.patch(f"/api/consultations/{created['record_id']}/end", follow_redirects=False)
     assert r.status_code == 303
 
 
