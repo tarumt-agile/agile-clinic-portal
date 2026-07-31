@@ -624,13 +624,15 @@ def test_search_patients_filters_by_registered_to() -> None:
 
 
 def test_search_patients_registered_from_and_to_are_inclusive_of_the_whole_day() -> None:
-    """A patient registered at 23:59 on the boundary date must still match when that
-    same date is used for both registered_from and registered_to - the range must
-    cover the whole day, not just midnight."""
-    from agile_ci_demo.patients.service import search_patients
+    """A patient registered in the last minute of the boundary date (in local time -
+    created_at is stored in UTC, per _local_day_bounds_utc) must still match when
+    that same date is used for both registered_from and registered_to - the range
+    must cover the whole local day, not just midnight."""
+    from agile_ci_demo.patients.service import _local_day_bounds_utc, search_patients
 
     db = _build_isolated_patients_db()
-    db.add(_make_patient("P00001", "Late Patient", dt.datetime(2026, 1, 10, 23, 59, 0)))
+    _, end_of_day_utc = _local_day_bounds_utc(dt.date(2026, 1, 10))
+    db.add(_make_patient("P00001", "Late Patient", end_of_day_utc - dt.timedelta(minutes=1)))
     db.commit()
 
     items, total = search_patients(

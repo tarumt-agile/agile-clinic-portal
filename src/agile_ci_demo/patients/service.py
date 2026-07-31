@@ -76,6 +76,26 @@ def search_patients_by_ic_prefix(db: Session, prefix: str, limit: int = 8) -> li
     return list(db.execute(stmt).scalars().all())
 
 
+def _local_day_bounds_utc(date: dt.date) -> tuple[dt.datetime, dt.datetime]:
+    """The UTC datetime range covering a local calendar day.
+
+    Patient.created_at is stored in UTC (dt.datetime.utcnow(), like every other
+    timestamp column in this codebase), but registered_from/registered_to come
+    from a receptionist's date picker and mean their own local "today" - not the
+    UTC day, which is a different date for several hours around local midnight in
+    any timezone ahead of UTC. Converting the boundary (not the stored timestamps)
+    keeps created_at's storage convention untouched everywhere else.
+    """
+    start_local = dt.datetime.combine(date, dt.time.min)
+    end_local = dt.datetime.combine(date, dt.time.max)
+    # astimezone() on a naive datetime presumes it's in the system's local
+    # timezone and resolves the correct UTC offset for that specific date
+    # (handling DST correctly, unlike a fixed offset computed from "now").
+    start_utc = start_local.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    end_utc = end_local.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    return start_utc, end_utc
+
+
 def search_patients(
     db: Session,
     query: str | None,
@@ -94,9 +114,11 @@ def search_patients(
         pattern = f"%{query.strip()}%"
         conditions.append(or_(Patient.full_name.ilike(pattern), Patient.patient_id.ilike(pattern)))
     if registered_from is not None:
-        conditions.append(Patient.created_at >= dt.datetime.combine(registered_from, dt.time.min))
+        start, _ = _local_day_bounds_utc(registered_from)
+        conditions.append(Patient.created_at >= start)
     if registered_to is not None:
-        conditions.append(Patient.created_at <= dt.datetime.combine(registered_to, dt.time.max))
+        _, end = _local_day_bounds_utc(registered_to)
+        conditions.append(Patient.created_at <= end)
 
     count_stmt = select(func.count()).select_from(Patient)
     items_stmt = select(Patient).order_by(Patient.id)
