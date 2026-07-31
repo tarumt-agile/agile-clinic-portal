@@ -65,5 +65,8 @@ python_version = "3.11"
 packages = ["src"]
 
 [[tool.mypy.overrides]]
+# reportlab ships no type stubs and CI's Type check step doesn't install
+# types-reportlab (only types-requests) - ignore missing imports here rather
+# than depend on that step installing something it doesn't ask for.
 module = "reportlab.*"
 ignore_missing_imports = true

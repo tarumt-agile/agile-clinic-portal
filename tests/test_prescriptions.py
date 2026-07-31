@@ -230,12 +230,16 @@ def find_medication_id(
 def prepare_consultation(client: TestClient) -> PreparedConsultation:
     patient_id = register_patient(client)
     doctor_id, email, password = register_doctor(client)
+
+    # Creating a consultation is doctor-only and the doctor is always taken from
+    # the session, so login must happen before create_consultation, not after.
+    login_doctor(client, email, password)
+
     record = create_consultation(client, patient_id, doctor_id)
     diagnoses = record["diagnoses"]
     assert isinstance(diagnoses, list)
     diagnosis_id = int(diagnoses[0]["id"])
 
-    login_doctor(client, email, password)
     medication_id = find_medication_id(
         client,
         "Amoxicillin",
@@ -258,12 +262,17 @@ def create_prescription(
     prepared: PreparedConsultation,
     **overrides: object,
 ) -> dict[str, object]:
+    # Built via .update() rather than forwarding overrides straight into
+    # valid_prescription_payload's positional args - an override like
+    # medication_id=... would otherwise collide with the positional
+    # prepared.medication_id already bound to that same parameter name.
     payload = valid_prescription_payload(
         prepared.record_id,
         prepared.diagnosis_id,
         prepared.medication_id,
     )
     payload.update(overrides)
+
     response = client.post("/api/prescriptions", json=payload)
     assert response.status_code == 201, response.json()
     return response.json()

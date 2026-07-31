@@ -22,11 +22,8 @@
         <input type="hidden" id="patient_id" name="patient_id" value="{{ patient_id }}">
 
         <div class="mb-3">
-          <label for="doctor_id" class="form-label">Doctor *</label>
-          <select class="form-select" id="doctor_id" name="doctor_id" required>
-            <option value="" selected disabled>Loading doctors...</option>
-          </select>
-          <div class="invalid-feedback">Please select a doctor.</div>
+          <label class="form-label">Doctor</label>
+          <input type="text" class="form-control" value="{{ doctor_name }}" disabled readonly>
         </div>
 
         <div class="mb-3">

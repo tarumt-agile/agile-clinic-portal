@@ -15,7 +15,10 @@
   let searchDebounceTimer = null;
   let hasLoadedOnce = false;
 
-  newRecordLink.href = `/consultations/new?patient_id=${encodeURIComponent(patientId)}`;
+  // Only present for doctors - the create-consultation flow is doctor-only.
+  if (newRecordLink) {
+    newRecordLink.href = `/consultations/new?patient_id=${encodeURIComponent(patientId)}`;
+  }
 
   function escapeHtml(str) {
     return str.replace(/[&<>"']/g, (c) => (

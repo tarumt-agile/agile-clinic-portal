@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as dt
+import re
 from collections.abc import Generator
 
 import pytest
@@ -11,9 +13,13 @@ from sqlalchemy.pool import StaticPool
 
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
+from agile_ci_demo.core.email import clear_outbox, get_outbox
+from agile_ci_demo.appointments import models as _appointments_models  # noqa: F401
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+
+TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -37,11 +43,13 @@ def client() -> Generator[TestClient, None, None]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    clear_outbox()
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_db, None)
         Base.metadata.drop_all(bind=engine)
+        clear_outbox()
 
 
 def valid_patient_payload(**overrides: object) -> dict[str, object]:
@@ -77,6 +85,7 @@ def _register_patient(client: TestClient, **overrides: object) -> str:
 
 
 def _register_doctor(client: TestClient, **overrides: object) -> str:
+    """Create a doctor account (no session/login) and return its staff_id."""
     response = client.post(
         "/api/staff",
         json=valid_staff_payload(**overrides),
@@ -88,10 +97,49 @@ def _register_doctor(client: TestClient, **overrides: object) -> str:
     return str(body["staff_id"])
 
 
-def valid_record_payload(patient_id: str, doctor_id: str, **overrides: object) -> dict[str, object]:
+def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
+    """Create a doctor account, log in as them, and return the doctor's staff_id.
+
+    Creating consultation notes is doctor-only and the doctor is always taken
+    from the session, so most tests need an actual logged-in doctor, not just
+    a doctor row in the database.
+    """
+    response = client.post("/api/staff", json=valid_staff_payload(**overrides))
+    assert response.status_code == 201, response.json()
+    body = response.json()
+
+    email = str(overrides.get("email", "alan.chua@example.com"))
+    outbox_body = get_outbox()[-1].body
+    match = re.search(r"temporary password is: (\S+)", outbox_body)
+    assert match is not None
+    temp_password = match.group(1)
+
+    login = client.post("/api/auth/login", json={"email": email, "password": temp_password})
+    assert login.status_code == 200, login.json()
+
+    return str(body["staff_id"])
+
+
+def _book_appointment(
+    client: TestClient, patient_id: str, doctor_id: str, **overrides: object
+) -> str:
+    """Book an appointment and return its reference_number."""
     payload: dict[str, object] = {
         "patient_id": patient_id,
         "doctor_id": doctor_id,
+        "appointment_date": TOMORROW,
+        "start_time": "10:00",
+        "reason": "Fever and cough",
+    }
+    payload.update(overrides)
+    r = client.post("/api/appointments", json=payload)
+    assert r.status_code == 201, r.json()
+    return str(r.json()["reference_number"])
+
+
+def valid_record_payload(patient_id: str, **overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "patient_id": patient_id,
         "notes": "Patient presented with fever and cough for 3 days.",
         "diagnoses": [{"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}],
     }
@@ -105,14 +153,14 @@ def valid_record_payload(patient_id: str, doctor_id: str, **overrides: object) -
 def test_create_consultation_note_success(client: TestClient) -> None:
     """
     Scenario: Document a consultation
-      Given a registered patient and an active doctor
+      Given a registered patient and a logged-in doctor
       When I POST /api/consultations with notes and at least one diagnosis
-      Then I receive 201 and a generated record number, and the diagnosis is stored
+      Then I receive 201, a generated record number, and it starts in_progress
     """
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    doctor_id = _register_and_login_doctor(client)
 
-    r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id))
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id))
     assert r.status_code == 201
     body = r.json()
     assert body["record_id"].startswith("R")
@@ -124,14 +172,15 @@ def test_create_consultation_note_success(client: TestClient) -> None:
     assert body["diagnoses"] == [
         {"id": 1, "icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}
     ]
+    assert body["status"] == "in_progress"
+    assert body["ended_at"] is None
+    assert body["started_at"] is not None
 
 
 def test_create_consultation_note_then_fetch_by_record_id(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
-    created = client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, doctor_id)
-    ).json()
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
 
     r = client.get(f"/api/consultations/{created['record_id']}")
     assert r.status_code == 200
@@ -145,12 +194,7 @@ def test_get_unknown_record_returns_404(client: TestClient) -> None:
 
 def test_new_record_page_renders(client: TestClient) -> None:
     """The HTML consultation note form page loads successfully."""
-    from test_auth import _create_staff_and_get_temp_password
-
-    temp_password = _create_staff_and_get_temp_password(
-        client, email="doctor@example.com", role="doctor"
-    )
-    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+    _register_and_login_doctor(client, email="doctor@example.com")
 
     r = client.get("/consultations/new?patient_id=P00001")
     assert r.status_code == 200
@@ -158,12 +202,7 @@ def test_new_record_page_renders(client: TestClient) -> None:
 
 
 def test_record_detail_page_renders(client: TestClient) -> None:
-    from test_auth import _create_staff_and_get_temp_password
-
-    temp_password = _create_staff_and_get_temp_password(
-        client, email="doctor@example.com", role="doctor"
-    )
-    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+    _register_and_login_doctor(client, email="doctor@example.com")
 
     r = client.get("/consultations/R00001")
     assert r.status_code == 200
@@ -180,17 +219,30 @@ def test_record_detail_page_redirects_when_not_logged_in(client: TestClient) -> 
     assert r.status_code == 303
 
 
+def test_new_record_page_redirects_for_non_doctor_role(client: TestClient) -> None:
+    """The create-consultation flow is doctor-only now - a nurse gets redirected."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse@example.com", "password": temp_password})
+
+    r = client.get("/consultations/new?patient_id=P00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
 # --- 2. Required field / validation tests -------------------------------------
 
 
 @pytest.mark.parametrize(
     "missing_field",
-    ["patient_id", "doctor_id", "notes", "diagnoses"],
+    ["patient_id", "notes", "diagnoses"],
 )
 def test_create_missing_required_field_returns_422(client: TestClient, missing_field: str) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
-    payload = valid_record_payload(patient_id, doctor_id)
+    _register_and_login_doctor(client)
+    payload = valid_record_payload(patient_id)
     del payload[missing_field]
 
     r = client.post("/api/consultations", json=payload)
@@ -200,45 +252,49 @@ def test_create_missing_required_field_returns_422(client: TestClient, missing_f
 def test_create_with_no_diagnoses_returns_422(client: TestClient) -> None:
     """At least one diagnosis is required before a consultation note can be saved."""
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    _register_and_login_doctor(client)
 
-    r = client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, diagnoses=[])
-    )
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, diagnoses=[]))
     assert r.status_code == 422
 
 
 def test_create_with_blank_notes_returns_422(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    _register_and_login_doctor(client)
 
-    r = client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="   ")
-    )
+    r = client.post("/api/consultations", json=valid_record_payload(patient_id, notes="   "))
     assert r.status_code == 422
 
 
 def test_create_unknown_patient_returns_404(client: TestClient) -> None:
-    doctor_id = _register_doctor(client)
-    r = client.post("/api/consultations", json=valid_record_payload("P99999", doctor_id))
+    _register_and_login_doctor(client)
+    r = client.post("/api/consultations", json=valid_record_payload("P99999"))
     assert r.status_code == 404
 
 
-def test_create_unknown_doctor_returns_404(client: TestClient) -> None:
+def test_create_without_login_redirects(client: TestClient) -> None:
+    """No session at all -> redirected to login, same as the page route."""
     patient_id = _register_patient(client)
-    r = client.post("/api/consultations", json=valid_record_payload(patient_id, "S99999"))
-    assert r.status_code == 404
-
-
-def test_create_with_non_doctor_staff_returns_404(client: TestClient) -> None:
-    """A staff member who isn't a doctor (e.g. a nurse) cannot document a consultation."""
-    patient_id = _register_patient(client)
-    nurse_id = _register_doctor(
-        client, full_name="Nurse Amy", email="amy@example.com", role="nurse"
+    r = client.post(
+        "/api/consultations", json=valid_record_payload(patient_id), follow_redirects=False
     )
+    assert r.status_code == 303
 
-    r = client.post("/api/consultations", json=valid_record_payload(patient_id, nurse_id))
-    assert r.status_code == 404
+
+def test_create_as_non_doctor_staff_redirects(client: TestClient) -> None:
+    """A staff member who isn't a doctor (e.g. a nurse) cannot document a consultation."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    patient_id = _register_patient(client)
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="amy@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "amy@example.com", "password": temp_password})
+
+    r = client.post(
+        "/api/consultations", json=valid_record_payload(patient_id), follow_redirects=False
+    )
+    assert r.status_code == 303
 
 
 # --- 3. Diagnosis / ICD-10 search tests ----------------------------------------
@@ -246,13 +302,12 @@ def test_create_with_non_doctor_staff_returns_404(client: TestClient) -> None:
 
 def test_diagnosis_stores_code_and_description(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    _register_and_login_doctor(client)
 
     r = client.post(
         "/api/consultations",
         json=valid_record_payload(
             patient_id,
-            doctor_id,
             diagnoses=[
                 {"icd10_code": "i10", "description": "Essential (primary) hypertension"},
                 {"icd10_code": "e11", "description": "Type 2 diabetes mellitus"},
@@ -292,13 +347,13 @@ def test_icd10_search_with_blank_query_returns_empty(client: TestClient) -> None
 
 def test_patient_history_lists_newest_first(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    _register_and_login_doctor(client)
 
     first = client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="First visit")
+        "/api/consultations", json=valid_record_payload(patient_id, notes="First visit")
     ).json()
     second = client.post(
-        "/api/consultations", json=valid_record_payload(patient_id, doctor_id, notes="Second visit")
+        "/api/consultations", json=valid_record_payload(patient_id, notes="Second visit")
     ).json()
 
     r = client.get(f"/api/consultations?patient_id={patient_id}")
@@ -317,12 +372,11 @@ def test_patient_history_unknown_patient_returns_404(client: TestClient) -> None
 
 def test_patient_history_search_by_diagnosis_keyword(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    _register_and_login_doctor(client)
     client.post(
         "/api/consultations",
         json=valid_record_payload(
             patient_id,
-            doctor_id,
             notes="Routine check-up",
             diagnoses=[{"icd10_code": "I10", "description": "Essential (primary) hypertension"}],
         ),
@@ -331,7 +385,6 @@ def test_patient_history_search_by_diagnosis_keyword(client: TestClient) -> None
         "/api/consultations",
         json=valid_record_payload(
             patient_id,
-            doctor_id,
             notes="Follow-up visit",
             diagnoses=[{"icd10_code": "J00", "description": "Acute nasopharyngitis (common cold)"}],
         ),
@@ -346,15 +399,11 @@ def test_patient_history_search_by_diagnosis_keyword(client: TestClient) -> None
 
 def test_patient_history_search_by_notes_keyword(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
+    _register_and_login_doctor(client)
     client.post(
-        "/api/consultations",
-        json=valid_record_payload(patient_id, doctor_id, notes="Fever and cough"),
+        "/api/consultations", json=valid_record_payload(patient_id, notes="Fever and cough")
     )
-    client.post(
-        "/api/consultations",
-        json=valid_record_payload(patient_id, doctor_id, notes="Sprained ankle"),
-    )
+    client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Sprained ankle"))
 
     r = client.get(f"/api/consultations?patient_id={patient_id}&q=ankle")
     assert r.status_code == 200
@@ -365,8 +414,8 @@ def test_patient_history_search_by_notes_keyword(client: TestClient) -> None:
 
 def test_patient_history_search_no_match_returns_empty(client: TestClient) -> None:
     patient_id = _register_patient(client)
-    doctor_id = _register_doctor(client)
-    client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id))
+    _register_and_login_doctor(client)
+    client.post("/api/consultations", json=valid_record_payload(patient_id))
 
     r = client.get(f"/api/consultations?patient_id={patient_id}&q=nonexistentkeyword")
     assert r.status_code == 200
@@ -375,16 +424,12 @@ def test_patient_history_search_no_match_returns_empty(client: TestClient) -> No
 
 def test_patient_history_scoped_to_correct_patient(client: TestClient) -> None:
     """A patient's medical history only includes their own consultation notes."""
-    doctor_id = _register_doctor(client)
+    _register_and_login_doctor(client)
     patient_a = _register_patient(client, full_name="Jane Tan", ic_or_passport="900520-10-1234")
     patient_b = _register_patient(client, full_name="John Lee", ic_or_passport="900520-10-5678")
 
-    client.post(
-        "/api/consultations", json=valid_record_payload(patient_a, doctor_id, notes="Visit A")
-    )
-    client.post(
-        "/api/consultations", json=valid_record_payload(patient_b, doctor_id, notes="Visit B")
-    )
+    client.post("/api/consultations", json=valid_record_payload(patient_a, notes="Visit A"))
+    client.post("/api/consultations", json=valid_record_payload(patient_b, notes="Visit B"))
 
     r = client.get(f"/api/consultations?patient_id={patient_a}")
     body = r.json()
@@ -392,7 +437,128 @@ def test_patient_history_scoped_to_correct_patient(client: TestClient) -> None:
     assert body["items"][0]["notes"] == "Visit A"
 
 
-# --- 5. BDD-style tests with pytest-bdd --------------------------------------
+# --- 5. End consultation ------------------------------------------------------
+
+
+def test_end_consultation_success(client: TestClient) -> None:
+    """
+    Scenario: Doctor ends a consultation they started
+      Given a consultation note that's in_progress
+      When I PATCH /api/consultations/{record_id}/end
+      Then it's marked completed with an ended_at timestamp
+    """
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+    assert created["status"] == "in_progress"
+
+    r = client.patch(f"/api/consultations/{created['record_id']}/end")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "completed"
+    assert body["ended_at"] is not None
+
+
+def test_end_consultation_unknown_record_returns_404(client: TestClient) -> None:
+    _register_and_login_doctor(client)
+    r = client.patch("/api/consultations/R99999/end")
+    assert r.status_code == 404
+
+
+def test_end_consultation_already_ended_returns_409(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    client.patch(f"/api/consultations/{created['record_id']}/end")
+    r = client.patch(f"/api/consultations/{created['record_id']}/end")
+    assert r.status_code == 409
+
+
+def test_end_consultation_by_a_different_doctor_returns_403(client: TestClient) -> None:
+    """Only the doctor who documented the consultation can end it."""
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client, email="alan.chua@example.com")
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    _register_and_login_doctor(
+        client,
+        full_name="Dr. Beth Ong",
+        email="beth.ong@example.com",
+        license_number="MMC-54321",
+    )
+    r = client.patch(f"/api/consultations/{created['record_id']}/end")
+    assert r.status_code == 403
+
+
+def test_ending_a_consultation_marks_its_appointment_completed(client: TestClient) -> None:
+    """
+    Scenario: The appointment schedule reflects a finished consultation
+      Given an appointment and a consultation started from it
+      When I end that consultation
+      Then the appointment's status becomes "completed", not left "scheduled"
+    """
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    appointment_reference = _book_appointment(client, patient_id, doctor_id)
+
+    created = client.post(
+        "/api/consultations",
+        json=valid_record_payload(patient_id, appointment_reference=appointment_reference),
+    ).json()
+
+    # Still scheduled while the consultation is only in_progress.
+    schedule = client.get(f"/api/appointments/schedule?date={TOMORROW}").json()
+    appt = next(
+        a for a in schedule["appointments"] if a["reference_number"] == appointment_reference
+    )
+    assert appt["status"] == "scheduled"
+
+    client.patch(f"/api/consultations/{created['record_id']}/end")
+
+    schedule = client.get(f"/api/appointments/schedule?date={TOMORROW}").json()
+    appt = next(
+        a for a in schedule["appointments"] if a["reference_number"] == appointment_reference
+    )
+    assert appt["status"] == "completed"
+
+
+def test_create_with_unknown_appointment_reference_is_ignored(client: TestClient) -> None:
+    """An unknown appointment_reference doesn't block documenting the visit - it's a
+    best-effort link, not a required one."""
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+
+    r = client.post(
+        "/api/consultations",
+        json=valid_record_payload(patient_id, appointment_reference="A99999"),
+    )
+    assert r.status_code == 201
+
+
+def test_ending_a_consultation_with_no_linked_appointment_still_works(client: TestClient) -> None:
+    """A consultation created without an appointment_reference has nothing to sync,
+    but ending it must not error."""
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    r = client.patch(f"/api/consultations/{created['record_id']}/end")
+    assert r.status_code == 200
+    assert r.json()["status"] == "completed"
+
+
+def test_end_consultation_requires_login(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+    client.post("/api/auth/logout")
+
+    r = client.patch(f"/api/consultations/{created['record_id']}/end", follow_redirects=False)
+    assert r.status_code == 303
+
+
+# --- 6. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/consultations.feature
 
 scenarios("features/consultations.feature")
@@ -419,14 +585,14 @@ def api_is_running(client: TestClient) -> dict:
 def a_patient_and_doctor_exist(api_is_running: dict, context: Context) -> None:
     client: TestClient = api_is_running["client"]
     context.patient_id = _register_patient(client)
-    context.doctor_id = _register_doctor(client)
+    context.doctor_id = _register_and_login_doctor(client)
 
 
 @bdd_when("I document a consultation with a diagnosis for that patient and doctor")
 def document_consultation_step(api_is_running: dict, context: Context) -> None:
     client: TestClient = api_is_running["client"]
     context.last_response = client.post(
-        "/api/consultations", json=valid_record_payload(context.patient_id, context.doctor_id)
+        "/api/consultations", json=valid_record_payload(context.patient_id)
     )
 
 
@@ -435,7 +601,7 @@ def document_consultation_without_diagnosis_step(api_is_running: dict, context: 
     client: TestClient = api_is_running["client"]
     context.last_response = client.post(
         "/api/consultations",
-        json=valid_record_payload(context.patient_id, context.doctor_id, diagnoses=[]),
+        json=valid_record_payload(context.patient_id, diagnoses=[]),
     )
 
 

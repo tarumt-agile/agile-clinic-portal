@@ -65,13 +65,21 @@ class DiagnosisOut(BaseModel):
 
 
 class ConsultationNoteCreate(BaseModel):
-    """Payload used to document a consultation."""
+    """Payload used to document a consultation.
+
+    No doctor_id - the doctor is always whoever is logged in (require_role(Role.DOCTOR)
+    on the endpoint), not a value the client can choose.
+    """
 
     patient_id: str = Field(
         min_length=1,
     )
 
-    doctor_id: str = Field(
+    # The appointment this consultation was started from, if any - lets ending
+    # the consultation mark that appointment completed instead of leaving it
+    # "scheduled" forever. Optional since not every consultation has one.
+    appointment_reference: str | None = Field(
+        default=None,
         min_length=1,
     )
 
@@ -117,6 +125,10 @@ class ConsultationNoteOut(BaseModel):
 
     diagnoses: list[DiagnosisOut]
 
+    started_at: dt.datetime
+    ended_at: dt.datetime | None
+    status: str
+
     created_at: dt.datetime
 
 
@@ -132,6 +144,7 @@ class ConsultationNoteSummary(BaseModel):
     doctor_name: str
     notes: str
     diagnoses: list[DiagnosisOut]
+    status: str
 
 
 class PatientHistory(BaseModel):

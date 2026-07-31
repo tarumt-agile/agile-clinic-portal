@@ -24,6 +24,10 @@ Consultation Record - Agile Clinic Portal
           <h1 class="h3 mb-1">
             Consultation
             <span id="heading-record-id"></span>
+            <span
+              id="consultation-status-badge"
+              class="badge text-bg-primary align-middle"
+            ></span>
           </h1>
 
           <p class="text-muted mb-0">
@@ -32,17 +36,33 @@ Consultation Record - Agile Clinic Portal
           </p>
         </div>
 
-        <a
-          href="#"
-          id="back-to-patient-link"
-          class="btn btn-outline-secondary"
-        >
-          Back to Patient
-        </a>
+        <div class="d-flex gap-2">
+          <button
+            type="button"
+            id="end-consultation-button"
+            class="btn btn-danger d-none"
+          >
+            End Consultation
+          </button>
+
+          <a
+            href="#"
+            id="back-to-patient-link"
+            class="btn btn-outline-secondary"
+          >
+            Back to Patient
+          </a>
+        </div>
       </header>
 
       <div
         id="detail-alert"
+        class="alert alert-danger d-none"
+        role="alert"
+      ></div>
+
+      <div
+        id="end-consultation-alert"
         class="alert alert-danger d-none"
         role="alert"
       ></div>

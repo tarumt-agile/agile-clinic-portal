@@ -30,6 +30,18 @@
     "back-to-patient-link"
   );
 
+  const statusBadge = document.getElementById(
+    "consultation-status-badge"
+  );
+
+  const endButton = document.getElementById(
+    "end-consultation-button"
+  );
+
+  const endAlert = document.getElementById(
+    "end-consultation-alert"
+  );
+
   const diagnosisList =
     document.getElementById(
       "diagnosis-list"
@@ -749,6 +761,27 @@
       ).textContent =
         data.notes;
 
+      const isInProgress =
+        data.status === "in_progress";
+
+      statusBadge.textContent =
+        isInProgress
+          ? "In Progress"
+          : "Completed";
+
+      statusBadge.className =
+        "badge align-middle " +
+        (
+          isInProgress
+            ? "text-bg-primary"
+            : "text-bg-success"
+        );
+
+      endButton.classList.toggle(
+        "d-none",
+        !(canPrescribe && isInProgress)
+      );
+
       backLink.href =
         "/patients/" +
         encodeURIComponent(
@@ -933,6 +966,44 @@
         )
       ) {
         hideMedicationSuggestions();
+      }
+    }
+  );
+
+  endButton.addEventListener(
+    "click",
+    async function () {
+      hideAlert(endAlert);
+      endButton.disabled = true;
+
+      try {
+        const response = await fetch(
+          "/api/consultations/" +
+          encodeURIComponent(recordId) +
+          "/end",
+          { method: "PATCH" }
+        );
+
+        const data =
+          await readResponse(response);
+
+        if (!response.ok) {
+          throw new Error(
+            data.detail ||
+            "This consultation could not be ended."
+          );
+        }
+
+        await loadRecord();
+
+      } catch (error) {
+        showAlert(
+          endAlert,
+          error.message
+        );
+
+      } finally {
+        endButton.disabled = false;
       }
     }
   );

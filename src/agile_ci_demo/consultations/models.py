@@ -24,11 +24,21 @@ class ConsultationNote(Base):
 
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     doctor_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), index=True)
+    # The appointment this consultation was started from, if any (nullable - not
+    # every consultation necessarily originates from a scheduled appointment).
+    appointment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("appointments.id"), nullable=True, index=True
+    )
 
     visit_date: Mapped[dt.datetime] = mapped_column(
         DateTime, default=dt.datetime.utcnow, index=True
     )
     notes: Mapped[str] = mapped_column(Text)
+
+    started_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    # "in_progress" | "completed"
+    status: Mapped[str] = mapped_column(String(20), default="in_progress")
 
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
