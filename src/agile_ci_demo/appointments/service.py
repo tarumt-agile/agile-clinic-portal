@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -173,6 +173,26 @@ def get_doctor_schedule(db: Session, doctor_id: int, schedule_date: dt.date) -> 
             .order_by(Appointment.start_time)
         )
         .scalars()
+        .all()
+    )
+
+
+def get_doctor_schedule_dates(db: Session, doctor_id: int) -> list[tuple[dt.date, int]]:
+    """Upcoming dates (today or later) on which a doctor has appointments, each paired
+    with how many appointments fall on that date, ordered soonest first. Powers the
+    schedule page's date list, so a doctor isn't required to guess or filter by date
+    to see what's coming up."""
+    return list(
+        db.execute(
+            select(Appointment.appointment_date, func.count())
+            .where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date >= dt.date.today(),
+            )
+            .group_by(Appointment.appointment_date)
+            .order_by(Appointment.appointment_date)
+        )
+        .tuples()
         .all()
     )
 

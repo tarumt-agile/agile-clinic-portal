@@ -10,8 +10,10 @@ from agile_ci_demo.appointments.schemas import (
     AppointmentCreate,
     AppointmentOut,
     DoctorSchedule,
+    DoctorScheduleDates,
     DoctorSlots,
     PatientAppointments,
+    ScheduleDateSummary,
     SlotInfo,
 )
 from agile_ci_demo.appointments.service import (
@@ -27,6 +29,7 @@ from agile_ci_demo.appointments.service import (
     get_appointment_by_reference,
     get_available_slots,
     get_doctor_schedule,
+    get_doctor_schedule_dates,
     get_patient_appointments,
 )
 from agile_ci_demo.auth.deps import require_patient, require_role
@@ -96,6 +99,22 @@ def get_my_schedule(
         doctor_name=doctor.full_name,
         schedule_date=schedule_date,
         appointments=[_serialize(a) for a in appointments],
+    )
+
+
+@api_router.get("/schedule/dates", response_model=DoctorScheduleDates)
+def get_my_schedule_dates(
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    db: Session = Depends(get_db),
+) -> DoctorScheduleDates:
+    """The logged-in doctor's upcoming dates that have at least one appointment,
+    soonest first - lets the schedule page open on a list of what's coming up
+    instead of forcing the doctor to pick a date first."""
+    dates = get_doctor_schedule_dates(db, doctor.id)
+    return DoctorScheduleDates(
+        doctor_id=doctor.staff_id or "",
+        doctor_name=doctor.full_name,
+        dates=[ScheduleDateSummary(schedule_date=d, appointment_count=c) for d, c in dates],
     )
 
 
