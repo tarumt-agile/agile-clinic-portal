@@ -30,7 +30,7 @@ jobs:
           mypy src
       - name: Test
         run: |
-          pytest --maxfail=1 --disable-warnings -q --cov=src --cov-report=xml --junitxml=junit.xml
+          pytest --maxfail=1 --disable-warnings --cov=src --cov-report=xml --junitxml=junit.xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
