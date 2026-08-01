@@ -5,22 +5,31 @@ from typing import Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import RedirectResponse
 
 from agile_ci_demo.appointments.router import api_router as appointments_api_router
 from agile_ci_demo.appointments.router import pages_router as appointments_pages_router
+from agile_ci_demo.attachments.router import api_router as attachments_api_router
+from agile_ci_demo.auth.deps import NotAuthenticatedError
 from agile_ci_demo.auth.router import api_router as auth_api_router
 from agile_ci_demo.auth.router import pages_router as auth_pages_router
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import init_db
 from agile_ci_demo.patients.router import api_router as patients_api_router
 from agile_ci_demo.patients.router import pages_router as patients_pages_router
-from agile_ci_demo.records.router import api_router as records_api_router
-from agile_ci_demo.records.router import pages_router as records_pages_router
+from agile_ci_demo.pharmacy.router import api_router as pharmacy_api_router
+from agile_ci_demo.pharmacy.router import pages_router as pharmacy_pages_router
+from agile_ci_demo.consultations.router import api_router as consultations_api_router
+from agile_ci_demo.consultations.router import pages_router as consultations_pages_router
 from agile_ci_demo.staff.router import api_router as staff_api_router
 from agile_ci_demo.staff.router import pages_router as staff_pages_router
-from agile_ci_demo.prescription.router import (
+from agile_ci_demo.prescriptions.router import (
     api_router as prescription_api_router,
+    pages_router as prescription_pages_router,
 )
+from agile_ci_demo.reports.router import api_router as reports_api_router
+from agile_ci_demo.reports.router import pages_router as reports_pages_router
 
 
 @asynccontextmanager
@@ -30,21 +39,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Agile Clinic Portal", version="0.1.0", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+
+
+@app.exception_handler(NotAuthenticatedError)
+def handle_not_authenticated(request, exc: NotAuthenticatedError) -> RedirectResponse:
+    return RedirectResponse("/auth/login", status_code=303)
+
 
 if settings.static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
 
 app.include_router(patients_api_router)
 app.include_router(patients_pages_router)
+app.include_router(pharmacy_api_router)
+app.include_router(pharmacy_pages_router)
 app.include_router(staff_api_router)
 app.include_router(staff_pages_router)
 app.include_router(auth_api_router)
 app.include_router(auth_pages_router)
 app.include_router(appointments_api_router)
 app.include_router(appointments_pages_router)
-app.include_router(records_api_router)
-app.include_router(records_pages_router)
+app.include_router(consultations_api_router)
+app.include_router(consultations_pages_router)
 app.include_router(prescription_api_router)
+app.include_router(prescription_pages_router)
+app.include_router(reports_api_router)
+app.include_router(reports_pages_router)
+app.include_router(attachments_api_router)
 
 
 class Item(BaseModel):
@@ -61,6 +83,12 @@ _db: Dict[int, Item] = {}
 def health() -> dict:
     """Simple health check endpoint used by tests and monitoring."""
     return {"status": "ok"}
+
+
+@app.get("/")
+def root() -> RedirectResponse:
+    """Send a bare visit to the app straight to the login page."""
+    return RedirectResponse("/auth/login")
 
 
 @app.post("/items", status_code=201)

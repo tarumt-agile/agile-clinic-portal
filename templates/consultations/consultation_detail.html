@@ -8,6 +8,7 @@ Consultation Record - Agile Clinic Portal
 <div
   id="record-detail-root"
   data-record-id="{{ record_id }}"
+  data-can-prescribe="{{ 'true' if request.session.get('role') == 'doctor' else 'false' }}"
 >
   <div class="row justify-content-center">
     <div class="col-xl-9">
@@ -23,6 +24,10 @@ Consultation Record - Agile Clinic Portal
           <h1 class="h3 mb-1">
             Consultation
             <span id="heading-record-id"></span>
+            <span
+              id="consultation-status-badge"
+              class="badge text-bg-primary align-middle"
+            ></span>
           </h1>
 
           <p class="text-muted mb-0">
@@ -31,17 +36,33 @@ Consultation Record - Agile Clinic Portal
           </p>
         </div>
 
-        <a
-          href="#"
-          id="back-to-patient-link"
-          class="btn btn-outline-secondary"
-        >
-          Back to Patient
-        </a>
+        <div class="d-flex gap-2">
+          <button
+            type="button"
+            id="end-consultation-button"
+            class="btn btn-danger d-none"
+          >
+            End Consultation
+          </button>
+
+          <a
+            href="#"
+            id="back-to-patient-link"
+            class="btn btn-outline-secondary"
+          >
+            Back to Patient
+          </a>
+        </div>
       </header>
 
       <div
         id="detail-alert"
+        class="alert alert-danger d-none"
+        role="alert"
+      ></div>
+
+      <div
+        id="end-consultation-alert"
         class="alert alert-danger d-none"
         role="alert"
       ></div>
@@ -133,6 +154,53 @@ Consultation Record - Agile Clinic Portal
 
           <div id="diagnosis-list"></div>
         </section>
+
+        <section class="card mb-4">
+          <div class="card-body">
+            <div
+              class="d-flex justify-content-between
+                align-items-center mb-3"
+            >
+              <h2 class="h5 mb-0">
+                Attachments
+              </h2>
+            </div>
+
+            <div
+              id="attachments-alert"
+              class="alert alert-danger d-none"
+            ></div>
+
+            <form
+              id="attachment-upload-form"
+              class="d-flex align-items-start gap-2 mb-3"
+              novalidate
+            >
+              <div class="flex-grow-1">
+                <input
+                  type="file"
+                  class="form-control"
+                  id="attachment-file-input"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  required
+                >
+                <div class="form-text">
+                  PDF, JPG, or PNG. Maximum 5 MB.
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                id="attachment-upload-btn"
+                class="btn btn-primary"
+              >
+                Upload
+              </button>
+            </form>
+
+            <div id="attachment-list"></div>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -185,7 +253,12 @@ Consultation Record - Agile Clinic Portal
             id="prescription-diagnosis-id"
           >
 
-          <div class="mb-3">
+          <input
+            type="hidden"
+            id="prescription-medication-id"
+          >
+
+          <div class="mb-3 position-relative">
             <label
               for="prescription-medication"
               class="form-label"
@@ -193,18 +266,29 @@ Consultation Record - Agile Clinic Portal
               Medication *
             </label>
 
-            <select
+            <input
+              type="search"
               id="prescription-medication"
-              class="form-select"
+              class="form-control"
+              autocomplete="off"
+              placeholder="Search by medication name..."
               required
             >
-              <option value="">
-                Loading medications...
-              </option>
-            </select>
+
+            <div
+              id="prescription-medication-suggestions"
+              class="list-group position-absolute
+                start-0 end-0 d-none medication-suggestions"
+              role="listbox"
+              aria-label="Medication suggestions"
+            ></div>
 
             <div class="invalid-feedback">
-              Please select a medication.
+              Please enter or select a medication.
+            </div>
+
+            <div class="form-text">
+              Type at least two characters to search.
             </div>
           </div>
 
@@ -302,5 +386,6 @@ Consultation Record - Agile Clinic Portal
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/record_detail.js?v=5"></script>
-{% endblock %}  
+<script src="/static/js/consultation-detail.js?v=6"></script>
+<script src="/static/js/consultation-attachments.js"></script>
+{% endblock %}

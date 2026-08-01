@@ -10,6 +10,8 @@
   }
 
   const recordId = root.dataset.recordId;
+  const canPrescribe =
+    root.dataset.canPrescribe === "true";
 
   const alertBox = document.getElementById(
     "detail-alert"
@@ -26,6 +28,18 @@
 
   const backLink = document.getElementById(
     "back-to-patient-link"
+  );
+
+  const statusBadge = document.getElementById(
+    "consultation-status-badge"
+  );
+
+  const endButton = document.getElementById(
+    "end-consultation-button"
+  );
+
+  const endAlert = document.getElementById(
+    "end-consultation-alert"
   );
 
   const diagnosisList =
@@ -51,6 +65,16 @@
   const medicationInput =
     document.getElementById(
       "prescription-medication"
+    );
+
+  const medicationSuggestions =
+    document.getElementById(
+      "prescription-medication-suggestions"
+    );
+
+  const medicationIdInput =
+    document.getElementById(
+      "prescription-medication-id"
     );
 
   const dosageInput =
@@ -96,6 +120,9 @@
   let currentRecord = null;
   let prescriptions = [];
   let optionsLoaded = false;
+  const medicationSearchCache = new Map();
+  let medicationSearchTimer = null;
+  let medicationSearchSequence = 0;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -201,12 +228,6 @@
       );
     }
 
-    medicationInput.innerHTML =
-      createOptions(
-        data.medications,
-        "Choose a medication..."
-      );
-
     dosageInput.innerHTML =
       createOptions(
         data.dosages,
@@ -226,6 +247,168 @@
       );
 
     optionsLoaded = true;
+  }
+
+  function hideMedicationSuggestions() {
+    medicationSuggestions.classList.add(
+      "d-none"
+    );
+
+    medicationSuggestions.innerHTML = "";
+  }
+
+  function selectMedication(item) {
+    medicationInput.value =
+      item.prescription_value;
+    medicationIdInput.value =
+      item.medication_id;
+
+    medicationInput.setCustomValidity("");
+    hideMedicationSuggestions();
+  }
+
+  function renderMedicationSuggestions(
+    items
+  ) {
+    if (items.length === 0) {
+      medicationSuggestions.innerHTML = `
+        <div
+          class="list-group-item text-muted"
+          role="option"
+          aria-disabled="true"
+        >
+          No matching medications found.
+        </div>
+      `;
+
+      medicationSuggestions.classList.remove(
+        "d-none"
+      );
+
+      return;
+    }
+
+    medicationSuggestions.innerHTML =
+      items.map(function (item, index) {
+        return `
+          <button
+            type="button"
+            class="list-group-item
+              list-group-item-action"
+            data-medication-index="${index}"
+            role="option"
+          >
+            <span class="fw-semibold">
+              ${escapeHtml(item.name)}
+            </span>
+
+            <span class="d-block small text-muted">
+              ${escapeHtml(item.form)}
+              ·
+              ${escapeHtml(
+                item.standard_dosage
+              )}
+            </span>
+          </button>
+        `;
+      }).join("");
+
+    medicationSuggestions
+      .querySelectorAll(
+        "[data-medication-index]"
+      )
+      .forEach(function (button) {
+        button.addEventListener(
+          "mousedown",
+          function (event) {
+            event.preventDefault();
+          }
+        );
+
+        button.addEventListener(
+          "click",
+          function () {
+            selectMedication(
+              items[
+                Number(
+                  button.dataset
+                    .medicationIndex
+                )
+              ]
+            );
+          }
+        );
+      });
+
+    medicationSuggestions.classList.remove(
+      "d-none"
+    );
+  }
+
+  async function searchMedicationCatalogue(
+    keyword
+  ) {
+    const cacheKey =
+      keyword.trim().toLocaleLowerCase();
+
+    if (medicationSearchCache.has(cacheKey)) {
+      return medicationSearchCache.get(
+        cacheKey
+      );
+    }
+
+    const response = await fetch(
+      "/api/prescriptions/medications?" +
+      new URLSearchParams({
+        q: keyword
+      }).toString()
+    );
+
+    const data = await readResponse(response);
+
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+        "Medication search is unavailable."
+      );
+    }
+
+    const results = Array.isArray(data)
+      ? data
+      : [];
+
+    medicationSearchCache.set(
+      cacheKey,
+      results
+    );
+
+    return results;
+  }
+
+  async function updateMedicationSuggestions(
+    keyword,
+    sequence
+  ) {
+    try {
+      const results =
+        await searchMedicationCatalogue(
+          keyword
+        );
+
+      if (sequence !== medicationSearchSequence) {
+        return;
+      }
+
+      renderMedicationSuggestions(results);
+
+    } catch (error) {
+      if (sequence !== medicationSearchSequence) {
+        return;
+      }
+
+      hideMedicationSuggestions();
+      showAlert(formAlert, error.message);
+    }
   }
 
   function prescriptionsForDiagnosis(
@@ -255,6 +438,22 @@
 
     return items
       .map(function (item) {
+        const printAction = item.can_edit
+          ? `
+            <a
+              href="/prescriptions/${
+                encodeURIComponent(
+                  item.prescription_id
+                )
+              }"
+              class="btn btn-sm
+                btn-outline-primary mt-2"
+            >
+              View / Print
+            </a>
+          `
+          : "";
+
         return `
           <article
             class="border rounded p-3 mb-2 bg-light"
@@ -310,6 +509,8 @@
                     ).toLocaleString()
                   )}
                 </div>
+
+                ${printAction}
               </div>
             </div>
           </article>
@@ -347,6 +548,33 @@
               diagnosis.id
             );
 
+          const addMedicationAction =
+            canPrescribe
+              ? `
+                <button
+                  type="button"
+                  class="btn btn-sm
+                    btn-primary
+                    add-medication-button"
+                  data-diagnosis-id="${
+                    diagnosis.id
+                  }"
+                  data-diagnosis-code="${
+                    escapeHtml(
+                      diagnosis.icd10_code
+                    )
+                  }"
+                  data-diagnosis-description="${
+                    escapeHtml(
+                      diagnosis.description
+                    )
+                  }"
+                >
+                  + Add Medication
+                </button>
+              `
+              : "";
+
           return `
             <article class="card mb-4">
               <div class="card-header">
@@ -381,27 +609,7 @@
                     </h3>
                   </div>
 
-                  <button
-                    type="button"
-                    class="btn btn-sm
-                      btn-primary
-                      add-medication-button"
-                    data-diagnosis-id="${
-                      diagnosis.id
-                    }"
-                    data-diagnosis-code="${
-                      escapeHtml(
-                        diagnosis.icd10_code
-                      )
-                    }"
-                    data-diagnosis-description="${
-                      escapeHtml(
-                        diagnosis.description
-                      )
-                    }"
-                  >
-                    + Add Medication
-                  </button>
+                  ${addMedicationAction}
                 </div>
               </div>
 
@@ -446,6 +654,7 @@
     hideAlert(formAlert);
 
     prescriptionForm.reset();
+    hideMedicationSuggestions();
 
     prescriptionForm.classList.remove(
       "was-validated"
@@ -500,7 +709,7 @@
   async function loadRecord() {
     try {
       const response = await fetch(
-        "/api/records/" +
+        "/api/consultations/" +
         encodeURIComponent(recordId)
       );
 
@@ -552,6 +761,27 @@
       ).textContent =
         data.notes;
 
+      const isInProgress =
+        data.status === "in_progress";
+
+      statusBadge.textContent =
+        isInProgress
+          ? "In Progress"
+          : "Completed";
+
+      statusBadge.className =
+        "badge align-middle " +
+        (
+          isInProgress
+            ? "text-bg-primary"
+            : "text-bg-success"
+        );
+
+      endButton.classList.toggle(
+        "d-none",
+        !(canPrescribe && isInProgress)
+      );
+
       backLink.href =
         "/patients/" +
         encodeURIComponent(
@@ -587,6 +817,12 @@
 
       hideAlert(formAlert);
 
+      if (!medicationIdInput.value) {
+        medicationInput.setCustomValidity(
+          "Select a medication from the search results."
+        );
+      }
+
       if (
         !prescriptionForm.checkValidity()
       ) {
@@ -605,8 +841,8 @@
           diagnosisIdInput.value
         ),
 
-        medication:
-          medicationInput.value,
+        medication_id:
+          medicationIdInput.value,
 
         dosage:
           dosageInput.value,
@@ -667,6 +903,107 @@
         saveButton.disabled = false;
         saveButton.textContent =
           "Add Medication";
+      }
+    }
+  );
+
+  medicationInput.addEventListener(
+    "input",
+    function () {
+      medicationIdInput.value = "";
+      medicationInput.setCustomValidity("");
+      hideAlert(formAlert);
+
+      if (medicationSearchTimer) {
+        window.clearTimeout(
+          medicationSearchTimer
+        );
+      }
+
+      const keyword =
+        medicationInput.value.trim();
+
+      medicationSearchSequence += 1;
+      const sequence =
+        medicationSearchSequence;
+
+      if (keyword.length < 2) {
+        hideMedicationSuggestions();
+        return;
+      }
+
+      medicationSearchTimer =
+        window.setTimeout(
+          function () {
+            updateMedicationSuggestions(
+              keyword,
+              sequence
+            );
+          },
+          250
+        );
+    }
+  );
+
+  medicationInput.addEventListener(
+    "keydown",
+    function (event) {
+      if (
+        event.key === "Escape"
+      ) {
+        hideMedicationSuggestions();
+      }
+    }
+  );
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      if (
+        event.target !== medicationInput &&
+        !medicationSuggestions.contains(
+          event.target
+        )
+      ) {
+        hideMedicationSuggestions();
+      }
+    }
+  );
+
+  endButton.addEventListener(
+    "click",
+    async function () {
+      hideAlert(endAlert);
+      endButton.disabled = true;
+
+      try {
+        const response = await fetch(
+          "/api/consultations/" +
+          encodeURIComponent(recordId) +
+          "/end",
+          { method: "PATCH" }
+        );
+
+        const data =
+          await readResponse(response);
+
+        if (!response.ok) {
+          throw new Error(
+            data.detail ||
+            "This consultation could not be ended."
+          );
+        }
+
+        await loadRecord();
+
+      } catch (error) {
+        showAlert(
+          endAlert,
+          error.message
+        );
+
+      } finally {
+        endButton.disabled = false;
       }
     }
   );

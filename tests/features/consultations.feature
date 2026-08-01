@@ -1,4 +1,4 @@
-Feature: Medical record documentation
+Feature: Consultation documentation
   As a doctor
   I want to document a consultation and its diagnosis
   So that the visit is captured in the patient's medical history

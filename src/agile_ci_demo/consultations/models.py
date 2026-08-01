@@ -18,17 +18,27 @@ class ConsultationNote(Base):
 
     # Public-facing, human-readable unique identifier, e.g. "R00001".
     # Nullable at the DB level only because it is derived from `id` after the
-    # initial flush (see records.service.create_consultation_note) - the service
+    # initial flush (see consultations.service.create_consultation_note) - the service
     # layer guarantees it is always set before commit.
     record_id: Mapped[str | None] = mapped_column(String(10), unique=True, index=True)
 
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     doctor_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), index=True)
+    # The appointment this consultation was started from, if any (nullable - not
+    # every consultation necessarily originates from a scheduled appointment).
+    appointment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("appointments.id"), nullable=True, index=True
+    )
 
     visit_date: Mapped[dt.datetime] = mapped_column(
         DateTime, default=dt.datetime.utcnow, index=True
     )
     notes: Mapped[str] = mapped_column(Text)
+
+    started_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    # "in_progress" | "completed"
+    status: Mapped[str] = mapped_column(String(20), default="in_progress")
 
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(

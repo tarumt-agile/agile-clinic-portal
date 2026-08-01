@@ -106,6 +106,11 @@ class StaffOut(BaseModel):
     specialty: str | None = None
     department: str | None = None
     doctor_status: str | None = None
+    start_time: dt.time | None = None
+    end_time: dt.time | None = None
+    next_start_time: dt.time | None = None
+    next_end_time: dt.time | None = None
+    next_effective_date: dt.date | None = None
 
 
 class StaffUpdate(BaseModel):
@@ -115,6 +120,8 @@ class StaffUpdate(BaseModel):
     license_number: str | None = None
     specialty: Specialty | None = None
     doctor_status: DoctorStatus | None = None
+    start_time: dt.time | None = None
+    end_time: dt.time | None = None
 
     @field_validator("full_name")
     @classmethod

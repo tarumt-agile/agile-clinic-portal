@@ -277,6 +277,22 @@
           `
           : "";
 
+        const printButton = item.can_edit
+          ? `
+            <a
+              href="/prescriptions/${
+                encodeURIComponent(
+                  item.prescription_id
+                )
+              }"
+              class="btn btn-sm
+                btn-outline-secondary"
+            >
+              View / Print
+            </a>
+          `
+          : "";
+
         return `
           <article class="card mb-3">
             <div class="card-body">
@@ -353,7 +369,7 @@
                     <strong>Consultation:</strong>
 
                     <a
-                      href="/records/${
+                      href="/consultations/${
                         encodeURIComponent(
                           item.consultation_record_id
                         )
@@ -373,7 +389,8 @@
                   </p>
                 </div>
 
-                <div>
+                <div class="d-flex flex-column gap-2">
+                  ${printButton}
                   ${editButton}
                 </div>
               </div>

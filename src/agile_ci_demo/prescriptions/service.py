@@ -9,89 +9,27 @@ from sqlalchemy.orm import (
     selectinload,
 )
 
-from agile_ci_demo.appointments.service import (
-    get_current_doctor,
-)
-from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.patients.service import (
     get_patient_by_patient_id,
 )
-from agile_ci_demo.prescription.models import (
+from agile_ci_demo.pharmacy.service import (
+    MedicationNotFoundError,
+    get_medication_by_public_id,
+    list_medications,
+)
+from agile_ci_demo.prescriptions.models import (
     Prescription,
     PrescriptionHistory,
 )
-from agile_ci_demo.prescription.schemas import (
+from agile_ci_demo.prescriptions.schemas import (
     PrescriptionCreate,
     PrescriptionInstructionUpdate,
 )
-from agile_ci_demo.records.models import Diagnosis
-from agile_ci_demo.records.service import (
+from agile_ci_demo.consultations.models import Diagnosis
+from agile_ci_demo.consultations.service import (
     get_consultation_note_by_record_id,
 )
-
-MEDICATION_OPTIONS = [
-    {
-        "value": "Amoxicillin 250 mg Capsule",
-        "label": "Amoxicillin 250 mg Capsule",
-    },
-    {
-        "value": "Amoxicillin 500 mg Capsule",
-        "label": "Amoxicillin 500 mg Capsule",
-    },
-    {
-        "value": "Azithromycin 250 mg Tablet",
-        "label": "Azithromycin 250 mg Tablet",
-    },
-    {
-        "value": "Cetirizine 10 mg Tablet",
-        "label": "Cetirizine 10 mg Tablet",
-    },
-    {
-        "value": "Chlorpheniramine 4 mg Tablet",
-        "label": "Chlorpheniramine 4 mg Tablet",
-    },
-    {
-        "value": "Diclofenac 50 mg Tablet",
-        "label": "Diclofenac 50 mg Tablet",
-    },
-    {
-        "value": "Ibuprofen 200 mg Tablet",
-        "label": "Ibuprofen 200 mg Tablet",
-    },
-    {
-        "value": "Ibuprofen 400 mg Tablet",
-        "label": "Ibuprofen 400 mg Tablet",
-    },
-    {
-        "value": "Loratadine 10 mg Tablet",
-        "label": "Loratadine 10 mg Tablet",
-    },
-    {
-        "value": "Metformin 500 mg Tablet",
-        "label": "Metformin 500 mg Tablet",
-    },
-    {
-        "value": "Omeprazole 20 mg Capsule",
-        "label": "Omeprazole 20 mg Capsule",
-    },
-    {
-        "value": "Paracetamol 500 mg Tablet",
-        "label": "Paracetamol 500 mg Tablet",
-    },
-    {
-        "value": "Salbutamol 100 mcg Inhaler",
-        "label": "Salbutamol 100 mcg Inhaler",
-    },
-    {
-        "value": "Cough Mixture",
-        "label": "Cough Mixture",
-    },
-    {
-        "value": "Oral Rehydration Salts",
-        "label": "Oral Rehydration Salts",
-    },
-]
-
+from agile_ci_demo.staff.models import Staff
 
 DOSAGE_OPTIONS = [
     "Half tablet",
@@ -149,10 +87,6 @@ class DiagnosisNotFoundError(Exception):
     """Raised when a diagnosis is not found."""
 
 
-class CurrentDoctorNotFoundError(Exception):
-    """Raised when a current doctor is not found."""
-
-
 class PrescriptionPermissionError(Exception):
     """Raised when a doctor lacks permission."""
 
@@ -168,11 +102,19 @@ class PrescriptionOptions(TypedDict):
     durations: list[str]
 
 
-def get_prescription_options() -> PrescriptionOptions:
+def get_prescription_options(
+    db: Session,
+) -> PrescriptionOptions:
     """Return selectable prescription form options."""
 
     return {
-        "medications": MEDICATION_OPTIONS,
+        "medications": [
+            {
+                "value": item.prescription_value,
+                "label": item.prescription_value,
+            }
+            for item in list_medications(db)
+        ],
         "dosages": DOSAGE_OPTIONS,
         "frequencies": FREQUENCY_OPTIONS,
         "durations": DURATION_OPTIONS,
@@ -187,6 +129,7 @@ def _prescription_load_options():
         selectinload(Prescription.diagnosis),
         selectinload(Prescription.patient),
         selectinload(Prescription.prescribing_doctor),
+        selectinload(Prescription.medication_record),
         selectinload(Prescription.history).selectinload(PrescriptionHistory.changed_by_doctor),
     )
 
@@ -194,6 +137,7 @@ def _prescription_load_options():
 def create_prescription(
     db: Session,
     data: PrescriptionCreate,
+    doctor: Staff,
 ) -> Prescription:
     """Create a prescription for one diagnosis."""
 
@@ -216,25 +160,25 @@ def create_prescription(
             "The selected diagnosis does not belong " "to this consultation."
         )
 
-    current_doctor = get_current_doctor(db)
-
-    if current_doctor is None:
-        raise CurrentDoctorNotFoundError("No current doctor account was found.")
-
-    if current_doctor.role != Role.DOCTOR.value:
-        raise PrescriptionPermissionError("Only a doctor can create a prescription.")
-
-    if consultation.doctor_id != current_doctor.id:
+    if consultation.doctor_id != doctor.id:
         raise PrescriptionPermissionError(
             "Only the doctor who created this " "consultation can add medication."
         )
+
+    medication = get_medication_by_public_id(
+        db,
+        data.medication_id,
+    )
+    if medication is None or not medication.is_active:
+        raise MedicationNotFoundError("The selected medication was not found or is inactive.")
 
     prescription = Prescription(
         consultation_note_id=consultation.id,
         diagnosis_id=diagnosis.id,
         patient_id=consultation.patient_id,
-        prescribing_doctor_id=current_doctor.id,
-        medication=data.medication,
+        prescribing_doctor_id=doctor.id,
+        medication_id=medication.id,
+        medication=medication.prescription_value,
         dosage=data.dosage,
         frequency=data.frequency,
         duration=data.duration,
@@ -338,6 +282,7 @@ def update_prescription_instructions(
     db: Session,
     prescription_id: str,
     data: PrescriptionInstructionUpdate,
+    doctor: Staff,
 ) -> Prescription:
     """Update prescription instructions and save history."""
 
@@ -349,12 +294,7 @@ def update_prescription_instructions(
     if prescription is None:
         raise PrescriptionNotFoundError("Prescription not found.")
 
-    current_doctor = get_current_doctor(db)
-
-    if current_doctor is None:
-        raise CurrentDoctorNotFoundError("No current doctor account was found.")
-
-    if prescription.prescribing_doctor_id != current_doctor.id:
+    if prescription.prescribing_doctor_id != doctor.id:
         raise PrescriptionPermissionError(
             "Only the prescribing doctor can " "update this prescription."
         )
@@ -380,7 +320,7 @@ def update_prescription_instructions(
         previous_duration=prescription.duration,
         new_duration=data.duration,
         change_reason=data.change_reason,
-        changed_by_doctor_id=current_doctor.id,
+        changed_by_doctor_id=doctor.id,
     )
 
     db.add(revision)

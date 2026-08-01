@@ -1,3 +1,5 @@
+"""Validation schemas for consultation notes and diagnoses."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -63,15 +65,63 @@ class DiagnosisOut(BaseModel):
 
 
 class ConsultationNoteCreate(BaseModel):
-    """Payload used to document a consultation."""
+    """Payload used to document a consultation.
+
+    No doctor_id - the doctor is always whoever is logged in (require_role(Role.DOCTOR)
+    on the endpoint), not a value the client can choose.
+    """
 
     patient_id: str = Field(
         min_length=1,
     )
 
-    doctor_id: str = Field(
+    # The appointment this consultation was started from, if any - lets ending
+    # the consultation mark that appointment completed instead of leaving it
+    # "scheduled" forever. Optional since not every consultation has one.
+    appointment_reference: str | None = Field(
+        default=None,
         min_length=1,
     )
+
+    notes: str = Field(
+        min_length=2,
+    )
+
+    diagnoses: list[DiagnosisIn] = Field(
+        min_length=1,
+    )
+
+    @field_validator("notes")
+    @classmethod
+    def notes_not_blank(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Consultation notes are required.")
+
+        return value
+
+
+class ConsultationStart(BaseModel):
+    """Payload to open (or resume) a consultation. No notes/diagnoses yet - those
+    are filled in later via ConsultationNoteUpdate, so a doctor who opens this
+    page and leaves before writing anything still has a draft to come back to."""
+
+    patient_id: str = Field(
+        min_length=1,
+    )
+
+    appointment_reference: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+
+class ConsultationNoteUpdate(BaseModel):
+    """Payload used to fill in or revise an in-progress consultation's content."""
 
     notes: str = Field(
         min_length=2,
@@ -115,6 +165,10 @@ class ConsultationNoteOut(BaseModel):
 
     diagnoses: list[DiagnosisOut]
 
+    started_at: dt.datetime
+    ended_at: dt.datetime | None
+    status: str
+
     created_at: dt.datetime
 
 
@@ -130,6 +184,7 @@ class ConsultationNoteSummary(BaseModel):
     doctor_name: str
     notes: str
     diagnoses: list[DiagnosisOut]
+    status: str
 
 
 class PatientHistory(BaseModel):
@@ -137,6 +192,30 @@ class PatientHistory(BaseModel):
 
     items: list[ConsultationNoteSummary]
     total: int
+
+
+class ConsultationQueueEntry(BaseModel):
+    """One of a doctor's non-cancelled appointments for today, paired with its
+    linked consultation note's state (if any) - lets the Start Consultation page
+    decide whether to offer "Start Consultation", "Continue Consultation", or "Ended"."""
+
+    reference_number: str
+    patient_id: str
+    patient_name: str
+    start_time: dt.time
+    end_time: dt.time
+    reason: str
+    appointment_status: str
+    consultation_record_id: str | None
+    consultation_status: str | None
+
+
+class DoctorConsultationQueue(BaseModel):
+    """A doctor's today's consultation queue, ordered by appointment start time."""
+
+    doctor_id: str
+    doctor_name: str
+    appointments: list[ConsultationQueueEntry]
 
 
 class Icd10Entry(BaseModel):

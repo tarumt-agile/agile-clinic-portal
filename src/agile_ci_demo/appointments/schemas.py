@@ -74,6 +74,21 @@ class DoctorSchedule(BaseModel):
     appointments: list[AppointmentOut]
 
 
+class ScheduleDateSummary(BaseModel):
+    """One upcoming date on a doctor's schedule and how many appointments fall on it."""
+
+    schedule_date: dt.date
+    appointment_count: int
+
+
+class DoctorScheduleDates(BaseModel):
+    """A doctor's upcoming dates that have at least one appointment, soonest first."""
+
+    doctor_id: str
+    doctor_name: str
+    dates: list[ScheduleDateSummary]
+
+
 class SlotInfo(BaseModel):
     """A single bookable slot on a doctor's day, and whether it is still free."""
 

@@ -1,3 +1,5 @@
+"""Validation schemas for prescription creation, history, and printing."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -21,6 +23,14 @@ class MedicationOption(BaseModel):
     label: str
 
 
+class MedicationSearchResultOut(BaseModel):
+    medication_id: str
+    name: str
+    form: str
+    standard_dosage: str
+    prescription_value: str
+
+
 class PrescriptionOptionsOut(BaseModel):
     medications: list[MedicationOption]
     dosages: list[str]
@@ -38,9 +48,9 @@ class PrescriptionCreate(BaseModel):
         gt=0,
     )
 
-    medication: str = Field(
+    medication_id: str = Field(
         min_length=2,
-        max_length=150,
+        max_length=12,
     )
 
     dosage: str = Field(
@@ -60,7 +70,7 @@ class PrescriptionCreate(BaseModel):
 
     @field_validator(
         "consultation_record_id",
-        "medication",
+        "medication_id",
         "dosage",
         "frequency",
         "duration",
@@ -151,6 +161,10 @@ class PrescriptionOut(BaseModel):
     prescribing_doctor_id: str
     prescribing_doctor_name: str
 
+    medication_id: str | None
+    medication_name: str | None
+    medication_form: str | None
+    medication_standard_dosage: str | None
     medication: str
     dosage: str
     frequency: str
@@ -163,7 +177,7 @@ class PrescriptionOut(BaseModel):
 
     can_edit: bool
 
-    history: list[PrescriptionHistoryOut] = []
+    history: list[PrescriptionHistoryOut] = Field(default_factory=list)
 
 
 class PrescriptionList(BaseModel):

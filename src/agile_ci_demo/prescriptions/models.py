@@ -16,7 +16,8 @@ from sqlalchemy.orm import (
 
 from agile_ci_demo.core.database import Base
 from agile_ci_demo.patients.models import Patient
-from agile_ci_demo.records.models import (
+from agile_ci_demo.pharmacy.models import Medication
+from agile_ci_demo.consultations.models import (
     ConsultationNote,
     Diagnosis,
 )
@@ -55,6 +56,12 @@ class Prescription(Base):
     prescribing_doctor_id: Mapped[int] = mapped_column(
         ForeignKey("staff.id"),
         index=True,
+    )
+
+    medication_id: Mapped[int | None] = mapped_column(
+        ForeignKey("medications.id"),
+        index=True,
+        nullable=True,
     )
 
     medication: Mapped[str] = mapped_column(
@@ -99,6 +106,10 @@ class Prescription(Base):
 
     prescribing_doctor: Mapped[Staff] = relationship(
         foreign_keys=[prescribing_doctor_id],
+    )
+
+    medication_record: Mapped[Medication | None] = relationship(
+        foreign_keys=[medication_id],
     )
 
     history: Mapped[list["PrescriptionHistory"]] = relationship(
