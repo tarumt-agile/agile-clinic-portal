@@ -200,3 +200,18 @@ def test_logout_link_requires_confirmation(client: TestClient) -> None:
     assert response.status_code == 200
     assert 'id="logout-confirm-modal"' in response.text
     assert 'id="confirm-logout-btn"' in response.text
+
+
+def test_doctor_schedule_page_has_stat_cards_and_view_toggle(client: TestClient) -> None:
+    create_staff_and_login(client, "doctor")
+
+    response = client.get("/appointments/schedule")
+
+    assert response.status_code == 200
+    assert 'id="stat-total"' in response.text
+    assert 'id="stat-today"' in response.text
+    assert 'id="stat-future"' in response.text
+    assert 'id="stat-completed"' in response.text
+    assert 'id="view-list-btn"' in response.text
+    assert 'id="view-calendar-btn"' in response.text
+    assert 'id="schedule-calendar"' in response.text
