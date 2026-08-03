@@ -330,8 +330,8 @@
     );
     const ySteps = Math.min(5, maximum);
 
-    chartContext.strokeStyle = "#d9e2ec";
-    chartContext.fillStyle = "#62778b";
+    chartContext.strokeStyle = "#e2e8f0";
+    chartContext.fillStyle = "#475569";
     chartContext.lineWidth = 1;
     chartContext.font =
       '12px system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -377,7 +377,7 @@
         (slotWidth - barWidth) / 2;
       const y = margin.top + plotHeight - barHeight;
 
-      chartContext.fillStyle = "#2463a8";
+      chartContext.fillStyle = "#4f46e5";
       chartContext.fillRect(
         x,
         y,
@@ -395,7 +395,7 @@
           margin.top + plotHeight + 10
         );
         chartContext.rotate(-Math.PI / 4);
-        chartContext.fillStyle = "#62778b";
+        chartContext.fillStyle = "#475569";
         chartContext.textAlign = "right";
         chartContext.textBaseline = "middle";
         chartContext.fillText(
