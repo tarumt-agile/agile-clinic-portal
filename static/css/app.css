@@ -12,3 +12,102 @@
   max-height: 15rem;
   overflow-y: auto;
 }
+
+/* ===== Modern Slate design tokens ===== */
+:root {
+  --clinic-sidebar-bg: #1e293b;
+  --clinic-sidebar-hover: #334155;
+  --clinic-sidebar-text: #cbd5e1;
+  --clinic-sidebar-border: #334155;
+  --clinic-accent: #4f46e5;
+  --clinic-accent-soft: #6366f1;
+  --clinic-accent-hover: #4338ca;
+  --clinic-content-bg: #f8fafc;
+  --clinic-border: #e2e8f0;
+  --clinic-table-header-bg: #f1f5f9;
+  --clinic-table-header-text: #475569;
+  --clinic-text: #0f172a;
+  --clinic-input-border: #dbe0e6;
+  --clinic-success-bg: #dcfce7;
+  --clinic-success-text: #166534;
+  --clinic-pending-bg: #fef9c3;
+  --clinic-pending-text: #854d0e;
+  --clinic-error: #dc2626;
+}
+
+body {
+  background-color: var(--clinic-content-bg);
+  color: var(--clinic-text);
+}
+
+a {
+  color: var(--clinic-accent);
+}
+
+a:hover {
+  color: var(--clinic-accent-hover);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--clinic-accent);
+  --bs-btn-border-color: var(--clinic-accent);
+  --bs-btn-hover-bg: var(--clinic-accent-hover);
+  --bs-btn-hover-border-color: var(--clinic-accent-hover);
+  --bs-btn-active-bg: var(--clinic-accent-hover);
+  --bs-btn-active-border-color: var(--clinic-accent-hover);
+  --bs-btn-focus-shadow-rgb: 99, 102, 241;
+}
+
+.card {
+  border-color: var(--clinic-border);
+  border-radius: 0.5rem;
+}
+
+.card-header,
+.card-footer {
+  background-color: #fff;
+  border-color: var(--clinic-border);
+}
+
+.table thead th {
+  background-color: var(--clinic-table-header-bg);
+  color: var(--clinic-table-header-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom-width: 1px;
+}
+
+.table > :not(caption) > * > * {
+  border-bottom-color: var(--clinic-border);
+}
+
+.table-hover > tbody > tr:hover > * {
+  background-color: var(--clinic-content-bg);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--clinic-accent-soft);
+  box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.15);
+}
+
+.nav-tabs .nav-link {
+  color: #64748b;
+}
+
+.nav-tabs .nav-link.active {
+  color: var(--clinic-accent);
+  border-color: var(--clinic-border) var(--clinic-border) #fff;
+}
+
+.badge.bg-success {
+  background-color: var(--clinic-success-bg) !important;
+  color: var(--clinic-success-text) !important;
+}
+
+.badge.bg-warning {
+  background-color: var(--clinic-pending-bg) !important;
+  color: var(--clinic-pending-text) !important;
+}
