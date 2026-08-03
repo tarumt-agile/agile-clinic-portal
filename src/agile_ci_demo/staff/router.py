@@ -8,8 +8,11 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
+from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.schemas import (
     DoctorOut,
     StaffCreate,
@@ -24,6 +27,7 @@ from agile_ci_demo.staff.service import (
     StaffUpdateEmailExistsError,
     StaffUpdateLicenseExistsError,
     create_staff,
+    delete_staff,
     get_doctor_by_doctor_id,
     get_staff_by_staff_id,
     list_doctors,
@@ -31,7 +35,6 @@ from agile_ci_demo.staff.service import (
     set_staff_active_status,
     update_staff,
 )
-
 
 api_router = APIRouter(
     prefix="/api/staff",
@@ -73,9 +76,7 @@ def register_staff(
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-            ),
+            status_code=(status.HTTP_422_UNPROCESSABLE_ENTITY),
             detail=str(exc),
         ) from exc
 
@@ -92,10 +93,7 @@ def get_staff_list(
 ) -> list[StaffOut]:
     staff_accounts = list_staff(db)
 
-    return [
-        StaffOut.model_validate(staff)
-        for staff in staff_accounts
-    ]
+    return [StaffOut.model_validate(staff) for staff in staff_accounts]
 
 
 # =========================================================
@@ -140,6 +138,7 @@ def get_doctor_details(
 # STAFF DETAILS AND UPDATE API
 # =========================================================
 
+
 # This route activates or deactivates one staff account.
 @api_router.patch(
     "/{staff_id}/status",
@@ -149,6 +148,7 @@ def update_staff_status(
     staff_id: str,
     payload: StaffStatusUpdate,
     db: Session = Depends(get_db),
+    _staff: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = set_staff_active_status(
@@ -164,6 +164,32 @@ def update_staff_status(
         ) from exc
 
     return StaffOut.model_validate(staff)
+
+
+# This route permanently deletes a staff account.
+@api_router.delete(
+    "/{staff_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_staff_endpoint(
+    staff_id: str,
+    db: Session = Depends(get_db),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> None:
+    if staff_id == admin.staff_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own account.",
+        )
+
+    try:
+        delete_staff(db, staff_id)
+    except StaffNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
 
 # This route returns the details of one staff account.
 @api_router.get(
@@ -182,10 +208,7 @@ def get_staff_details(
     if staff is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No staff account found with "
-                f"staff_id '{staff_id}'."
-            ),
+            detail=("No staff account found with " f"staff_id '{staff_id}'."),
         )
 
     return StaffOut.model_validate(staff)
@@ -200,6 +223,7 @@ def update_staff_details(
     staff_id: str,
     payload: StaffUpdate,
     db: Session = Depends(get_db),
+    _staff: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = update_staff(
@@ -225,9 +249,7 @@ def update_staff_details(
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-            ),
+            status_code=(status.HTTP_422_UNPROCESSABLE_ENTITY),
             detail=str(exc),
         ) from exc
 
@@ -246,6 +268,7 @@ def update_staff_details(
 )
 def staff_list_page(
     request: Request,
+    _staff: Staff = Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -261,6 +284,7 @@ def staff_list_page(
 )
 def create_staff_page(
     request: Request,
+    _staff=Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -277,6 +301,7 @@ def create_staff_page(
 def staff_detail_page(
     request: Request,
     staff_id: str,
+    _staff=Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,

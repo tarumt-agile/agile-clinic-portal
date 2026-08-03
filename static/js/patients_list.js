@@ -5,11 +5,13 @@
   if (!tableBody) return;
 
   const searchInput = document.getElementById("search-input");
+  const registeredFromInput = document.getElementById("registered-from-input");
+  const registeredToInput = document.getElementById("registered-to-input");
   const alertBox = document.getElementById("list-alert");
   const paginationEl = document.getElementById("pagination-controls");
   const pageSize = 10;
 
-  let state = { query: "", page: 1 };
+  let state = { query: "", registeredFrom: "", registeredTo: "", page: 1 };
   let debounceTimer = null;
 
   function escapeHtml(value) {
@@ -21,13 +23,15 @@
   async function loadPatients() {
     alertBox.classList.add("d-none");
     tableBody.innerHTML =
-      '<tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>';
+      '<tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr>';
 
     const params = new URLSearchParams({
       page: String(state.page),
       page_size: String(pageSize),
     });
     if (state.query) params.set("q", state.query);
+    if (state.registeredFrom) params.set("registered_from", state.registeredFrom);
+    if (state.registeredTo) params.set("registered_to", state.registeredTo);
 
     try {
       const response = await fetch(`/api/patients?${params.toString()}`);
@@ -45,7 +49,7 @@
   function renderTable(items) {
     if (items.length === 0) {
       tableBody.innerHTML =
-        '<tr><td colspan="5" class="text-center text-muted py-4">No patients found.</td></tr>';
+        '<tr><td colspan="6" class="text-center text-muted py-4">No patients found.</td></tr>';
       return;
     }
 
@@ -58,6 +62,7 @@
         <td class="text-capitalize">${escapeHtml(p.gender)}</td>
         <td>${escapeHtml(p.phone_number)}</td>
         <td>${escapeHtml(p.date_of_birth)}</td>
+        <td>${escapeHtml((p.created_at || "").slice(0, 10))}</td>
       </tr>`
       )
       .join("");
@@ -109,6 +114,18 @@
       state.page = 1;
       loadPatients();
     }, 300);
+  });
+
+  registeredFromInput.addEventListener("input", () => {
+    state.registeredFrom = registeredFromInput.value;
+    state.page = 1;
+    loadPatients();
+  });
+
+  registeredToInput.addEventListener("input", () => {
+    state.registeredTo = registeredToInput.value;
+    state.page = 1;
+    loadPatients();
   });
 
   loadPatients();

@@ -1,0 +1,237 @@
+#prescription-sheet {
+  max-width: 210mm;
+  min-height: 250mm;
+  margin: 0 auto;
+  padding: 16mm;
+  color: #172033;
+  background: #fff;
+  border: 1px solid #d8dee9;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1.5rem rgb(23 32 51 / 8%);
+}
+
+.prescription-clinic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 3px solid #0d6efd;
+}
+
+.prescription-clinic-header h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.8rem;
+}
+
+.prescription-clinic-header address {
+  display: grid;
+  gap: 0.2rem;
+  color: #49536a;
+  font-style: normal;
+}
+
+.prescription-kicker,
+.prescription-label {
+  color: #667085;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.prescription-kicker {
+  margin-bottom: 0.35rem;
+}
+
+.prescription-rx-mark {
+  color: #0d6efd;
+  font-family: Georgia, serif;
+  font-size: 3.5rem;
+  font-style: italic;
+  line-height: 1;
+}
+
+.prescription-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 2rem;
+  padding: 1.5rem 0;
+}
+
+.prescription-meta-grid > div,
+.prescription-diagnosis {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.prescription-meta-grid span:not(.prescription-label) {
+  color: #667085;
+  font-size: 0.9rem;
+}
+
+.prescription-diagnosis {
+  padding: 1rem 1.25rem;
+  background: #f2f6ff;
+  border-left: 4px solid #0d6efd;
+}
+
+.prescription-medication {
+  margin-top: 1.75rem;
+}
+
+.prescription-medication h2 {
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+}
+
+.prescription-medication dl {
+  margin: 0;
+  border: 1px solid #d8dee9;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.prescription-medication dl > div {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  border-bottom: 1px solid #e4e7ec;
+}
+
+.prescription-medication dl > div:last-child {
+  border-bottom: 0;
+}
+
+.prescription-medication dt,
+.prescription-medication dd {
+  margin: 0;
+  padding: 0.9rem 1rem;
+}
+
+.prescription-medication dt {
+  background: #f8f9fb;
+}
+
+.prescription-medication dd {
+  font-weight: 600;
+}
+
+.prescription-signature {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 3rem;
+  margin-top: 4rem;
+}
+
+.prescription-signature > div {
+  display: grid;
+  min-width: 14rem;
+  gap: 0.2rem;
+}
+
+.prescription-signature > div span:last-child,
+.prescription-signature p {
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+.prescription-signature p {
+  max-width: 18rem;
+  margin: 0;
+  text-align: right;
+}
+
+.signature-line {
+  display: block;
+  margin-bottom: 0.4rem;
+  border-top: 1px solid #172033;
+}
+
+@media (max-width: 576px) {
+  #prescription-sheet {
+    min-height: auto;
+    padding: 1.5rem;
+  }
+
+  .prescription-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prescription-medication dl > div {
+    grid-template-columns: 1fr;
+  }
+
+  .prescription-medication dd {
+    padding-top: 0;
+  }
+
+  .prescription-signature {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .prescription-signature p {
+    max-width: none;
+    text-align: left;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  body {
+    color: #000;
+    background: #fff !important;
+  }
+
+  body > nav,
+  .print-actions {
+    display: none !important;
+  }
+
+  main.container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0 !important;
+  }
+
+  #prescription-sheet {
+    width: 100%;
+    max-width: none;
+    min-height: auto;
+    margin: 0;
+    padding: 0;
+    color: #000;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .prescription-clinic-header {
+    border-color: #000;
+  }
+
+  .prescription-rx-mark,
+  .prescription-clinic-header address,
+  .prescription-kicker,
+  .prescription-label,
+  .prescription-meta-grid span:not(.prescription-label),
+  .prescription-signature > div span:last-child,
+  .prescription-signature p {
+    color: #000;
+  }
+
+  .prescription-diagnosis,
+  .prescription-medication dt {
+    background: transparent;
+  }
+
+  .prescription-diagnosis {
+    border-color: #000;
+  }
+}

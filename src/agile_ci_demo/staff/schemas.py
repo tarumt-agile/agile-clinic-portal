@@ -106,6 +106,12 @@ class StaffOut(BaseModel):
     specialty: str | None = None
     department: str | None = None
     doctor_status: str | None = None
+    start_time: dt.time | None = None
+    end_time: dt.time | None = None
+    next_start_time: dt.time | None = None
+    next_end_time: dt.time | None = None
+    next_effective_date: dt.date | None = None
+
 
 class StaffUpdate(BaseModel):
     full_name: str = Field(max_length=120)
@@ -114,6 +120,8 @@ class StaffUpdate(BaseModel):
     license_number: str | None = None
     specialty: Specialty | None = None
     doctor_status: DoctorStatus | None = None
+    start_time: dt.time | None = None
+    end_time: dt.time | None = None
 
     @field_validator("full_name")
     @classmethod
@@ -121,26 +129,17 @@ class StaffUpdate(BaseModel):
         value = " ".join(value.strip().split())
 
         if not value:
-            raise ValueError(
-                "Full name must be filled in."
-            )
+            raise ValueError("Full name must be filled in.")
 
         if len(value.split()) < 2:
-            raise ValueError(
-                "Full name must contain at least 2 words."
-            )
+            raise ValueError("Full name must contain at least 2 words.")
 
         if not all(
-            word
-            .replace("-", "")
-            .replace("'", "")
-            .replace(".", "")
-            .isalpha()
+            word.replace("-", "").replace("'", "").replace(".", "").isalpha()
             for word in value.split()
         ):
             raise ValueError(
-                "Full name may only contain letters, spaces, "
-                "apostrophes, periods and hyphens."
+                "Full name may only contain letters, spaces, " "apostrophes, periods and hyphens."
             )
 
         return value
@@ -168,14 +167,11 @@ class StaffUpdate(BaseModel):
             r"MMC-\d{5}",
             value,
         ):
-            raise ValueError(
-                "Registration number must use the "
-                "format MMC-12345."
-            )
+            raise ValueError("Registration number must use the " "format MMC-12345.")
 
         return value
-    
-    
+
+
 class StaffStatusUpdate(BaseModel):
     is_active: bool
 

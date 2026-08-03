@@ -21,13 +21,26 @@ Patient Details - Agile Clinic Portal
         </h1>
 
         <div>
+          {% set role = request.session.get("role") %}
+          {% if role == "doctor" %}
+          <a
+            href="/appointments/schedule"
+            id="back-link"
+            class="btn btn-outline-secondary"
+          >
+            Back to Schedule
+          </a>
+          {% else %}
           <a
             href="/patients"
+            id="back-link"
             class="btn btn-outline-secondary"
           >
             Back to List
           </a>
+          {% endif %}
 
+          {% if role != "doctor" %}
           <button
             type="button"
             class="btn btn-primary"
@@ -35,6 +48,17 @@ Patient Details - Agile Clinic Portal
           >
             Edit
           </button>
+          {% endif %}
+
+          {% if role == "admin" %}
+          <button
+            type="button"
+            class="btn btn-danger"
+            id="delete-patient-button"
+          >
+            Delete Patient
+          </button>
+          {% endif %}
         </div>
       </div>
 
@@ -225,7 +249,7 @@ Patient Details - Agile Clinic Portal
                 >
 
                 <div class="invalid-feedback">
-                  A valid date of birth is required.
+                  Enter a date of birth that is not in the future and not more than 100 years ago.
                 </div>
               </div>
 
@@ -311,29 +335,6 @@ Patient Details - Agile Clinic Portal
 
               <div class="col-md-6">
                 <label
-                  for="edit-ic_or_passport"
-                  class="form-label"
-                >
-                  IC / Passport number *
-                </label>
-
-                <input
-                  type="text"
-                  class="form-control"
-                  id="edit-ic_or_passport"
-                  name="ic_or_passport"
-                  required
-                  minlength="5"
-                  maxlength="30"
-                >
-
-                <div class="invalid-feedback">
-                  IC or passport number is required.
-                </div>
-              </div>
-
-              <div class="col-md-6">
-                <label
                   for="edit-address"
                   class="form-label"
                 >
@@ -348,6 +349,11 @@ Patient Details - Agile Clinic Portal
                   placeholder="optional"
                   maxlength="255"
                 >
+
+                <div class="form-text">
+                  IC number is fixed at registration
+                  and cannot be edited.
+                </div>
               </div>
             </div>
 
@@ -395,6 +401,7 @@ Patient Details - Agile Clinic Portal
               autocomplete="off"
             >
 
+            {% if role == "doctor" %}
             <a
               href="#"
               id="new-record-link"
@@ -402,6 +409,7 @@ Patient Details - Agile Clinic Portal
             >
               + New Consultation Note
             </a>
+            {% endif %}
           </div>
 
           <div
@@ -661,11 +669,75 @@ Patient Details - Agile Clinic Portal
     </div>
   </div>
 </div>
+
+{% if role == "admin" %}
+<div
+  class="modal fade"
+  id="delete-patient-modal"
+  tabindex="-1"
+  aria-labelledby="delete-patient-modal-title"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h2
+          id="delete-patient-modal-title"
+          class="modal-title fs-5"
+        >
+          Delete Patient
+        </h2>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        <p>
+          Delete this patient permanently? This will also permanently delete
+          their appointments, consultation records, and prescriptions. This
+          cannot be undone.
+        </p>
+
+        <div
+          id="delete-patient-modal-alert"
+          class="alert alert-danger d-none"
+          role="alert"
+        ></div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          data-bs-dismiss="modal"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          id="confirm-delete-patient-button"
+          class="btn btn-danger"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/patient-form.js"></script>
-<script src="/static/js/patient_detail.js"></script>
+<script src="/static/js/patient-form.js?v=1"></script>
+<script src="/static/js/patient_detail.js?v=3"></script>
 <script src="/static/js/medical_history.js"></script>
-<script src="/static/js/prescription-history.js?v=2"></script>
+<script src="/static/js/patient-prescription-history.js?v=3"></script>
+<script src="/static/js/patient-delete.js"></script>
 {% endblock %}

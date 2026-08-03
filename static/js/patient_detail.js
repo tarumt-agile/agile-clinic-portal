@@ -17,6 +17,23 @@
   const saveBtn = document.getElementById("save-btn");
   const successModalEl = document.getElementById("success-modal");
   const successModal = window.bootstrap ? new bootstrap.Modal(successModalEl) : null;
+  const editPhoneInput = document.getElementById("edit-phone_number");
+  if (editPhoneInput) window.PatientForm.autoDash(editPhoneInput, [3, 7]);
+  const editDobInput = document.getElementById("edit-date_of_birth");
+  if (editDobInput) window.PatientForm.setDobRange(editDobInput);
+
+  // When opened via a "View Patient Details" link from elsewhere (e.g. the
+  // Start Consultation queue or an in-progress consultation note), ?from=
+  // carries where to actually go back to, since that's not always the
+  // default Back to Schedule/List destination.
+  const backLink = document.getElementById("back-link");
+  const returnParams = new URLSearchParams(window.location.search);
+  const backTo = returnParams.get("from");
+  const backLabel = returnParams.get("label");
+  if (backLink && backTo) {
+    backLink.href = backTo;
+    if (backLabel) backLink.textContent = backLabel;
+  }
 
   let currentPatient = null;
 
@@ -38,13 +55,13 @@
     hideAlert(alertBox);
     viewMode.classList.add("d-none");
     editForm.classList.remove("d-none");
-    editBtn.classList.add("d-none");
+    if (editBtn) editBtn.classList.add("d-none");
   }
 
   function exitEditMode() {
     editForm.classList.add("d-none");
     viewMode.classList.remove("d-none");
-    editBtn.classList.remove("d-none");
+    if (editBtn) editBtn.classList.remove("d-none");
   }
 
   async function loadPatient() {
@@ -52,7 +69,7 @@
       const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`);
       if (response.status === 404) {
         notFoundAlert.classList.remove("d-none");
-        editBtn.classList.add("d-none");
+        if (editBtn) editBtn.classList.add("d-none");
         viewMode.classList.add("d-none");
         return;
       }
@@ -92,8 +109,9 @@
 
       if (response.status === 422) {
         const body = await response.json();
-        if (!applyValidationErrors(editForm, body)) {
-          showAlert(alertBox, "Please check the form for errors.");
+        const { hadFieldError, message } = applyValidationErrors(editForm, body);
+        if (!hadFieldError) {
+          showAlert(alertBox, message || "Please check the form for errors.");
         }
         return;
       }
@@ -118,7 +136,7 @@
     }
   }
 
-  editBtn.addEventListener("click", enterEditMode);
+  if (editBtn) editBtn.addEventListener("click", enterEditMode);
   cancelBtn.addEventListener("click", exitEditMode);
   editForm.addEventListener("submit", handleSave);
 
