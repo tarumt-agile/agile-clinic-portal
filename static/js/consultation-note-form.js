@@ -331,9 +331,9 @@
     backLink.textContent = "Back to Start Consultation";
   }
 
-  // "View Patient Details" opens in a new tab so an in-progress draft note
-  // isn't lost - its own Back button should return to this exact page
-  // (including appointment_reference), not somewhere generic.
+  // Open patient details in this tab. Its Back button returns to this exact
+  // consultation URL (including appointment_reference), not somewhere generic.
+  viewPatientLink.target = "_self";
   viewPatientLink.href =
     `/patients/${encodeURIComponent(patientId)}?` +
     `from=${encodeURIComponent(window.location.pathname + window.location.search)}` +

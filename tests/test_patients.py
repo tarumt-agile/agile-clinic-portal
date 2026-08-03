@@ -7,7 +7,7 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 from pytest_bdd import given as bdd_given, parsers, scenarios, then as bdd_then, when as bdd_when
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -125,6 +125,31 @@ def test_register_patient_then_fetch_by_id(client: TestClient) -> None:
     r = client.get(f"/api/patients/{created['patient_id']}")
     assert r.status_code == 200
     assert r.json()["full_name"] == "Jane Tan"
+
+
+def test_fetch_patient_with_legacy_invalid_email_does_not_crash(client: TestClient) -> None:
+    """Imported/previously populated data may predate current EmailStr validation.
+    It should remain readable while new and edited email values stay validated."""
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    override = app.dependency_overrides[get_db]
+    db_generator = override()
+    db = next(db_generator)
+    try:
+        patient = db.execute(
+            select(_patients_models.Patient).where(
+                _patients_models.Patient.patient_id == created["patient_id"]
+            )
+        ).scalar_one()
+        patient.email = "julaug.patient10@example.test"
+        db.commit()
+    finally:
+        db_generator.close()
+
+    r = client.get(f"/api/patients/{created['patient_id']}")
+
+    assert r.status_code == 200
+    assert r.json()["email"] == "julaug.patient10@example.test"
 
 
 def test_get_unknown_patient_returns_404(client: TestClient) -> None:

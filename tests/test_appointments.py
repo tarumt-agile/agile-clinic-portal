@@ -948,6 +948,11 @@ def test_consultations_page_loads_when_logged_in_as_doctor(client: TestClient) -
     assert r.status_code == 200
     assert "Start Consultation" in r.text
 
+    script = client.get("/static/js/doctor-start-consultation.js")
+    assert script.status_code == 200
+    assert 'target="_self"' in script.text
+    assert 'target="_blank"' not in script.text
+
 
 def test_doctor_schedule_page_redirects_when_not_logged_in(client: TestClient) -> None:
     r = client.get("/appointments/doctor-schedule", follow_redirects=False)
