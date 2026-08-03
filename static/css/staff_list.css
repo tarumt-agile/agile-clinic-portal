@@ -170,7 +170,7 @@
 }
 
 .staff-table tbody tr:hover {
-  background: #f4f8ff;
+  background: var(--clinic-content-bg);
 }
 
 .staff-table tbody tr:last-child td {
@@ -178,7 +178,7 @@
 }
 
 .staff-id {
-  color: #0d6efd;
+  color: var(--clinic-accent);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -309,7 +309,7 @@
 
 .staff-mobile-card-id {
   margin: 0.2rem 0 0;
-  color: #0d6efd;
+  color: var(--clinic-accent);
   font-size: 0.825rem;
   font-weight: 700;
 }
