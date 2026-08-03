@@ -42,11 +42,18 @@ def _send_via_smtp(email: SentEmail, *, host: str, username: str, password: str)
     message["To"] = email.to
     message.set_content(email.body)
 
+    # Bcc'd (not added as a header) so real recipients never see this address -
+    # it's a dev-only mailbox for confirming sends actually go out, since staff
+    # emails in the dev database are mostly unreachable placeholder addresses.
+    recipients = [email.to]
+    if settings.email_dev_bcc:
+        recipients.append(settings.email_dev_bcc)
+
     with smtplib.SMTP(host, settings.smtp_port) as server:
         if settings.smtp_use_tls:
             server.starttls()
         server.login(username, password)
-        server.send_message(message)
+        server.send_message(message, to_addrs=recipients)
 
 
 def get_outbox() -> list[SentEmail]:

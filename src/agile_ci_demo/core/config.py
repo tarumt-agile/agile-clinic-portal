@@ -32,6 +32,11 @@ class Settings:
     smtp_from: str | None = os.getenv("SMTP_FROM")
     smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
 
+    # Dev-only mailbox that silently receives a copy of every email sent (via Bcc),
+    # so sends can be verified without needing a real inbox for every recipient.
+    # Leave unset in production.
+    email_dev_bcc: str | None = os.getenv("EMAIL_DEV_BCC")
+
     # Signs the login session cookie. Falls back to a fixed dev value so local
     # runs and tests work with no .env entry - set a real SECRET_KEY in
     # production.
