@@ -216,6 +216,7 @@ a:hover {
 .app-content {
   flex: 1;
   max-width: 1200px;
+  margin-inline: auto;
   padding: 1.5rem;
 }
 
@@ -283,4 +284,62 @@ a:hover {
   width: 100%;
   flex: 0 0 auto;
   padding: 0;
+}
+
+/* ===== Stat cards (single-number summary tiles) ===== */
+.stat-card {
+  padding: 1.1rem 1.25rem;
+  background-color: #fff;
+  border: 1px solid var(--clinic-border);
+  border-radius: 0.65rem;
+}
+
+.stat-card-label {
+  margin: 0 0 0.35rem;
+  color: var(--clinic-table-header-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stat-card-value {
+  display: block;
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--clinic-text);
+}
+
+/* ===== Form sections (grouped field labels inside forms) ===== */
+.form-section {
+  margin-bottom: 1.5rem;
+}
+
+.form-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.form-section-title {
+  margin: 0 0 0.9rem;
+  color: var(--clinic-table-header-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ===== Time-slot picker (Book Appointment) ===== */
+.slot-btn {
+  min-width: 4.5rem;
+  border-radius: 999px;
+}
+
+/* ===== Doctor Schedule date list ===== */
+.date-list-item {
+  border-left: 3px solid transparent;
+}
+
+.date-list-item:hover {
+  background-color: var(--clinic-content-bg);
+  border-left-color: var(--clinic-accent-soft);
 }
