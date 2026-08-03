@@ -225,8 +225,6 @@ a:hover {
 
 .app-content {
   flex: 1;
-  max-width: 1200px;
-  margin-inline: auto;
   padding: 1.5rem;
 }
 
