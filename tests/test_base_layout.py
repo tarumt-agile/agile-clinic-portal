@@ -178,3 +178,12 @@ def test_app_shell_wraps_authenticated_pages(client: TestClient) -> None:
     assert response.status_code == 200
     assert 'id="app-sidebar"' in response.text
     assert 'class="app-shell"' in response.text
+
+
+def test_login_page_renders_auth_shell_with_no_sidebar(client: TestClient) -> None:
+    response = client.get("/auth/login")
+
+    assert response.status_code == 200
+    assert 'class="auth-shell"' in response.text
+    assert 'class="auth-card-wrap"' in response.text
+    assert 'id="app-sidebar"' not in response.text
