@@ -10,48 +10,61 @@
     <div id="form-alert" class="alert alert-danger d-none" role="alert"></div>
 
     <form id="appointment-form" novalidate>
-      <div class="row g-3">
-        <div class="col-12">
-          <label class="form-label">Booking as</label>
-          <p class="form-control-plaintext fw-semibold" id="patient-display">Loading your record...</p>
-          <input type="hidden" id="patient_id" name="patient_id" required>
-        </div>
-
-        <div class="col-md-3">
-          <label for="specialty" class="form-label">Specialty</label>
-          <select class="form-select" id="specialty">
-            <option value="">All specialties</option>
-          </select>
-        </div>
-
-        <div class="col-md-3">
-          <label for="doctor_id" class="form-label">Doctor *</label>
-          <select class="form-select" id="doctor_id" name="doctor_id" required>
-            <option value="" selected disabled>Loading doctors...</option>
-          </select>
-          <div class="invalid-feedback">Please select a doctor.</div>
-        </div>
-
-        <div class="col-md-6">
-          <label for="appointment_date" class="form-label">Date *</label>
-          <input type="date" class="form-control" id="appointment_date" name="appointment_date" required>
-          <div class="invalid-feedback">Please choose a date that is not in the past.</div>
-        </div>
-
-        <div class="col-12">
-          <label class="form-label d-block">Time slot *</label>
-          <input type="hidden" id="start_time" name="start_time" required>
-          <div id="slot-grid" class="d-flex flex-wrap gap-2">
-            <p class="text-muted mb-0" id="slot-placeholder">Select a doctor and date to see available time slots.</p>
+      <div class="form-section">
+        <p class="form-section-title">Your Booking</p>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Booking as</label>
+            <p class="form-control-plaintext fw-semibold" id="patient-display">Loading your record...</p>
+            <input type="hidden" id="patient_id" name="patient_id" required>
           </div>
-          <div class="invalid-feedback" id="slot-error">Please select an available time slot.</div>
         </div>
+      </div>
 
-        <div class="col-md-8">
-          <label for="reason" class="form-label">Reason for visit *</label>
-          <input type="text" class="form-control" id="reason" name="reason" required minlength="2" maxlength="255"
-                 placeholder="e.g. Fever and cough">
-          <div class="invalid-feedback">Reason for visit is required.</div>
+      <div class="form-section">
+        <p class="form-section-title">Appointment Details</p>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label for="specialty" class="form-label">Specialty</label>
+            <select class="form-select" id="specialty">
+              <option value="">All specialties</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label for="doctor_id" class="form-label">Doctor *</label>
+            <select class="form-select" id="doctor_id" name="doctor_id" required>
+              <option value="" selected disabled>Loading doctors...</option>
+            </select>
+            <div class="invalid-feedback">Please select a doctor.</div>
+          </div>
+
+          <div class="col-md-6">
+            <label for="appointment_date" class="form-label">Date *</label>
+            <input type="date" class="form-control" id="appointment_date" name="appointment_date" required>
+            <div class="invalid-feedback">Please choose a date that is not in the past.</div>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label d-block">Time slot *</label>
+            <input type="hidden" id="start_time" name="start_time" required>
+            <div id="slot-grid" class="d-flex flex-wrap gap-2">
+              <p class="text-muted mb-0" id="slot-placeholder">Select a doctor and date to see available time slots.</p>
+            </div>
+            <div class="invalid-feedback" id="slot-error">Please select an available time slot.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <p class="form-section-title">Visit Reason</p>
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label for="reason" class="form-label">Reason for visit *</label>
+            <input type="text" class="form-control" id="reason" name="reason" required minlength="2" maxlength="255"
+                   placeholder="e.g. Fever and cough">
+            <div class="invalid-feedback">Reason for visit is required.</div>
+          </div>
         </div>
       </div>
 
