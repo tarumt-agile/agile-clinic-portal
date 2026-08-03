@@ -111,3 +111,133 @@ a:hover {
   background-color: var(--clinic-pending-bg) !important;
   color: var(--clinic-pending-text) !important;
 }
+
+/* ===== App shell (sidebar navigation) ===== */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+  background-color: var(--clinic-sidebar-bg);
+  color: var(--clinic-sidebar-text);
+}
+
+.sidebar-brand {
+  padding: 0 1rem 1rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--clinic-sidebar-border);
+}
+
+.sidebar-brand a {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  text-decoration: none;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.sidebar-link {
+  display: block;
+  padding: 0.6rem 1rem;
+  border-right: 3px solid transparent;
+  color: var(--clinic-sidebar-text);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.sidebar-link:hover {
+  background-color: var(--clinic-sidebar-hover);
+  color: #fff;
+}
+
+.sidebar-link.active {
+  background-color: var(--clinic-sidebar-hover);
+  border-right-color: var(--clinic-accent-soft);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sidebar-user {
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--clinic-sidebar-border);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  max-width: 1200px;
+  padding: 1.5rem;
+}
+
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 1050;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: none;
+  border-radius: 0.4rem;
+  background-color: var(--clinic-sidebar-bg);
+  color: #fff;
+  font-size: 1.25rem;
+}
+
+@media (max-width: 768px) {
+  .sidebar-toggle {
+    display: block;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1040;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .app-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .app-content {
+    padding-top: 4rem;
+  }
+}
+
+/* ===== Auth shell (login / forgot / reset password) ===== */
+.auth-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+  background-color: var(--clinic-sidebar-bg);
+}
+
+.auth-card-wrap {
+  width: 100%;
+  max-width: 420px;
+  padding: 2rem 1.75rem;
+  background-color: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, 0.25);
+}
