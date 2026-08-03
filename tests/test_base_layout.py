@@ -215,3 +215,14 @@ def test_doctor_schedule_page_has_stat_cards_and_view_toggle(client: TestClient)
     assert 'id="view-list-btn"' in response.text
     assert 'id="view-calendar-btn"' in response.text
     assert 'id="schedule-calendar"' in response.text
+
+
+def test_receptionist_doctor_schedule_page_has_view_toggle(client: TestClient) -> None:
+    create_staff_and_login(client, "receptionist")
+
+    response = client.get("/appointments/doctor-schedule")
+
+    assert response.status_code == 200
+    assert 'id="view-list-btn"' in response.text
+    assert 'id="view-calendar-btn"' in response.text
+    assert 'id="schedule-calendar"' in response.text
