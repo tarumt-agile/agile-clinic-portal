@@ -190,3 +190,13 @@ def test_login_page_renders_auth_shell_with_no_sidebar(client: TestClient) -> No
     assert 'class="auth-shell"' in response.text
     assert 'class="auth-card-wrap"' in response.text
     assert 'id="app-sidebar"' not in response.text
+
+
+def test_logout_link_requires_confirmation(client: TestClient) -> None:
+    create_staff_and_login(client, "admin")
+
+    response = client.get("/patients")
+
+    assert response.status_code == 200
+    assert 'id="logout-confirm-modal"' in response.text
+    assert 'id="confirm-logout-btn"' in response.text
