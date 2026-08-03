@@ -120,6 +120,9 @@ def test_receptionist_and_nurse_see_front_desk_sidebar_links(
     assert 'href="/staff"' not in response.text
     assert 'href="/appointments/consultations"' not in response.text
 
+    if role == "nurse":
+        assert 'href="/pharmacy"' not in response.text
+
 
 def test_admin_sees_pharmacy_staff_and_reports_sidebar_links(client: TestClient) -> None:
     create_staff_and_login(client, "admin")

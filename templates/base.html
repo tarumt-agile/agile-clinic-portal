@@ -59,6 +59,29 @@
         {% endif %}
       </nav>
       <div class="sidebar-user">
+        {% if is_patient %}
+          {% set identity_initials = "PT" %}
+          {% set identity_label = "Patient" %}
+        {% elif role == "doctor" %}
+          {% set identity_initials = "DR" %}
+          {% set identity_label = "Doctor" %}
+        {% elif role == "admin" %}
+          {% set identity_initials = "AD" %}
+          {% set identity_label = "Admin" %}
+        {% elif role == "receptionist" %}
+          {% set identity_initials = "RC" %}
+          {% set identity_label = "Receptionist" %}
+        {% elif role == "nurse" %}
+          {% set identity_initials = "NR" %}
+          {% set identity_label = "Nurse" %}
+        {% else %}
+          {% set identity_initials = "" %}
+          {% set identity_label = "" %}
+        {% endif %}
+        <div class="sidebar-user-identity">
+          <span class="sidebar-user-avatar">{{ identity_initials }}</span>
+          <span class="sidebar-user-label">{{ identity_label }}</span>
+        </div>
         <a class="sidebar-link" href="#" id="logout-link">Logout</a>
       </div>
     </aside>

@@ -33,6 +33,10 @@
   --clinic-pending-bg: #fef9c3;
   --clinic-pending-text: #854d0e;
   --clinic-error: #dc2626;
+
+  --bs-primary: #4f46e5;
+  --bs-primary-rgb: 79, 70, 229;
+  --bs-link-color-rgb: 79, 70, 229;
 }
 
 body {
@@ -102,12 +106,14 @@ a:hover {
   border-color: var(--clinic-border) var(--clinic-border) #fff;
 }
 
-.badge.bg-success {
+.badge.bg-success,
+.badge.text-bg-success {
   background-color: var(--clinic-success-bg) !important;
   color: var(--clinic-success-text) !important;
 }
 
-.badge.bg-warning {
+.badge.bg-warning,
+.badge.text-bg-warning {
   background-color: var(--clinic-pending-bg) !important;
   color: var(--clinic-pending-text) !important;
 }
@@ -171,6 +177,33 @@ a:hover {
 .sidebar-user {
   padding: 0.75rem 0 0;
   border-top: 1px solid var(--clinic-sidebar-border);
+}
+
+.sidebar-user-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 1rem 0.75rem;
+}
+
+.sidebar-user-avatar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background-color: var(--clinic-accent-soft);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.sidebar-user-label {
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .app-main {
@@ -240,4 +273,14 @@ a:hover {
   background-color: #fff;
   border-radius: 0.75rem;
   box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, 0.25);
+}
+
+.auth-shell .auth-card-wrap .row {
+  margin: 0;
+}
+
+.auth-shell .auth-card-wrap [class*="col-"] {
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 0;
 }
