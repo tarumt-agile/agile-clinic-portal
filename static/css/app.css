@@ -335,11 +335,17 @@ a:hover {
 }
 
 /* ===== Doctor Schedule date list ===== */
-.date-list-item {
-  border-left: 3px solid transparent;
+/* .list-group-item.date-list-item (two classes) is needed, not just
+   .date-list-item alone, to out-specificity Bootstrap's
+   `.list-group-flush > .list-group-item { border-width: 0 0 1px; }`,
+   which otherwise zeroes out border-left-width regardless of source order. */
+.list-group-item.date-list-item {
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-left-color: transparent;
 }
 
-.date-list-item:hover {
+.list-group-item.date-list-item:hover {
   background-color: var(--clinic-content-bg);
   border-left-color: var(--clinic-accent-soft);
 }
