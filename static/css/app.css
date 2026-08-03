@@ -87,6 +87,15 @@ a:hover {
   border-bottom-color: var(--clinic-border);
 }
 
+/* Tables placed directly inside a card (Patients List, Doctor Schedule, Start
+   Consultation, My Appointments, Reports) otherwise sit edge-to-edge with no
+   gutter from the card border - unlike Pharmacy's table, which is inset inside
+   a padded .card-body. Adds the same horizontal breathing room here without
+   touching the vertical rhythm around each card's own header/footer. */
+.card > .table-responsive {
+  padding-inline: 1rem;
+}
+
 .table-hover > tbody > tr:hover > * {
   background-color: var(--clinic-content-bg);
 }
