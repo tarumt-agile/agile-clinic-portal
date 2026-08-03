@@ -44,50 +44,44 @@ Pharmacy - Agile Clinic Portal
 
   <section class="row g-3 mb-4">
     <div class="col-sm-4">
-      <div class="card h-100">
-        <div class="card-body">
-          <p class="text-muted mb-1">
-            Displayed medications
-          </p>
-          <strong
-            id="medication-total"
-            class="fs-3"
-          >
-            0
-          </strong>
-        </div>
+      <div class="stat-card h-100">
+        <p class="stat-card-label mb-0">
+          Displayed medications
+        </p>
+        <strong
+          id="medication-total"
+          class="stat-card-value"
+        >
+          0
+        </strong>
       </div>
     </div>
 
     <div class="col-sm-4">
-      <div class="card h-100">
-        <div class="card-body">
-          <p class="text-muted mb-1">
-            Low stock
-          </p>
-          <strong
-            id="low-stock-total"
-            class="fs-3 text-warning-emphasis"
-          >
-            0
-          </strong>
-        </div>
+      <div class="stat-card h-100">
+        <p class="stat-card-label mb-0">
+          Low stock
+        </p>
+        <strong
+          id="low-stock-total"
+          class="stat-card-value text-warning-emphasis"
+        >
+          0
+        </strong>
       </div>
     </div>
 
     <div class="col-sm-4">
-      <div class="card h-100">
-        <div class="card-body">
-          <p class="text-muted mb-1">
-            Out of stock
-          </p>
-          <strong
-            id="out-of-stock-total"
-            class="fs-3 text-danger"
-          >
-            0
-          </strong>
-        </div>
+      <div class="stat-card h-100">
+        <p class="stat-card-label mb-0">
+          Out of stock
+        </p>
+        <strong
+          id="out-of-stock-total"
+          class="stat-card-value text-danger"
+        >
+          0
+        </strong>
       </div>
     </div>
   </section>
@@ -200,140 +194,148 @@ Pharmacy - Agile Clinic Portal
             id="medication-edit-id"
           >
 
-          <div class="mb-3">
-            <label
-              for="medication-name"
-              class="form-label"
-            >
-              Medication name *
-            </label>
-            <input
-              type="text"
-              id="medication-name"
-              class="form-control"
-              maxlength="120"
-              required
-            >
+          <div class="form-section">
+            <p class="form-section-title">Medication Details</p>
+
+            <div class="mb-3">
+              <label
+                for="medication-name"
+                class="form-label"
+              >
+                Medication name *
+              </label>
+              <input
+                type="text"
+                id="medication-name"
+                class="form-control"
+                maxlength="120"
+                required
+              >
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <label
+                  for="medication-form-type"
+                  class="form-label"
+                >
+                  Form *
+                </label>
+                <select
+                  id="medication-form-type"
+                  class="form-select"
+                  required
+                >
+                  <option value="">Select form</option>
+                  {% for option in medication_form_options %}
+                    <option value="{{ option }}">
+                      {{ option }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="col-sm-6">
+                <label
+                  for="medication-standard-dosage"
+                  class="form-label"
+                >
+                  Standard dosage *
+                </label>
+                <select
+                  id="medication-standard-dosage"
+                  class="form-select"
+                  required
+                >
+                  <option value="">Select dosage</option>
+                  {% for option in standard_dosage_options %}
+                    <option value="{{ option }}">
+                      {{ option }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
           </div>
 
-          <div class="row g-3 mb-3">
-            <div class="col-sm-6">
-              <label
-                for="medication-form-type"
-                class="form-label"
-              >
-                Form *
-              </label>
-              <select
-                id="medication-form-type"
-                class="form-select"
-                required
-              >
-                <option value="">Select form</option>
-                {% for option in medication_form_options %}
-                  <option value="{{ option }}">
-                    {{ option }}
-                  </option>
-                {% endfor %}
-              </select>
+          <div class="form-section">
+            <p class="form-section-title">Stock Settings</p>
+
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <label
+                  for="medication-unit"
+                  class="form-label"
+                >
+                  Stock unit *
+                </label>
+                <select
+                  id="medication-unit"
+                  class="form-select"
+                  required
+                >
+                  {% for option in stock_unit_options %}
+                    <option
+                      value="{{ option }}"
+                      {% if option == "units" %}selected{% endif %}
+                    >
+                      {{ option }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="col-sm-6">
+                <label
+                  for="medication-reorder-level"
+                  class="form-label"
+                >
+                  Reorder level *
+                </label>
+                <input
+                  type="number"
+                  id="medication-reorder-level"
+                  class="form-control"
+                  min="0"
+                  value="10"
+                  required
+                >
+              </div>
             </div>
 
-            <div class="col-sm-6">
+            <div
+              id="initial-stock-group"
+              class="mb-3"
+            >
               <label
-                for="medication-standard-dosage"
+                for="medication-initial-stock"
                 class="form-label"
               >
-                Standard dosage *
-              </label>
-              <select
-                id="medication-standard-dosage"
-                class="form-select"
-                required
-              >
-                <option value="">Select dosage</option>
-                {% for option in standard_dosage_options %}
-                  <option value="{{ option }}">
-                    {{ option }}
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
-          </div>
-
-          <div class="row g-3 mb-3">
-            <div class="col-sm-6">
-              <label
-                for="medication-unit"
-                class="form-label"
-              >
-                Stock unit *
-              </label>
-              <select
-                id="medication-unit"
-                class="form-select"
-                required
-              >
-                {% for option in stock_unit_options %}
-                  <option
-                    value="{{ option }}"
-                    {% if option == "units" %}selected{% endif %}
-                  >
-                    {{ option }}
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="col-sm-6">
-              <label
-                for="medication-reorder-level"
-                class="form-label"
-              >
-                Reorder level *
+                Initial stock
               </label>
               <input
                 type="number"
-                id="medication-reorder-level"
+                id="medication-initial-stock"
                 class="form-control"
                 min="0"
-                value="10"
-                required
+                value="0"
               >
             </div>
-          </div>
 
-          <div
-            id="initial-stock-group"
-            class="mb-3"
-          >
-            <label
-              for="medication-initial-stock"
-              class="form-label"
-            >
-              Initial stock
-            </label>
-            <input
-              type="number"
-              id="medication-initial-stock"
-              class="form-control"
-              min="0"
-              value="0"
-            >
-          </div>
-
-          <div class="form-check">
-            <input
-              type="checkbox"
-              id="medication-active"
-              class="form-check-input"
-              checked
-            >
-            <label
-              for="medication-active"
-              class="form-check-label"
-            >
-              Available for prescribing
-            </label>
+            <div class="form-check">
+              <input
+                type="checkbox"
+                id="medication-active"
+                class="form-check-input"
+                checked
+              >
+              <label
+                for="medication-active"
+                class="form-check-label"
+              >
+                Available for prescribing
+              </label>
+            </div>
           </div>
         </div>
 
@@ -400,42 +402,46 @@ Pharmacy - Agile Clinic Portal
             id="stock-medication-id"
           >
 
-          <div class="row g-3 mb-4">
-            <div class="col-sm-5">
-              <label
-                for="stock-quantity-change"
-                class="form-label"
-              >
-                Quantity change *
-              </label>
-              <input
-                type="number"
-                id="stock-quantity-change"
-                class="form-control"
-                placeholder="+50 or -5"
-                required
-              >
-              <div class="form-text">
-                Positive adds stock; negative removes stock.
-              </div>
-            </div>
+          <div class="form-section">
+            <p class="form-section-title">Adjustment</p>
 
-            <div class="col-sm-7">
-              <label
-                for="stock-reason"
-                class="form-label"
-              >
-                Reason *
-              </label>
-              <input
-                type="text"
-                id="stock-reason"
-                class="form-control"
-                minlength="3"
-                maxlength="255"
-                placeholder="Received delivery, damaged stock..."
-                required
-              >
+            <div class="row g-3 mb-4">
+              <div class="col-sm-5">
+                <label
+                  for="stock-quantity-change"
+                  class="form-label"
+                >
+                  Quantity change *
+                </label>
+                <input
+                  type="number"
+                  id="stock-quantity-change"
+                  class="form-control"
+                  placeholder="+50 or -5"
+                  required
+                >
+                <div class="form-text">
+                  Positive adds stock; negative removes stock.
+                </div>
+              </div>
+
+              <div class="col-sm-7">
+                <label
+                  for="stock-reason"
+                  class="form-label"
+                >
+                  Reason *
+                </label>
+                <input
+                  type="text"
+                  id="stock-reason"
+                  class="form-control"
+                  minlength="3"
+                  maxlength="255"
+                  placeholder="Received delivery, damaged stock..."
+                  required
+                >
+              </div>
             </div>
           </div>
 
