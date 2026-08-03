@@ -14,7 +14,7 @@
 - The existing single-`date` behavior of `/api/appointments/schedule` and `/api/appointments/schedule/by-doctor` must be preserved byte-for-byte when `start_date`/`end_date` are omitted.
 - No new roles/permissions — same `require_role(Role.DOCTOR)` / front-desk access as today.
 - pytest must be green after every task.
-- FullCalendar version pinned to `7.0.2` via `https://cdn.jsdelivr.net/npm/fullcalendar@7.0.2/index.global.min.js` (verified real on jsDelivr) — no separate CSS file (FullCalendar 6+'s global bundle injects its own styles via JS).
+- FullCalendar version pinned to `6.1.19` via `https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js`. (Originally written against `7.0.2`, which looked real via a jsDelivr package search but 404s in practice — v7 apparently dropped the `index.global.min.js` bundle. Caught and corrected during Task 5's manual verification; `6.1.19` was confirmed to return 200 with real `Calendar`-containing JS before switching. No separate CSS file needed — FullCalendar 6's global bundle injects its own styles via JS.)
 
 ---
 
