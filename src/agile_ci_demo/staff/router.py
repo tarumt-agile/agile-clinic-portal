@@ -336,6 +336,22 @@ def create_staff_page(
     )
 
 
+# This route displays the logged-in staff member's own profile.
+@pages_router.get(
+    "/profile",
+    response_class=HTMLResponse,
+)
+def staff_profile_page(
+    request: Request,
+    _staff: Staff = Depends(require_staff),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "staff/staff_profile.html",
+        {},
+    )
+
+
 # This route displays the details page for one staff account.
 @pages_router.get(
     "/{staff_id}",

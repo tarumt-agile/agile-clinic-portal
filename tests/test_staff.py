@@ -872,3 +872,26 @@ def test_update_my_staff_profile_duplicate_email_returns_409(client: TestClient)
         json={"full_name": "Nora Ibrahim", "email": "taken@example.com"},
     )
     assert r.status_code == 409
+
+
+# --- Self-service profile page -------------------------------------------------
+
+
+@pytest.mark.parametrize("role", ["receptionist", "nurse", "doctor", "admin"])
+def test_staff_profile_page_loads_for_any_staff_role(client: TestClient, role: str) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(client, role=role)
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.get("/staff/profile")
+    assert r.status_code == 200
+    assert "My Profile" in r.text
+
+
+def test_staff_profile_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/profile", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"

@@ -226,3 +226,22 @@ def test_receptionist_doctor_schedule_page_has_view_toggle(client: TestClient) -
     assert 'id="view-list-btn"' in response.text
     assert 'id="view-calendar-btn"' in response.text
     assert 'id="schedule-calendar"' in response.text
+
+
+@pytest.mark.parametrize("role", ["receptionist", "nurse", "doctor", "admin"])
+def test_staff_sidebar_has_my_profile_link(client: TestClient, role: str) -> None:
+    create_staff_and_login(client, role)
+
+    response = client.get("/staff/profile")
+
+    assert response.status_code == 200
+    assert '<a class="sidebar-link active" href="/staff/profile">My Profile</a>' in response.text
+
+
+def test_patient_sidebar_has_no_my_profile_link(client: TestClient) -> None:
+    create_patient_and_login(client)
+
+    response = client.get("/patients/dashboard")
+
+    assert response.status_code == 200
+    assert 'href="/staff/profile"' not in response.text

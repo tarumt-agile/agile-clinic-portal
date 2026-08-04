@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}My Profile - Agile Clinic Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/staff_view.css?v=1">
+{% endblock %}
+
+{% block content %}
+<div id="profile-root" class="staff-detail-page">
+  <header class="staff-detail-header">
+    <div>
+      <p class="staff-detail-breadcrumb">Account</p>
+      <h1>My Profile</h1>
+      <p>View and update your own account details.</p>
+    </div>
+  </header>
+
+  <div id="profile-alert" class="alert alert-danger d-none" role="alert"></div>
+  <div id="profile-success-alert" class="alert alert-success d-none" role="alert"></div>
+
+  <div id="profile-loading">Loading your profile...</div>
+
+  <div id="profile-content" class="d-none">
+    <section class="staff-profile-card">
+      <div class="staff-avatar">
+        <span id="profile-avatar-text">ST</span>
+      </div>
+      <div>
+        <div class="staff-profile-title-row">
+          <h2 id="profile-full-name">—</h2>
+        </div>
+        <p id="profile-role-heading">—</p>
+        <p id="profile-email-heading">—</p>
+      </div>
+    </section>
+
+    <section class="staff-edit-card">
+      <h2>Edit My Details</h2>
+
+      <div id="profile-update-alert" class="alert alert-danger d-none"></div>
+
+      <form id="edit-profile-form" novalidate>
+        <div class="staff-edit-grid">
+          <div class="staff-edit-field staff-edit-wide">
+            <label for="profile-full-name-input">Full Name *</label>
+            <input type="text" id="profile-full-name-input" maxlength="120">
+            <div id="profile-full-name-input-error" class="staff-field-error"></div>
+          </div>
+
+          <div class="staff-edit-field staff-edit-wide">
+            <label for="profile-email-input">Email Address *</label>
+            <input type="email" id="profile-email-input" maxlength="254">
+            <div id="profile-email-input-error" class="staff-field-error"></div>
+          </div>
+        </div>
+
+        <div class="staff-edit-actions">
+          <button type="submit" id="save-profile-button" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="staff-edit-card">
+      <h2>Change Password</h2>
+
+      <div id="password-update-alert" class="alert alert-danger d-none"></div>
+      <div id="password-success-alert" class="alert alert-success d-none"></div>
+
+      <form id="change-password-form" novalidate>
+        <div class="staff-edit-grid">
+          <div class="staff-edit-field staff-edit-wide">
+            <label for="current-password-input">Current Password *</label>
+            <input type="password" id="current-password-input">
+            <div id="current-password-input-error" class="staff-field-error"></div>
+          </div>
+
+          <div class="staff-edit-field">
+            <label for="new-password-input">New Password *</label>
+            <input type="password" id="new-password-input">
+            <div id="new-password-input-error" class="staff-field-error"></div>
+          </div>
+
+          <div class="staff-edit-field">
+            <label for="confirm-password-input">Confirm New Password *</label>
+            <input type="password" id="confirm-password-input">
+            <div id="confirm-password-input-error" class="staff-field-error"></div>
+          </div>
+        </div>
+
+        <div class="staff-edit-actions">
+          <button type="submit" id="save-password-button" class="btn btn-primary">Change Password</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/staff_profile.js"></script>
+{% endblock %}

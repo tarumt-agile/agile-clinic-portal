@@ -82,6 +82,9 @@
           <span class="sidebar-user-avatar">{{ identity_initials }}</span>
           <span class="sidebar-user-label">{{ identity_label }}</span>
         </div>
+        {% if role %}
+          <a class="sidebar-link{{ ' active' if current_path == '/staff/profile' else '' }}" href="/staff/profile">My Profile</a>
+        {% endif %}
         <a class="sidebar-link" href="#" id="logout-link">Logout</a>
       </div>
     </aside>
