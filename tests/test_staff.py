@@ -794,3 +794,81 @@ def test_delete_staff_requires_admin_login(client: TestClient) -> None:
 
     r = client.delete(f"/api/staff/{created['staff_id']}", follow_redirects=False)
     assert r.status_code == 303
+
+
+# --- Self-service profile API -------------------------------------------------
+
+
+def test_get_my_staff_profile_returns_own_account(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.get("/api/staff/me")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["email"] == "nora@example.com"
+    assert body["role"] == "nurse"
+
+
+def test_get_my_staff_profile_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/api/staff/me", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_update_my_staff_profile_changes_name_and_email(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.patch(
+        "/api/staff/me",
+        json={"full_name": "Nora Updated Ibrahim", "email": "nora.updated@example.com"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["full_name"] == "Nora Updated Ibrahim"
+    assert body["email"] == "nora.updated@example.com"
+
+
+def test_update_my_staff_profile_cannot_change_is_active(client: TestClient) -> None:
+    """StaffSelfUpdate has no is_active field, so a staff member cannot
+    deactivate/reactivate their own account through this endpoint - an extra
+    is_active field in the request body is silently ignored by pydantic, not
+    accepted, proven by checking the account is still active afterward."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.patch(
+        "/api/staff/me",
+        json={"full_name": "Nora Ibrahim", "email": "nora@example.com", "is_active": False},
+    )
+    assert r.status_code == 200
+    assert r.json()["is_active"] is True
+
+
+def test_update_my_staff_profile_duplicate_email_returns_409(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    _create_staff_and_get_temp_password(client, email="taken@example.com", role="receptionist")
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.patch(
+        "/api/staff/me",
+        json={"full_name": "Nora Ibrahim", "email": "taken@example.com"},
+    )
+    assert r.status_code == 409

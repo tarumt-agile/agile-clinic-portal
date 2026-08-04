@@ -48,6 +48,17 @@ def require_role(*roles: Role) -> Callable[..., Staff]:
     return dependency
 
 
+def require_staff(request: Request, db: Session = Depends(get_db)) -> Staff:
+    """Any authenticated staff member, regardless of role - used by self-service
+    endpoints (like the staff profile page) that every staff role can reach,
+    unlike require_role(*roles) which requires an explicit allowed-role list."""
+    staff_id = request.session.get("staff_id")
+    staff = get_staff_by_staff_id(db, staff_id) if staff_id else None
+    if staff is None or not staff.is_active:
+        raise NotAuthenticatedError()
+    return staff
+
+
 def require_patient(request: Request, db: Session = Depends(get_db)) -> Patient:
     patient_id = request.session.get("patient_id")
     patient = get_patient_by_patient_id(db, patient_id) if patient_id else None

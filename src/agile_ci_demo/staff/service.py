@@ -16,6 +16,7 @@ from agile_ci_demo.staff.schemas import (
     DoctorStatus,
     DoctorUpdate,
     StaffCreate,
+    StaffSelfUpdate,
     StaffUpdate,
 )
 
@@ -226,6 +227,24 @@ def update_staff(
         )
         or staff
     )
+
+
+def update_staff_self(db: Session, staff: Staff, data: StaffSelfUpdate) -> Staff:
+    """A staff member updating their OWN full_name/email. Deliberately does not
+    touch is_active, license_number, specialty, or doctor scheduling fields -
+    those stay admin-only via update_staff."""
+    duplicate_email = db.execute(
+        select(Staff).where(Staff.email == str(data.email)).where(Staff.id != staff.id)
+    ).scalar_one_or_none()
+
+    if duplicate_email is not None:
+        raise StaffUpdateEmailExistsError("This email address is already registered.")
+
+    staff.full_name = data.full_name
+    staff.email = str(data.email)
+    db.commit()
+    db.refresh(staff)
+    return staff
 
 
 def list_staff(db: Session) -> list[Staff]:
