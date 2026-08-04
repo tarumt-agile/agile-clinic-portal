@@ -261,7 +261,9 @@ def test_staff_sidebar_has_my_profile_link(client: TestClient, role: str) -> Non
     response = client.get("/staff/profile")
 
     assert response.status_code == 200
-    assert '<a class="sidebar-link active" href="/staff/profile">My Profile</a>' in response.text
+    assert 'class="topbar-user topbar-user-link"' in response.text
+    assert 'href="/staff/profile"' in response.text
+    assert "Nora Ibrahim" in response.text
 
 
 def test_patient_sidebar_has_no_my_profile_link(client: TestClient) -> None:
@@ -271,3 +273,6 @@ def test_patient_sidebar_has_no_my_profile_link(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert 'href="/staff/profile"' not in response.text
+    assert 'class="topbar-user"' in response.text
+    assert 'class="topbar-user topbar-user-link"' not in response.text
+    assert "Jane Tan" in response.text

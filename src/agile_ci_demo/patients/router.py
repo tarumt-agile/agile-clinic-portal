@@ -3,13 +3,12 @@ from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.auth.deps import require_patient, require_role
 from agile_ci_demo.core.rbac import Role
-from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.templates import templates
 from agile_ci_demo.patients.schemas import (
     PaginatedPatients,
     PatientCreate,
@@ -29,8 +28,6 @@ from agile_ci_demo.patients.service import (
     update_patient,
 )
 from agile_ci_demo.patients.models import Patient
-
-templates = Jinja2Templates(directory=str(settings.templates_dir))
 
 # JSON API used by the frontend's JavaScript.
 api_router = APIRouter(prefix="/api/patients", tags=["patients"])
