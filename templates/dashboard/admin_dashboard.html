@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<header class="mb-4">
+  <p class="text-muted mb-1">Admin / Dashboard</p>
+  <h1 class="h3 mb-1">Dashboard</h1>
+  <p class="text-muted mb-0">Clinic-wide overview and quick access.</p>
+</header>
+
+<div id="dashboard-alert" class="alert alert-danger d-none" role="alert"></div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-3">
+    <div class="stat-card h-100">
+      <p class="stat-card-label mb-0">Total Patients</p>
+      <strong id="stat-total-patients" class="stat-card-value">0</strong>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="stat-card h-100">
+      <p class="stat-card-label mb-0">Total Staff</p>
+      <strong id="stat-total-staff" class="stat-card-value">0</strong>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="stat-card h-100">
+      <p class="stat-card-label mb-0">Active Doctors</p>
+      <strong id="stat-active-doctors" class="stat-card-value">0</strong>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="stat-card h-100">
+      <p class="stat-card-label mb-0">Today's Appointments</p>
+      <strong id="stat-appointments-today" class="stat-card-value">0</strong>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-sm-6 col-lg-3">
+    <a href="/staff" class="dashboard-quick-link">
+      <span class="dashboard-quick-link-title">Manage Staff</span>
+      <span class="dashboard-quick-link-desc">View, create and manage staff accounts</span>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <a href="/patients" class="dashboard-quick-link">
+      <span class="dashboard-quick-link-title">Manage Patients</span>
+      <span class="dashboard-quick-link-desc">View and search registered patients</span>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <a href="/reports" class="dashboard-quick-link">
+      <span class="dashboard-quick-link-title">Clinic Reports</span>
+      <span class="dashboard-quick-link-desc">Review appointment activity and export PDFs</span>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <a href="/pharmacy" class="dashboard-quick-link">
+      <span class="dashboard-quick-link-title">Pharmacy</span>
+      <span class="dashboard-quick-link-desc">View and manage medication inventory</span>
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/admin-dashboard.js"></script>
+{% endblock %}

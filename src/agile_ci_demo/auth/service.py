@@ -20,7 +20,7 @@ from agile_ci_demo.staff.models import Staff
 logger = logging.getLogger(__name__)
 
 _REDIRECT_BY_ROLE: dict[Role, str] = {
-    Role.ADMIN: "/staff",
+    Role.ADMIN: "/dashboard",
     Role.DOCTOR: "/appointments/schedule",
     Role.NURSE: "/patients",
     Role.RECEPTIONIST: "/patients",

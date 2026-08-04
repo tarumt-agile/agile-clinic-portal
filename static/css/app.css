@@ -487,3 +487,34 @@ a:hover {
     padding: 2rem 1.75rem;
   }
 }
+
+/* ===== Admin dashboard quick links ===== */
+.dashboard-quick-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  height: 100%;
+  padding: 1.1rem 1.25rem;
+  background-color: #fff;
+  border: 1px solid var(--clinic-border);
+  border-radius: 0.65rem;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-quick-link:hover {
+  border-color: var(--clinic-accent-soft);
+  box-shadow: 0 0.25rem 0.75rem rgba(79, 70, 229, 0.08);
+  color: inherit;
+}
+
+.dashboard-quick-link-title {
+  color: var(--clinic-text);
+  font-weight: 600;
+}
+
+.dashboard-quick-link-desc {
+  color: var(--clinic-table-header-text);
+  font-size: 0.85rem;
+}

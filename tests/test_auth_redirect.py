@@ -76,7 +76,7 @@ def _create_staff_and_login(client: TestClient, email: str, role: str) -> dict:
 @pytest.mark.parametrize(
     "role,expected_redirect",
     [
-        ("admin", "/staff"),
+        ("admin", "/dashboard"),
         ("doctor", "/appointments/schedule"),
         ("nurse", "/patients"),
         ("receptionist", "/patients"),

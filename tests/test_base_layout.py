@@ -130,6 +130,7 @@ def test_admin_sees_pharmacy_staff_and_reports_sidebar_links(client: TestClient)
     response = client.get("/patients")
 
     assert response.status_code == 200
+    assert '<a class="sidebar-link" href="/dashboard">Dashboard</a>' in response.text
     assert '<a class="sidebar-link" href="/pharmacy">Pharmacy</a>' in response.text
     assert '<a class="sidebar-link" href="/staff">Staff</a>' in response.text
     assert '<a class="sidebar-link" href="/reports">Reports</a>' in response.text
