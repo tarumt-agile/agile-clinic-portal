@@ -443,7 +443,7 @@ a:hover {
   justify-content: center;
   gap: 1rem;
   padding: 2rem;
-  background-color: var(--clinic-sidebar-bg);
+  background-color: var(--clinic-sidebar-hover);
   color: #fff;
   text-align: center;
 }
