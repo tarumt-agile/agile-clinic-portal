@@ -357,3 +357,36 @@ a:hover {
   background-color: var(--clinic-content-bg);
   border-left-color: var(--clinic-accent-soft);
 }
+
+/* ===== FullCalendar theming (Doctor Schedule "Calendar" mode) ===== */
+#schedule-calendar {
+  --fc-border-color: var(--clinic-border);
+  --fc-page-bg-color: #fff;
+  --fc-neutral-bg-color: var(--clinic-content-bg);
+  --fc-list-event-hover-bg-color: var(--clinic-content-bg);
+  --fc-today-bg-color: #eef2ff;
+  --fc-button-bg-color: #fff;
+  --fc-button-border-color: var(--clinic-border);
+  --fc-button-text-color: var(--clinic-text);
+  --fc-button-hover-bg-color: var(--clinic-content-bg);
+  --fc-button-active-bg-color: var(--clinic-accent);
+  --fc-button-active-border-color: var(--clinic-accent);
+}
+
+#schedule-calendar .fc-toolbar-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--clinic-text);
+}
+
+#schedule-calendar .fc-button {
+  text-transform: capitalize;
+}
+
+#schedule-calendar .fc-button-active {
+  /* FullCalendar's --fc-button-active-bg-color turns this indigo, but there is
+     no matching --fc-button-active-text-color variable, so the default dark
+     --fc-button-text-color would sit on an indigo background - same problem
+     .sidebar-link.active solves by switching to white text. */
+  color: #fff;
+}
