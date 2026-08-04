@@ -7,6 +7,8 @@
   const heading = document.getElementById("consultation-heading");
   const alertBox = document.getElementById("consultation-alert");
   const currentDatetimeEl = document.getElementById("current-datetime");
+  let queueAppointments = null;
+  let lastRenderedMinute = null;
 
   const STATUS_BADGE = {
     scheduled: "text-bg-primary",
@@ -60,7 +62,8 @@
       if (!response.ok) throw new Error("Request failed");
 
       heading.textContent = `${body.doctor_name}'s Appointments`;
-      renderTable(body.appointments);
+      queueAppointments = body.appointments;
+      renderTable(queueAppointments);
     } catch (err) {
       tableBody.innerHTML = "";
       showAlert("Unable to load the schedule. Please try again.");
@@ -80,12 +83,16 @@
     });
   }
 
-  // An appointment is locked from starting if any earlier appointment today
-  // is still open (appointment_status stays "scheduled" until its
-  // consultation is ended) - one patient at a time, in order.
+  // An appointment is locked only while an earlier slot is still current/future,
+  // or while an earlier consultation is genuinely in progress. A missed earlier
+  // appointment must stop blocking the rest of the day's queue once its slot ends.
   function isLocked(appointments, index) {
+    const now = nowMinutes();
     for (let i = 0; i < index; i++) {
-      if (appointments[i].appointment_status === "scheduled") return true;
+      const earlier = appointments[i];
+      if (earlier.appointment_status !== "scheduled") continue;
+      if (earlier.consultation_status === "in_progress") return true;
+      if (!earlier.consultation_status && timeToMinutes(earlier.end_time) > now) return true;
     }
     return false;
   }
@@ -93,7 +100,7 @@
   function viewPatientButton(patientId) {
     const from = encodeURIComponent(window.location.pathname + window.location.search);
     const label = encodeURIComponent("Back to Start Consultation");
-    return `<a href="/patients/${encodeURIComponent(patientId)}?from=${from}&label=${label}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">View Patient Details</a>`;
+    return `<a href="/patients/${encodeURIComponent(patientId)}?from=${from}&label=${label}" target="_self" class="btn btn-sm btn-outline-secondary">View Patient Details</a>`;
   }
 
   function consultationAction(appointment, locked) {
@@ -110,6 +117,11 @@
 
     if (appointment.appointment_status !== "scheduled") {
       return "";
+    }
+
+    if (timeToMinutes(appointment.start_time) > nowMinutes()) {
+      const start = escapeHtml(appointment.start_time.slice(0, 5));
+      return `<button type="button" class="btn btn-sm btn-primary" disabled title="Available at ${start}">Start Consultation</button>`;
     }
 
     if (locked) {
@@ -163,6 +175,18 @@
       minute: "2-digit",
       second: "2-digit",
     })}`;
+
+    // A doctor may leave this page open while waiting for a slot. Re-render at
+    // the next minute boundary so the action unlocks without requiring refresh.
+    const currentMinute = now.getHours() * 60 + now.getMinutes();
+    if (
+      lastRenderedMinute !== null &&
+      currentMinute !== lastRenderedMinute &&
+      queueAppointments !== null
+    ) {
+      renderTable(queueAppointments);
+    }
+    lastRenderedMinute = currentMinute;
   }
 
   updateCurrentDatetime();
