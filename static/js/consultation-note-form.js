@@ -5,12 +5,17 @@
   if (!root) return;
 
   const patientId = root.dataset.patientId;
+  const appointmentReference = new URLSearchParams(window.location.search).get(
+    "appointment_reference"
+  );
+  const formHeading = document.getElementById("form-heading");
   const form = document.getElementById("record-form");
+  const backLink = document.getElementById("back-link");
+  const viewPatientLink = document.getElementById("view-patient-link");
   const alertBox = document.getElementById("form-alert");
   const diagnosesAlert = document.getElementById("diagnoses-alert");
   const submitBtn = document.getElementById("submit-btn");
   const cancelBtn = document.getElementById("cancel-btn");
-  const doctorSelect = document.getElementById("doctor_id");
   const patientNameLabel = document.getElementById("patient-name-label");
   const diagnosisRows = document.getElementById("diagnosis-rows");
   const rowTemplate = document.getElementById("diagnosis-row-template");
@@ -19,7 +24,9 @@
   const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
 
   let searchDebounceTimer = null;
-  let lastCreatedRecordId = null;
+  // The record this page is writing to - set once /start resolves. Saving is
+  // disabled until then, since there's nothing to save to yet.
+  let recordId = null;
 
   function showAlert(box, message) {
     box.textContent = message;
@@ -41,7 +48,7 @@
   }
 
   // Maps Pydantic 422 errors for nested diagnoses (loc like ["body", "diagnoses", 0, "icd10_code"])
-  // onto the matching row's input. Falls back to top-level fields (doctor_id, notes).
+  // onto the matching row's input. Falls back to top-level fields (notes).
   function applyValidationErrors(errorBody) {
     if (!Array.isArray(errorBody.detail)) return false;
     let hadFieldError = false;
@@ -73,27 +80,6 @@
     return hadFieldError;
   }
 
-  async function loadDoctors() {
-    doctorSelect.innerHTML = '<option value="" selected disabled>Loading doctors...</option>';
-    try {
-      const response = await fetch("/api/staff");
-      if (!response.ok) throw new Error("Request failed");
-      const staff = await response.json();
-      const doctors = staff.filter((s) => s.role === "doctor" && s.is_active);
-
-      if (doctors.length === 0) {
-        doctorSelect.innerHTML = '<option value="" selected disabled>No doctors available</option>';
-        return;
-      }
-
-      doctorSelect.innerHTML =
-        '<option value="" selected disabled>Choose...</option>' +
-        doctors.map((d) => `<option value="${d.staff_id}">${d.full_name}</option>`).join("");
-    } catch (err) {
-      doctorSelect.innerHTML = '<option value="" selected disabled>Unable to load doctors</option>';
-    }
-  }
-
   async function loadPatientName() {
     try {
       const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`);
@@ -107,10 +93,15 @@
 
   // --- Diagnosis rows -----------------------------------------------------
 
-  function addDiagnosisRow() {
+  function addDiagnosisRow(icd10Code, description) {
     const fragment = rowTemplate.content.cloneNode(true);
     const row = fragment.querySelector(".diagnosis-row");
     wireRow(row);
+    if (icd10Code) row.querySelector(".diagnosis-code").value = icd10Code;
+    if (description) row.querySelector(".diagnosis-description").value = description;
+    if (icd10Code && description) {
+      row.querySelector(".diagnosis-search").value = `${icd10Code} - ${description}`;
+    }
     diagnosisRows.appendChild(row);
     hideAlert(diagnosesAlert);
   }
@@ -156,7 +147,7 @@
 
   async function runSearch(term, suggestionsEl, onPick) {
     try {
-      const response = await fetch(`/api/records/icd10?q=${encodeURIComponent(term)}`);
+      const response = await fetch(`/api/consultations/icd10?q=${encodeURIComponent(term)}`);
       if (!response.ok) throw new Error("Request failed");
       const results = await response.json();
 
@@ -198,11 +189,55 @@
 
   function collectPayload() {
     return {
-      patient_id: patientId,
-      doctor_id: doctorSelect.value,
       notes: document.getElementById("notes").value.trim(),
       diagnoses: collectDiagnoses(),
     };
+  }
+
+  // --- Starting/resuming ------------------------------------------------------
+
+  // Opens (or resumes) the consultation the instant this page loads, before the
+  // doctor has written anything - so leaving the page without ever clicking Save
+  // still leaves a draft the doctor can get back to, instead of losing the visit.
+  // Idempotent server-side: reopening the same appointment's note resumes the
+  // same draft rather than creating a duplicate.
+  async function startConsultation() {
+    submitBtn.disabled = true;
+    try {
+      const response = await fetch("/api/consultations/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: patientId,
+          appointment_reference: appointmentReference || null,
+        }),
+      });
+
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        showAlert(
+          alertBox,
+          typeof body.detail === "string" ? body.detail : "Unable to start this consultation."
+        );
+        return;
+      }
+
+      recordId = body.record_id;
+      document.getElementById("notes").value = body.notes || "";
+
+      diagnosisRows.innerHTML = "";
+      if (Array.isArray(body.diagnoses) && body.diagnoses.length > 0) {
+        body.diagnoses.forEach((d) => addDiagnosisRow(d.icd10_code, d.description));
+        formHeading.textContent = "Continue Consultation Note";
+      } else {
+        addDiagnosisRow();
+      }
+
+      submitBtn.disabled = false;
+    } catch (err) {
+      showAlert(alertBox, "Unable to reach the server. Please check your connection and try again.");
+    }
   }
 
   // --- Submission -----------------------------------------------------------
@@ -212,6 +247,11 @@
     hideAlert(alertBox);
     hideAlert(diagnosesAlert);
     clearFieldErrors();
+
+    if (!recordId) {
+      showAlert(alertBox, "This consultation hasn't finished starting yet. Please try again.");
+      return;
+    }
 
     const diagnoses = collectDiagnoses();
     const formValid = form.checkValidity();
@@ -229,15 +269,13 @@
 
     submitBtn.disabled = true;
     try {
-      const response = await fetch("/api/records", {
-        method: "POST",
+      const response = await fetch(`/api/consultations/${encodeURIComponent(recordId)}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(collectPayload()),
       });
 
-      if (response.status === 201) {
-        const note = await response.json();
-        lastCreatedRecordId = note.record_id;
+      if (response.status === 200) {
         if (confirmationModal) {
           confirmationModal.show();
         } else {
@@ -248,7 +286,7 @@
 
       const body = await response.json().catch(() => ({}));
 
-      if (response.status === 404 || response.status === 409) {
+      if (response.status === 404 || response.status === 403 || response.status === 409) {
         showAlert(alertBox, body.detail || "This consultation note could not be saved.");
         return;
       }
@@ -272,18 +310,35 @@
   }
 
   document.getElementById("view-record-btn").addEventListener("click", () => {
-    if (lastCreatedRecordId) window.location.href = `/records/${encodeURIComponent(lastCreatedRecordId)}`;
+    if (recordId) window.location.href = `/consultations/${encodeURIComponent(recordId)}`;
   });
   document.getElementById("back-to-patient-btn").addEventListener("click", () => {
     window.location.href = `/patients/${encodeURIComponent(patientId)}`;
   });
   cancelBtn.addEventListener("click", () => {
-    window.location.href = `/patients/${encodeURIComponent(patientId)}`;
+    // Same destination as the "Back" link above - wherever this note was
+    // opened from, not the patient details page.
+    window.location.href = backLink.href;
   });
-  addDiagnosisBtn.addEventListener("click", addDiagnosisRow);
+  addDiagnosisBtn.addEventListener("click", () => addDiagnosisRow());
   form.addEventListener("submit", handleSubmit);
 
-  loadDoctors();
+  // If this note was started from the Start Consultation queue, "back" should
+  // return there (where the doctor will see this appointment's updated
+  // state) rather than to the general My Schedule page.
+  if (appointmentReference) {
+    backLink.href = "/appointments/consultations";
+    backLink.textContent = "Back to Start Consultation";
+  }
+
+  // "View Patient Details" opens in a new tab so an in-progress draft note
+  // isn't lost - its own Back button should return to this exact page
+  // (including appointment_reference), not somewhere generic.
+  viewPatientLink.href =
+    `/patients/${encodeURIComponent(patientId)}?` +
+    `from=${encodeURIComponent(window.location.pathname + window.location.search)}` +
+    `&label=${encodeURIComponent("Back to Consultation Note")}`;
+
   loadPatientName();
-  addDiagnosisRow();
+  startConsultation();
 })();

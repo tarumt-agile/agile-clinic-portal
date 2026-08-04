@@ -1,3 +1,4 @@
+import datetime as dt
 from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -5,11 +6,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_patient, require_role
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.patients.schemas import (
     PaginatedPatients,
     PatientCreate,
+    PatientIcSuggestion,
     PatientOut,
     PatientUpdate,
 )
@@ -17,12 +21,14 @@ from agile_ci_demo.patients.service import (
     DuplicatePatientError,
     PatientNotFoundError,
     create_patient,
-    get_current_patient,
+    delete_patient,
     get_patient_by_ic,
     get_patient_by_patient_id,
     search_patients,
+    search_patients_by_ic_prefix,
     update_patient,
 )
+from agile_ci_demo.patients.models import Patient
 
 templates = Jinja2Templates(directory=str(settings.templates_dir))
 
@@ -46,11 +52,17 @@ def register_patient(payload: PatientCreate, db: Session = Depends(get_db)) -> P
 @api_router.get("", response_model=PaginatedPatients)
 def list_patients(
     q: str | None = Query(default=None, description="Search by name or patient ID"),
+    registered_from: dt.date | None = Query(
+        default=None, description="Only include patients registered on or after this date"
+    ),
+    registered_to: dt.date | None = Query(
+        default=None, description="Only include patients registered on or before this date"
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedPatients:
-    items, total = search_patients(db, q, page, page_size)
+    items, total = search_patients(db, q, page, page_size, registered_from, registered_to)
     total_pages = max(1, ceil(total / page_size))
     return PaginatedPatients(
         items=[PatientOut.model_validate(p) for p in items],
@@ -62,17 +74,8 @@ def list_patients(
 
 
 @api_router.get("/me", response_model=PatientOut)
-def get_my_patient_record(db: Session = Depends(get_db)) -> PatientOut:
-    """The current patient's own record, for self-service booking.
-
-    "Current patient" is a placeholder - see get_current_patient() - until real
-    patient login sessions exist.
-    """
-    patient = get_current_patient(db)
-    if patient is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No patient account found"
-        )
+def get_my_patient_record(patient: Patient = Depends(require_patient)) -> PatientOut:
+    """The logged-in patient's own record, for self-service booking."""
     return PatientOut.model_validate(patient)
 
 
@@ -87,6 +90,17 @@ def get_patient_by_ic_number(ic_or_passport: str, db: Session = Depends(get_db))
             detail=f"No patient found with IC/passport '{ic_or_passport}'",
         )
     return PatientOut.model_validate(patient)
+
+
+@api_router.get("/search-ic", response_model=list[PatientIcSuggestion])
+def search_patients_by_ic(
+    q: str = Query(default="", description="IC/passport prefix typed so far"),
+    db: Session = Depends(get_db),
+) -> list[PatientIcSuggestion]:
+    """Patients whose IC/passport starts with the given digits, for the booking
+    form's autocomplete dropdown."""
+    patients = search_patients_by_ic_prefix(db, q)
+    return [PatientIcSuggestion.model_validate(p) for p in patients]
 
 
 @api_router.get("/{patient_id}", response_model=PatientOut)
@@ -109,25 +123,46 @@ def edit_patient(
     return PatientOut.model_validate(patient)
 
 
+@api_router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_patient_endpoint(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_role(Role.ADMIN)),
+) -> None:
+    try:
+        delete_patient(db, patient_id)
+    except PatientNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
 @pages_router.get("/register", response_class=HTMLResponse)
-def register_page(request: Request) -> HTMLResponse:
+def register_patient_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(request, "patients/receptionist_registerPatients.html", {})
 
 
 @pages_router.get("", response_class=HTMLResponse)
-def list_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "patients/list.html", {})
+def list_patients_page(
+    request: Request,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)),
+) -> HTMLResponse:
+    return templates.TemplateResponse(request, "patients/receptionist_viewPatients.html", {})
 
 
 @pages_router.get("/dashboard", response_class=HTMLResponse)
-def dashboard_page(request: Request) -> HTMLResponse:
-    """Patient self-service home page. Patient identity is a placeholder (see
-    get_current_patient) until real login sessions exist."""
+def patient_dashboard_page(request: Request, _patient=Depends(require_patient)) -> HTMLResponse:
+    """Patient self-service home page."""
     return templates.TemplateResponse(request, "patients/patient_dashboard.html", {})
 
 
 @pages_router.get("/{patient_id}", response_class=HTMLResponse)
-def detail_page(request: Request, patient_id: str) -> HTMLResponse:
+def patient_detail_page(
+    request: Request,
+    patient_id: str,
+    _staff=Depends(require_role(Role.RECEPTIONIST, Role.NURSE, Role.DOCTOR, Role.ADMIN)),
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "patients/patients_details.html", {"patient_id": patient_id}
     )

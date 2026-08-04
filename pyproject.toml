@@ -10,7 +10,9 @@ dependencies = [
   "jinja2>=3.1",
   "python-multipart>=0.0.9",
   "email-validator>=2.1",
-  "python-dotenv>=1.0"
+  "python-dotenv>=1.0",
+  "itsdangerous>=2.1",
+  "reportlab>=4.2",
 ]
 
 [build-system]
@@ -39,6 +41,7 @@ dev = [
   "dnspython",
   "email-validator",
   "httpx",
+  "pypdf>=5.0",
 ]
 
 [tool.ruff]
@@ -60,3 +63,10 @@ markers = [
 [tool.mypy]
 python_version = "3.11"
 packages = ["src"]
+
+[[tool.mypy.overrides]]
+# reportlab ships no type stubs and CI's Type check step doesn't install
+# types-reportlab (only types-requests) - ignore missing imports here rather
+# than depend on that step installing something it doesn't ask for.
+module = "reportlab.*"
+ignore_missing_imports = true

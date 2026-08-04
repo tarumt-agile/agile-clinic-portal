@@ -6,3 +6,9 @@
 .was-validated :invalid ~ .invalid-feedback {
   display: block;
 }
+
+.medication-suggestions {
+  z-index: 1080;
+  max-height: 15rem;
+  overflow-y: auto;
+}

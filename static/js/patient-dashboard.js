@@ -163,7 +163,7 @@
     }
 
     try {
-      const response = await fetch(`/api/records?patient_id=${encodeURIComponent(patient.patient_id)}`);
+      const response = await fetch(`/api/consultations?patient_id=${encodeURIComponent(patient.patient_id)}`);
       if (response.ok) {
         const body = await response.json();
         renderRecentVisits(body.items);
