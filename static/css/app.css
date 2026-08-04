@@ -390,3 +390,69 @@ a:hover {
      .sidebar-link.active solves by switching to white text. */
   color: #fff;
 }
+
+/* ===== Login split panel ===== */
+.auth-card-wrap--split {
+  max-width: 900px;
+  padding: 0;
+  background-color: transparent;
+  overflow: hidden;
+}
+
+.login-split {
+  display: flex;
+  min-height: 480px;
+}
+
+.login-split-panel {
+  display: flex;
+  flex: 0 0 42%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  background-color: var(--clinic-sidebar-bg);
+  color: #fff;
+  text-align: center;
+}
+
+.login-split-icon svg {
+  width: 72px;
+  height: 72px;
+  color: var(--clinic-accent-soft);
+}
+
+.login-split-brand {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.login-split-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2.5rem 2.25rem;
+  background-color: #fff;
+}
+
+@media (max-width: 760px) {
+  .auth-card-wrap--split {
+    max-width: 420px;
+  }
+
+  .login-split {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .login-split-panel {
+    display: none;
+  }
+
+  .login-split-form {
+    padding: 2rem 1.75rem;
+  }
+}

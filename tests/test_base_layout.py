@@ -188,8 +188,34 @@ def test_login_page_renders_auth_shell_with_no_sidebar(client: TestClient) -> No
 
     assert response.status_code == 200
     assert 'class="auth-shell"' in response.text
-    assert 'class="auth-card-wrap"' in response.text
+    assert 'auth-card-wrap' in response.text
     assert 'id="app-sidebar"' not in response.text
+
+
+def test_login_page_still_has_staff_and_patient_tabs(client: TestClient) -> None:
+    """Regression check for the split-panel redesign: the tab toggle and both
+    login forms must keep their exact ids - static/js/auth-login.js wires up
+    to these ids and is not touched by this redesign."""
+    response = client.get("/auth/login")
+
+    assert response.status_code == 200
+    assert 'id="staff-tab-btn"' in response.text
+    assert 'id="patient-tab-btn"' in response.text
+    assert 'id="staff-login-form"' in response.text
+    assert 'id="patient-login-form"' in response.text
+    assert 'id="staff-submit-btn"' in response.text
+    assert 'id="patient-submit-btn"' in response.text
+    assert 'href="/auth/forgot-password"' in response.text
+    assert 'login-split' in response.text
+
+
+def test_forgot_password_page_keeps_single_card_layout(client: TestClient) -> None:
+    """forgot_password.html is explicitly out of scope for the split-panel
+    redesign, so it must render the plain single-class auth-card-wrap."""
+    response = client.get("/auth/forgot-password")
+
+    assert response.status_code == 200
+    assert 'class="auth-card-wrap"' in response.text
 
 
 def test_logout_link_requires_confirmation(client: TestClient) -> None:

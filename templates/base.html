@@ -92,7 +92,7 @@
       <main class="app-content">
   {% else %}
   <div class="auth-shell">
-    <div class="auth-card-wrap">
+    <div class="auth-card-wrap{{ ' auth-card-wrap--split' if current_path == '/auth/login' else '' }}">
   {% endif %}
         {% block content %}{% endblock %}
   {% if authed %}
