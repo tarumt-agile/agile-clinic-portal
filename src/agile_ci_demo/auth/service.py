@@ -80,6 +80,10 @@ class InvalidResetTokenError(Exception):
     """Raised when a password reset token is unknown, expired, or already used."""
 
 
+class WrongCurrentPasswordError(Exception):
+    """Raised when the supplied current password doesn't match the account's."""
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -149,4 +153,16 @@ def reset_password(db: Session, token: str, new_password: str) -> None:
     staff.password_hash = hash_password(new_password)
     staff.must_change_password = False
     reset_token.used_at = dt.datetime.utcnow()
+    db.commit()
+
+
+def change_password(db: Session, staff: Staff, current_password: str, new_password: str) -> None:
+    """Change a logged-in staff member's own password, verifying their current
+    one first - unlike reset_password (reached via an emailed token), which
+    doesn't check the old password at all."""
+    if not verify_password(current_password, staff.password_hash):
+        raise WrongCurrentPasswordError("Current password is incorrect")
+
+    staff.password_hash = hash_password(new_password)
+    staff.must_change_password = False
     db.commit()

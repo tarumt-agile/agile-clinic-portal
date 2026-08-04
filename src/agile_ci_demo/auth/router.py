@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.auth.deps import login_patient, login_staff, logout
+from agile_ci_demo.auth.deps import login_patient, login_staff, logout, require_staff
 from agile_ci_demo.auth.schemas import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
@@ -18,8 +19,10 @@ from agile_ci_demo.auth.service import (
     AccountInactiveError,
     InvalidCredentialsError,
     InvalidResetTokenError,
+    WrongCurrentPasswordError,
     authenticate_patient,
     authenticate_staff,
+    change_password,
     redirect_url_for_role,
     request_password_reset,
     reset_password,
@@ -28,6 +31,7 @@ from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import generate_session_token
 from agile_ci_demo.core.templates import templates
+from agile_ci_demo.staff.models import Staff
 
 # JSON API used by the frontend's JavaScript.
 api_router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -112,3 +116,16 @@ def reset_password_endpoint(payload: ResetPasswordRequest, db: Session = Depends
 @pages_router.get("/reset-password", response_class=HTMLResponse)
 def reset_password_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "auth/reset_password.html", {})
+
+
+@api_router.post("/change-password")
+def change_password_endpoint(
+    payload: ChangePasswordRequest,
+    staff: Staff = Depends(require_staff),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        change_password(db, staff, payload.current_password, payload.new_password)
+    except WrongCurrentPasswordError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return {"status": "ok"}

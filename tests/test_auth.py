@@ -545,3 +545,80 @@ def test_reset_password_rejects_mismatched_passwords(client: TestClient) -> None
 def test_reset_password_page_renders(client: TestClient) -> None:
     r = client.get("/auth/reset-password?token=whatever")
     assert r.status_code == 200
+
+
+# --- 8. Self-service change password -----------------------------------------
+
+
+def test_change_password_success(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="nurse")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": temp_password,
+            "new_password": "NewPassword123",
+            "confirm_password": "NewPassword123",
+        },
+    )
+    assert r.status_code == 200
+
+    stale = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert stale.status_code == 401
+
+    fresh = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": "NewPassword123"}
+    )
+    assert fresh.status_code == 200
+
+
+def test_change_password_wrong_current_password_returns_400(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="nurse")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": "wrong-password",
+            "new_password": "NewPassword123",
+            "confirm_password": "NewPassword123",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_change_password_mismatched_confirm_returns_422(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="nurse")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": temp_password,
+            "new_password": "NewPassword123",
+            "confirm_password": "SomethingElse123",
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_requires_login(client: TestClient) -> None:
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": "whatever",
+            "new_password": "NewPassword123",
+            "confirm_password": "NewPassword123",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
