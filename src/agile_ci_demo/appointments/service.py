@@ -197,6 +197,80 @@ def get_doctor_schedule_dates(db: Session, doctor_id: int) -> list[tuple[dt.date
     )
 
 
+def get_doctor_schedule_range(
+    db: Session, doctor_id: int, start_date: dt.date, end_date: dt.date
+) -> list[Appointment]:
+    """Return a doctor's appointments across a date range (inclusive), ordered by
+    date then start time ascending. Unlike get_doctor_schedule, past dates are
+    allowed here - the calendar view needs to browse previous months too."""
+    return list(
+        db.execute(
+            select(Appointment)
+            .where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date >= start_date,
+                Appointment.appointment_date <= end_date,
+            )
+            .order_by(Appointment.appointment_date, Appointment.start_time)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_doctor_schedule_stats(db: Session, doctor_id: int) -> dict[str, int]:
+    """Summary counts for the doctor dashboard: total non-cancelled appointments
+    (status "scheduled" or "completed"), today's, future (after today), and
+    completed. Status flips from "scheduled" to "completed" when the linked
+    consultation is ended - see consultations.service.end_consultation."""
+    today = dt.date.today()
+
+    total = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status.in_(["scheduled", "completed"]),
+        )
+    ).scalar_one()
+
+    today_count = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status == "scheduled",
+            Appointment.appointment_date == today,
+        )
+    ).scalar_one()
+
+    future_count = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status == "scheduled",
+            Appointment.appointment_date > today,
+        )
+    ).scalar_one()
+
+    completed_count = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status == "completed",
+        )
+    ).scalar_one()
+
+    return {
+        "total": total,
+        "today": today_count,
+        "future": future_count,
+        "completed": completed_count,
+    }
+
+
 def get_patient_appointments(db: Session, patient_id: int) -> list[Appointment]:
     """A patient's own upcoming appointments (today or later), ordered by date then
     start time ascending - includes cancelled ones so they can see the status."""

@@ -13,6 +13,11 @@
   const backToDatesBtn = document.getElementById("back-to-dates-btn");
   const alertBox = document.getElementById("schedule-alert");
 
+  const statTotal = document.getElementById("stat-total");
+  const statToday = document.getElementById("stat-today");
+  const statFuture = document.getElementById("stat-future");
+  const statCompleted = document.getElementById("stat-completed");
+
   const cancelModalEl = document.getElementById("cancel-modal");
   const cancelModal = window.bootstrap ? new bootstrap.Modal(cancelModalEl) : null;
   const cancelForm = document.getElementById("cancel-form");
@@ -24,6 +29,7 @@
   const STATUS_BADGE = {
     scheduled: "text-bg-primary",
     cancelled: "text-bg-secondary",
+    completed: "text-bg-success",
   };
 
   let pendingReferenceNumber = null;
@@ -68,6 +74,21 @@
     dateListView.classList.add("d-none");
     dayDetailView.classList.remove("d-none");
     loadSchedule(dateValue);
+  }
+
+  async function loadStats() {
+    try {
+      const response = await fetch("/api/appointments/schedule/stats");
+      if (!response.ok) return;
+      const body = await response.json();
+      statTotal.textContent = body.total;
+      statToday.textContent = body.today;
+      statFuture.textContent = body.future;
+      statCompleted.textContent = body.completed;
+    } catch (err) {
+      // Stat cards are a summary, not critical path - fail silently and leave
+      // the zeros in place rather than blocking the rest of the page.
+    }
   }
 
   async function loadDateList() {
@@ -223,6 +244,8 @@
       if (response.ok) {
         if (cancelModal) cancelModal.hide();
         if (currentDate) loadSchedule(currentDate);
+        loadStats();
+        if (scheduleView) scheduleView.refresh();
         return;
       }
 
@@ -269,5 +292,28 @@
   });
   cancelForm.addEventListener("submit", handleCancelSubmit);
 
+  const scheduleView = window.initScheduleViewToggle
+    ? window.initScheduleViewToggle({
+        viewModeStorageKey: "doctorScheduleViewMode",
+        listViewId: "list-view",
+        calendarViewId: "calendar-view",
+        listButtonId: "view-list-btn",
+        calendarButtonId: "view-calendar-btn",
+        calendar: {
+          containerId: "schedule-calendar",
+          calendarViewStorageKey: "doctorScheduleCalendarView",
+          eventsUrl: function (startDate, endDate) {
+            return `/api/appointments/schedule?start_date=${startDate}&end_date=${endDate}`;
+          },
+          onEventClick: function (appointment) {
+            if (appointment.status === "scheduled") {
+              openCancelModal(appointment.reference_number, appointment.patient_name);
+            }
+          },
+        },
+      })
+    : null;
+
+  loadStats();
   showDateListView();
 })();

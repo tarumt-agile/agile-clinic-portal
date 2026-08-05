@@ -66,11 +66,16 @@ class PatientAppointments(BaseModel):
 
 
 class DoctorSchedule(BaseModel):
-    """A doctor's appointments for a single day, ordered by start time ascending."""
+    """A doctor's appointments for a single day (schedule_date set, start_date/
+    end_date left None), or for a date range instead (start_date/end_date set,
+    schedule_date left None) - the calendar view uses the range form to fetch
+    a whole visible month/week in one call."""
 
     doctor_id: str
     doctor_name: str
-    schedule_date: dt.date
+    schedule_date: dt.date | None = None
+    start_date: dt.date | None = None
+    end_date: dt.date | None = None
     appointments: list[AppointmentOut]
 
 
@@ -104,3 +109,12 @@ class DoctorSlots(BaseModel):
     doctor_name: str
     schedule_date: dt.date
     slots: list[SlotInfo]
+
+
+class DoctorScheduleStats(BaseModel):
+    """Summary counts for the doctor dashboard stat cards."""
+
+    total: int
+    today: int
+    future: int
+    completed: int

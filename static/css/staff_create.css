@@ -29,7 +29,7 @@
 }
 
 .admin-back-link:hover {
-  color: #0d6efd;
+  color: var(--clinic-accent);
   text-decoration: underline;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .admin-back-link:hover span:first-child {
-  color: #0d6efd;
+  color: var(--clinic-accent);
 }
 
 /* =========================
@@ -159,8 +159,8 @@
 .form-field input:focus,
 .form-field select:focus {
   outline: none;
-  border-color: #86b7fe;
-  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+  border-color: var(--clinic-accent-soft);
+  box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.15);
 }
 
 .form-field input.is-valid,

@@ -3,10 +3,14 @@
 {% block title %}Patients - Agile Clinic Portal{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="h3 mb-0">Patients</h1>
-  <a href="/patients/register" class="btn btn-primary">Register New Patient</a>
-</div>
+<header class="d-flex justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <p class="text-muted mb-1">Front Desk / Patients</p>
+    <h1 class="h3 mb-1">Patients</h1>
+    <p class="text-muted mb-0">View, search, and manage registered patient records.</p>
+  </div>
+  <a href="/patients/register" class="btn btn-primary text-nowrap">Register New Patient</a>
+</header>
 
 <div id="list-alert" class="alert alert-danger d-none" role="alert"></div>
 

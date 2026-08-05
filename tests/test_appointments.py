@@ -508,6 +508,144 @@ def test_schedule_page_renders(client: TestClient) -> None:
     assert "My Schedule" in r.text
 
 
+def test_schedule_range_returns_appointments_across_multiple_days(client: TestClient) -> None:
+    """?start_date=&end_date= returns appointments spanning the whole range, not
+    just one day - the calendar view needs a whole visible month/week at once."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    day_after_tomorrow = (dt.date.today() + dt.timedelta(days=2)).isoformat()
+
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, appointment_date=TOMORROW),
+    )
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(
+            patient_id, doctor_id, appointment_date=day_after_tomorrow, start_time="11:00"
+        ),
+    )
+
+    r = client.get(f"/api/appointments/schedule?start_date={TOMORROW}&end_date={day_after_tomorrow}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["start_date"] == TOMORROW
+    assert body["end_date"] == day_after_tomorrow
+    assert body["schedule_date"] is None
+    dates = {a["appointment_date"] for a in body["appointments"]}
+    assert dates == {TOMORROW, day_after_tomorrow}
+
+
+def test_schedule_without_range_params_is_unchanged(client: TestClient) -> None:
+    """Omitting start_date/end_date must behave exactly as before - single date,
+    schedule_date populated, no range fields."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    client.post("/api/appointments", json=valid_appointment_payload(patient_id, doctor_id))
+
+    r = client.get(f"/api/appointments/schedule?date={TOMORROW}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["schedule_date"] == TOMORROW
+    assert body["start_date"] is None
+    assert body["end_date"] is None
+    assert len(body["appointments"]) == 1
+
+
+def test_schedule_by_doctor_range_returns_appointments_across_multiple_days(
+    client: TestClient,
+) -> None:
+    patient_id = _register_patient(client)
+    doctor_id = _register_doctor(client)
+    day_after_tomorrow = (dt.date.today() + dt.timedelta(days=2)).isoformat()
+
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, appointment_date=TOMORROW),
+    )
+    client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(
+            patient_id, doctor_id, appointment_date=day_after_tomorrow, start_time="11:00"
+        ),
+    )
+
+    r = client.get(
+        f"/api/appointments/schedule/by-doctor?doctor_id={doctor_id}"
+        f"&start_date={TOMORROW}&end_date={day_after_tomorrow}"
+    )
+    assert r.status_code == 200
+    body = r.json()
+    dates = {a["appointment_date"] for a in body["appointments"]}
+    assert dates == {TOMORROW, day_after_tomorrow}
+
+
+def test_schedule_stats_counts_scheduled_future_and_completed_separately(
+    client: TestClient,
+) -> None:
+    """
+    Scenario: The dashboard stat cards reflect scheduled, future, cancelled,
+    and completed appointments correctly
+      Given a doctor with a future appointment, a cancelled appointment, and a
+        completed appointment (status flips to "completed" when its linked
+        consultation is ended)
+      When I GET /api/appointments/schedule/stats
+      Then future/completed/total reflect exactly those buckets, and the
+        cancelled appointment counts toward none of them
+
+    Note: deliberately avoids booking a real "today" appointment, since the
+    doctor's working-hours slot validation would make that test's pass/fail
+    depend on what time of day the suite happens to run (the existing TOMORROW
+    constant in this file exists for the same reason) - the "today" bucket's
+    query logic is simple enough (status == scheduled AND date == today) that
+    exercising future/completed/cancelled/total here is sufficient coverage.
+    """
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    day_after_tomorrow = (dt.date.today() + dt.timedelta(days=2)).isoformat()
+
+    future_ref = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_id, appointment_date=TOMORROW),
+    ).json()["reference_number"]
+
+    cancelled_ref = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(
+            patient_id, doctor_id, appointment_date=TOMORROW, start_time="11:00"
+        ),
+    ).json()["reference_number"]
+    client.patch(
+        f"/api/appointments/{cancelled_ref}/cancel",
+        json={"cancellation_reason": "Patient rescheduled"},
+    )
+
+    to_complete_ref = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(
+            patient_id, doctor_id, appointment_date=day_after_tomorrow, start_time="09:00"
+        ),
+    ).json()["reference_number"]
+    record = client.post(
+        "/api/consultations",
+        json={
+            "patient_id": patient_id,
+            "notes": "Follow-up visit.",
+            "diagnoses": [{"icd10_code": "J00", "description": "Acute nasopharyngitis"}],
+            "appointment_reference": to_complete_ref,
+        },
+    ).json()
+    client.patch(f"/api/consultations/{record['record_id']}/end")
+
+    r = client.get("/api/appointments/schedule/stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["future"] == 1  # only future_ref is still scheduled + in the future
+    assert body["completed"] == 1  # only to_complete_ref
+    assert body["total"] == 2  # future_ref + to_complete_ref; cancelled_ref excluded
+    assert future_ref  # keeps the variable referenced for readability of the scenario
+
+
 # --- 6. Available slots tests ---------------------------------------------------
 
 
