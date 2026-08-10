@@ -775,3 +775,15 @@ def test_audit_log_requires_admin(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert r.status_code == 303
+
+
+def test_audit_log_page_renders_for_admin(client: TestClient) -> None:
+    _login_as_admin(client)
+    r = client.get("/auth/audit-log")
+    assert r.status_code == 200
+    assert "Audit Log" in r.text
+
+
+def test_audit_log_page_redirects_for_non_admin(client: TestClient) -> None:
+    r = client.get("/auth/audit-log", follow_redirects=False)
+    assert r.status_code == 303

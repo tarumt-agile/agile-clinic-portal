@@ -185,6 +185,22 @@ def change_password_endpoint(
     return {"status": "ok"}
 
 
+@pages_router.get("/audit-log", response_class=HTMLResponse)
+def audit_log_page(
+    request: Request,
+    _admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> HTMLResponse:
+    today = dt.date.today()
+    return templates.TemplateResponse(
+        request,
+        "auth/audit_log.html",
+        {
+            "default_from_date": (today - dt.timedelta(days=7)).isoformat(),
+            "default_to_date": today.isoformat(),
+        },
+    )
+
+
 @api_router.get("/audit-log", response_model=AuthAuditLogPage)
 def get_audit_log(
     from_date: dt.date | None = Query(default=None, alias="from"),
