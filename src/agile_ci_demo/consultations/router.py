@@ -251,6 +251,14 @@ def get_note(
     return _serialize(note)
 
 
+@pages_router.get("/access-log", response_class=HTMLResponse)
+def access_log_page(
+    request: Request,
+    _admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> HTMLResponse:
+    return templates.TemplateResponse(request, "consultations/access_log.html", {})
+
+
 @pages_router.get("/new", response_class=HTMLResponse)
 def new_note_page(
     request: Request,
