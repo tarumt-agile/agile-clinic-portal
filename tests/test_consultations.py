@@ -147,6 +147,17 @@ def valid_record_payload(patient_id: str, **overrides: object) -> dict[str, obje
     return payload
 
 
+def _login_as_admin_in_consultations(client: TestClient) -> None:
+    """Create an admin account and log in as them - used once per test by
+    access-log tests that need to switch identity from a doctor to an admin."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+
 # --- 1. Acceptance tests (docstring Given/When/Then) -------------------------
 
 
@@ -869,7 +880,96 @@ def test_start_consultation_requires_login(client: TestClient) -> None:
     assert r.status_code == 303
 
 
-# --- 6. BDD-style tests with pytest-bdd --------------------------------------
+# --- 6. Medical access log ----------------------------------------------------
+
+
+def test_reading_a_record_creates_an_access_log_entry(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    client.get(f"/api/consultations/{created['record_id']}")
+
+    _login_as_admin_in_consultations(client)
+    r = client.get(f"/api/consultations/access-log?patient_id={patient_id}")
+    assert r.status_code == 200
+    actions = [item["action"] for item in r.json()["items"]]
+    assert actions.count("read") >= 1
+    assert "create" in actions
+
+
+def test_updating_and_ending_a_note_are_logged(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+    client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "Updated notes here",
+            "diagnoses": [{"icd10_code": "J00", "description": "Common cold"}],
+        },
+    )
+    client.patch(f"/api/consultations/{started['record_id']}/end")
+
+    _login_as_admin_in_consultations(client)
+    r = client.get(f"/api/consultations/access-log?patient_id={patient_id}")
+    actions = [item["action"] for item in r.json()["items"]]
+    assert "update" in actions
+    assert "end" in actions
+
+
+def test_access_log_filtered_by_doctor(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    client.post("/api/consultations", json=valid_record_payload(patient_id))
+
+    _login_as_admin_in_consultations(client)
+    r = client.get(f"/api/consultations/access-log?doctor_id={doctor_id}")
+    assert r.status_code == 200
+    assert r.json()["total"] >= 1
+
+    r = client.get("/api/consultations/access-log?doctor_id=S99999")
+    assert r.json()["total"] == 0
+
+
+def test_access_log_requires_admin(client: TestClient) -> None:
+    r = client.get("/api/consultations/access-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_excessive_reads_of_one_record_triggers_a_single_alert_email(
+    client: TestClient,
+) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    # Create the admin account (without logging in as them, which would clear
+    # the doctor's session) so it exists to receive the alert during the burst.
+    _create_staff_and_get_temp_password(client, email="admin@example.com", role="admin")
+
+    for _ in range(55):
+        client.get(f"/api/consultations/{created['record_id']}")
+
+    alert_emails = [e for e in get_outbox() if "unusual" in e.subject.lower()]
+    assert len(alert_emails) == 1
+
+
+def test_access_log_page_renders_for_admin(client: TestClient) -> None:
+    _login_as_admin_in_consultations(client)
+    r = client.get("/consultations/access-log")
+    assert r.status_code == 200
+    assert "Access Log" in r.text
+
+
+def test_access_log_page_redirects_for_non_admin(client: TestClient) -> None:
+    r = client.get("/consultations/access-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+# --- 7. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/consultations.feature
 
 scenarios("features/consultations.feature")

@@ -6,7 +6,8 @@ from agile_ci_demo.auth.deps import require_role
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
-from agile_ci_demo.consultations.models import ConsultationNote
+from agile_ci_demo.consultations.audit import get_medical_access_log, log_medical_access
+from agile_ci_demo.consultations.models import ConsultationNote, MedicalAccessLog
 from agile_ci_demo.consultations.schemas import (
     ConsultationNoteCreate,
     ConsultationNoteOut,
@@ -17,6 +18,8 @@ from agile_ci_demo.consultations.schemas import (
     DiagnosisOut,
     DoctorConsultationQueue,
     Icd10Entry,
+    MedicalAccessLogEntry,
+    MedicalAccessLogPage,
     PatientHistory,
 )
 from agile_ci_demo.consultations.service import (
@@ -34,6 +37,7 @@ from agile_ci_demo.consultations.service import (
     start_consultation,
     update_consultation_note,
 )
+from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.staff.models import Staff
 
 # JSON API used by the frontend's JavaScript.
@@ -88,6 +92,7 @@ def create_note(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ConsultationNoteConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    log_medical_access(db, note=note, accessed_by=doctor, action="create")
     return _serialize(note)
 
 
@@ -126,6 +131,7 @@ def update_note(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ConsultationAlreadyEndedError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    log_medical_access(db, note=note, accessed_by=doctor, action="update")
     return _serialize(note)
 
 
@@ -144,6 +150,7 @@ def end_consultation_endpoint(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ConsultationAlreadyEndedError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    log_medical_access(db, note=note, accessed_by=doctor, action="end")
     return _serialize(note)
 
 
@@ -196,7 +203,34 @@ def patient_history(
     except PatientNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     own_notes = [n for n in notes if n.doctor_id == doctor.id]
+    for note in own_notes:
+        log_medical_access(db, note=note, accessed_by=doctor, action="read")
     return PatientHistory(items=[_serialize_summary(n) for n in own_notes], total=len(own_notes))
+
+
+@api_router.get("/access-log", response_model=MedicalAccessLogPage)
+def get_access_log(
+    patient_id: str | None = Query(default=None),
+    doctor_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> MedicalAccessLogPage:
+    entries = get_medical_access_log(db, patient_id=patient_id, doctor_id=doctor_id)
+    return MedicalAccessLogPage(
+        items=[_serialize_access_log_entry(db, e) for e in entries], total=len(entries)
+    )
+
+
+def _serialize_access_log_entry(db: Session, entry: MedicalAccessLog) -> MedicalAccessLogEntry:
+    accessed_by = db.get(Staff, entry.accessed_by_staff_id)
+    patient = db.get(Patient, entry.patient_id)
+    return MedicalAccessLogEntry(
+        record_id=entry.record_id or "",
+        patient_id=patient.patient_id if patient else "",
+        accessed_by_name=accessed_by.full_name if accessed_by else "Unknown",
+        action=entry.action,
+        created_at=entry.created_at,
+    )
 
 
 @api_router.get("/{record_id}", response_model=ConsultationNoteOut)
@@ -213,6 +247,7 @@ def get_note(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only access medical records for patients you are treating.",
         )
+    log_medical_access(db, note=note, accessed_by=doctor, action="read")
     return _serialize(note)
 
 

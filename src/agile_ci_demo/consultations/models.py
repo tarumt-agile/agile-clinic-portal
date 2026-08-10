@@ -68,3 +68,24 @@ class Diagnosis(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
 
     consultation_note: Mapped[ConsultationNote] = relationship(back_populates="diagnoses")
+
+
+class MedicalAccessLog(Base):
+    __tablename__ = "medical_access_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    consultation_note_id: Mapped[int] = mapped_column(
+        ForeignKey("consultation_notes.id"), index=True
+    )
+    record_id: Mapped[str | None] = mapped_column(String(10), index=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    doctor_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), index=True)
+    accessed_by_staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), index=True)
+
+    # "read" | "create" | "update" | "end"
+    action: Mapped[str] = mapped_column(String(20), index=True)
+
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.utcnow, index=True
+    )
