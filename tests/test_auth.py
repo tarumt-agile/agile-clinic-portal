@@ -123,6 +123,88 @@ def test_login_unknown_email_returns_401(client: TestClient) -> None:
     assert r.status_code == 401
 
 
+# --- 1b. Login rate limiting / lockout ---------------------------------------
+
+
+def test_login_locks_out_after_five_failed_attempts(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+
+    for _ in range(4):
+        r = client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+        assert r.status_code == 401
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "alice.wong@example.com", "password": "wrong-password"},
+    )
+    assert r.status_code == 429
+
+    # Even the correct password is rejected while locked out.
+    r = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert r.status_code == 429
+
+
+def test_login_lockout_sends_admin_alert(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    _login_as_admin(client)
+    client.post("/api/auth/logout")
+
+    for _ in range(5):
+        client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+
+    alert_emails = [e for e in get_outbox() if e.to == "admin@example.com"]
+    assert any("lock" in e.subject.lower() for e in alert_emails)
+
+
+def test_login_lockout_expires_after_the_configured_duration(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agile_ci_demo.core import rate_limit
+
+    temp_password = _create_staff_and_get_temp_password(client)
+    monkeypatch.setattr(rate_limit, "LOCKOUT_DURATION", dt.timedelta(seconds=-1))
+
+    for _ in range(5):
+        client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+
+    r = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert r.status_code == 200
+
+
+def test_successful_login_resets_the_failed_attempt_count(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+
+    for _ in range(4):
+        client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+    r = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert r.status_code == 200
+
+    for _ in range(4):
+        r = client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+        assert r.status_code == 401
+
+
 # --- 2. Block login for deactivated accounts --------------------------------
 
 

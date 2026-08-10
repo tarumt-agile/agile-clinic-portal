@@ -26,8 +26,10 @@ from agile_ci_demo.auth.service import (
     redirect_url_for_role,
     request_password_reset,
     reset_password,
+    send_account_lockout_alert,
 )
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rate_limit import is_locked_out, record_failure, record_success
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import generate_session_token
 from agile_ci_demo.core.templates import templates
@@ -42,13 +44,29 @@ pages_router = APIRouter(prefix="/auth", tags=["auth-pages"])
 
 @api_router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> LoginResponse:
+    email = str(payload.email)
+
+    if is_locked_out(email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. This account is locked for 15 minutes.",
+        )
+
     try:
-        staff = authenticate_staff(db, payload.email, payload.password)
+        staff = authenticate_staff(db, email, payload.password)
     except InvalidCredentialsError as exc:
+        just_locked = record_failure(email)
+        if just_locked:
+            send_account_lockout_alert(db, email)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed login attempts. This account is locked for 15 minutes.",
+            ) from exc
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except AccountInactiveError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
+    record_success(email)
     login_staff(request, staff)
     role = Role(staff.role)
     return LoginResponse(
