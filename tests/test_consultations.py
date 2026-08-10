@@ -188,8 +188,43 @@ def test_create_consultation_note_then_fetch_by_record_id(client: TestClient) ->
 
 
 def test_get_unknown_record_returns_404(client: TestClient) -> None:
+    _register_and_login_doctor(client)
     r = client.get("/api/consultations/R99999")
     assert r.status_code == 404
+
+
+def test_get_note_returns_403_for_a_different_doctor(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client, email="doctor.a@example.com")
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    _register_and_login_doctor(
+        client, email="doctor.b@example.com", license_number="MMC-99999"
+    )
+    r = client.get(f"/api/consultations/{created['record_id']}")
+    assert r.status_code == 403
+
+
+def test_get_note_redirects_for_non_doctor_role(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+    assert doctor_id
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse@example.com", "password": temp_password})
+
+    r = client.get(f"/api/consultations/{created['record_id']}", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_get_note_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/api/consultations/R00001", follow_redirects=False)
+    assert r.status_code == 303
 
 
 def test_new_record_page_renders(client: TestClient) -> None:
@@ -367,6 +402,7 @@ def test_patient_history_lists_newest_first(client: TestClient) -> None:
 
 
 def test_patient_history_unknown_patient_returns_404(client: TestClient) -> None:
+    _register_and_login_doctor(client)
     r = client.get("/api/consultations?patient_id=P99999")
     assert r.status_code == 404
 
@@ -436,6 +472,44 @@ def test_patient_history_scoped_to_correct_patient(client: TestClient) -> None:
     body = r.json()
     assert body["total"] == 1
     assert body["items"][0]["notes"] == "Visit A"
+
+
+def test_patient_history_only_includes_the_requesting_doctors_own_notes(
+    client: TestClient,
+) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client, email="doctor.a@example.com")
+    client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Visit with A"))
+
+    _register_and_login_doctor(
+        client, email="doctor.b@example.com", license_number="MMC-99999"
+    )
+    client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Visit with B"))
+
+    r = client.get(f"/api/consultations?patient_id={patient_id}")
+    body = r.json()
+    assert body["total"] == 1
+    assert body["items"][0]["notes"] == "Visit with B"
+
+
+def test_patient_history_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/api/consultations?patient_id=P00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_patient_history_redirects_for_non_doctor_role(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    patient_id = _register_patient(client)
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login",
+        json={"email": "receptionist@example.com", "password": temp_password},
+    )
+    r = client.get(f"/api/consultations?patient_id={patient_id}", follow_redirects=False)
+    assert r.status_code == 303
 
 
 # --- 5. End consultation ------------------------------------------------------

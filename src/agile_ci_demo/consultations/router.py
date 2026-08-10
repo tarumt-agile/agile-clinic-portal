@@ -187,20 +187,32 @@ def patient_history(
     patient_id: str = Query(..., description="Patient's public patient_id, e.g. P00001"),
     q: str | None = Query(default=None, description="Filter by diagnosis or note keyword"),
     db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
 ) -> PatientHistory:
-    """A patient's medical history, newest first, optionally filtered by keyword."""
+    """A patient's medical history, restricted to notes the requesting doctor
+    themselves authored - clinical notes are only visible to the treating doctor."""
     try:
         notes = get_patient_history(db, patient_id, q)
     except PatientNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return PatientHistory(items=[_serialize_summary(n) for n in notes], total=len(notes))
+    own_notes = [n for n in notes if n.doctor_id == doctor.id]
+    return PatientHistory(items=[_serialize_summary(n) for n in own_notes], total=len(own_notes))
 
 
 @api_router.get("/{record_id}", response_model=ConsultationNoteOut)
-def get_note(record_id: str, db: Session = Depends(get_db)) -> ConsultationNoteOut:
+def get_note(
+    record_id: str,
+    db: Session = Depends(get_db),
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+) -> ConsultationNoteOut:
     note = get_consultation_note_by_record_id(db, record_id)
     if note is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    if note.doctor_id != doctor.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access medical records for patients you are treating.",
+        )
     return _serialize(note)
 
 
@@ -221,7 +233,7 @@ def new_note_page(
 def note_detail_page(
     request: Request,
     record_id: str,
-    _staff=Depends(require_role(Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST, Role.ADMIN)),
+    _doctor=Depends(require_role(Role.DOCTOR)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
