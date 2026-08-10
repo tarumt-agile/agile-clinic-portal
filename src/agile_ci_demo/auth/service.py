@@ -163,9 +163,11 @@ def send_account_lockout_alert(db: Session, email: str) -> None:
     Best-effort like request_password_reset's email send - a delivery failure
     must never break the login request that triggered it.
     """
-    admins = db.execute(
-        select(Staff).where(Staff.role == Role.ADMIN.value, Staff.is_active.is_(True))
-    ).scalars().all()
+    admins = (
+        db.execute(select(Staff).where(Staff.role == Role.ADMIN.value, Staff.is_active.is_(True)))
+        .scalars()
+        .all()
+    )
 
     for admin in admins:
         try:

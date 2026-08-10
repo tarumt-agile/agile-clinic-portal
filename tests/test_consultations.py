@@ -209,9 +209,7 @@ def test_get_note_returns_403_for_a_different_doctor(client: TestClient) -> None
     _register_and_login_doctor(client, email="doctor.a@example.com")
     created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
 
-    _register_and_login_doctor(
-        client, email="doctor.b@example.com", license_number="MMC-99999"
-    )
+    _register_and_login_doctor(client, email="doctor.b@example.com", license_number="MMC-99999")
     r = client.get(f"/api/consultations/{created['record_id']}")
     assert r.status_code == 403
 
@@ -492,9 +490,7 @@ def test_patient_history_only_includes_the_requesting_doctors_own_notes(
     _register_and_login_doctor(client, email="doctor.a@example.com")
     client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Visit with A"))
 
-    _register_and_login_doctor(
-        client, email="doctor.b@example.com", license_number="MMC-99999"
-    )
+    _register_and_login_doctor(client, email="doctor.b@example.com", license_number="MMC-99999")
     client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Visit with B"))
 
     r = client.get(f"/api/consultations?patient_id={patient_id}")

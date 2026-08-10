@@ -96,22 +96,16 @@ def create_patient_and_login(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize("role", ["receptionist", "nurse"])
-def test_receptionist_and_nurse_see_front_desk_sidebar_links(
-    client: TestClient, role: str
-) -> None:
+def test_receptionist_and_nurse_see_front_desk_sidebar_links(client: TestClient, role: str) -> None:
     create_staff_and_login(client, role)
 
     response = client.get("/patients")
 
     assert response.status_code == 200
     assert '<a class="sidebar-link active" href="/patients">Patients</a>' in response.text
+    assert '<a class="sidebar-link" href="/patients/register">Register Patient</a>' in response.text
     assert (
-        '<a class="sidebar-link" href="/patients/register">Register Patient</a>'
-        in response.text
-    )
-    assert (
-        '<a class="sidebar-link" href="/appointments/create">Book Appointment</a>'
-        in response.text
+        '<a class="sidebar-link" href="/appointments/create">Book Appointment</a>' in response.text
     )
     assert (
         '<a class="sidebar-link" href="/appointments/doctor-schedule">Doctor Schedule</a>'
@@ -164,13 +158,9 @@ def test_patient_sees_only_patient_sidebar_links(client: TestClient) -> None:
         in response.text
     )
     assert (
-        '<a class="sidebar-link" href="/appointments/book">Book My Appointment</a>'
-        in response.text
+        '<a class="sidebar-link" href="/appointments/book">Book My Appointment</a>' in response.text
     )
-    assert (
-        '<a class="sidebar-link" href="/appointments/mine">My Appointments</a>'
-        in response.text
-    )
+    assert '<a class="sidebar-link" href="/appointments/mine">My Appointments</a>' in response.text
     assert 'href="/staff"' not in response.text
 
 
@@ -189,7 +179,7 @@ def test_login_page_renders_auth_shell_with_no_sidebar(client: TestClient) -> No
 
     assert response.status_code == 200
     assert 'class="auth-shell"' in response.text
-    assert 'auth-card-wrap' in response.text
+    assert "auth-card-wrap" in response.text
     assert 'id="app-sidebar"' not in response.text
 
 
@@ -207,7 +197,7 @@ def test_login_page_still_has_staff_and_patient_tabs(client: TestClient) -> None
     assert 'id="staff-submit-btn"' in response.text
     assert 'id="patient-submit-btn"' in response.text
     assert 'href="/auth/forgot-password"' in response.text
-    assert 'login-split' in response.text
+    assert "login-split" in response.text
 
 
 def test_forgot_password_page_keeps_single_card_layout(client: TestClient) -> None:

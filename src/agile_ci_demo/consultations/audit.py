@@ -56,9 +56,11 @@ def _check_excessive_reads(db: Session, note: ConsultationNote) -> None:
 
 
 def _send_excessive_access_alert(db: Session, note: ConsultationNote, count: int) -> None:
-    admins = db.execute(
-        select(Staff).where(Staff.role == Role.ADMIN.value, Staff.is_active.is_(True))
-    ).scalars().all()
+    admins = (
+        db.execute(select(Staff).where(Staff.role == Role.ADMIN.value, Staff.is_active.is_(True)))
+        .scalars()
+        .all()
+    )
 
     for admin in admins:
         try:
@@ -89,9 +91,7 @@ def get_medical_access_log(
         stmt = stmt.where(MedicalAccessLog.patient_id == (patient.id if patient else -1))
 
     if doctor_id:
-        doctor = db.execute(
-            select(Staff).where(Staff.staff_id == doctor_id)
-        ).scalar_one_or_none()
+        doctor = db.execute(select(Staff).where(Staff.staff_id == doctor_id)).scalar_one_or_none()
         stmt = stmt.where(MedicalAccessLog.doctor_id == (doctor.id if doctor else -1))
 
     return list(db.execute(stmt).scalars().all())

@@ -226,7 +226,7 @@ def _serialize_access_log_entry(db: Session, entry: MedicalAccessLog) -> Medical
     patient = db.get(Patient, entry.patient_id)
     return MedicalAccessLogEntry(
         record_id=entry.record_id or "",
-        patient_id=patient.patient_id if patient else "",
+        patient_id=(patient.patient_id or "") if patient else "",
         accessed_by_name=accessed_by.full_name if accessed_by else "Unknown",
         action=entry.action,
         created_at=entry.created_at,

@@ -31,6 +31,7 @@ def _inject_current_user_full_name(request: Request) -> dict[str, str | None]:
             staff = get_staff_by_staff_id(db, staff_id)
             return {"full_name": staff.full_name if staff else None}
 
+        assert patient_id is not None  # the guard above rules out both being falsy
         patient = get_patient_by_patient_id(db, patient_id)
         return {"full_name": patient.full_name if patient else None}
     finally:
