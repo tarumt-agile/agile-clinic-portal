@@ -704,3 +704,74 @@ def test_change_password_requires_login(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert r.status_code == 303
+
+
+# --- 9. Auth audit log --------------------------------------------------------
+
+
+def test_login_success_is_audit_logged(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    client.post("/api/auth/logout")
+    _login_as_admin(client)
+
+    r = client.get(
+        "/api/auth/audit-log",
+        params={"from": dt.date.today().isoformat(), "to": dt.date.today().isoformat()},
+    )
+    assert r.status_code == 200
+    events = [item["event"] for item in r.json()["items"]]
+    assert "login_success" in events
+
+
+def test_login_failure_is_audit_logged(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    _login_as_admin(client)
+
+    client.post(
+        "/api/auth/login",
+        json={"email": "alice.wong@example.com", "password": "wrong-password"},
+    )
+
+    r = client.get(
+        "/api/auth/audit-log",
+        params={
+            "from": dt.date.today().isoformat(),
+            "to": dt.date.today().isoformat(),
+        },
+    )
+    assert r.status_code == 200
+    events = [item["event"] for item in r.json()["items"]]
+    assert "login_failed" in events
+
+
+def test_logout_is_audit_logged(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.get(
+        "/api/auth/audit-log",
+        params={
+            "from": dt.date.today().isoformat(),
+            "to": dt.date.today().isoformat(),
+        },
+    )
+    events = [item["event"] for item in r.json()["items"]]
+    assert "logout" in events
+
+
+def test_audit_log_requires_admin(client: TestClient) -> None:
+    r = client.get(
+        "/api/auth/audit-log",
+        params={"from": dt.date.today().isoformat(), "to": dt.date.today().isoformat()},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
