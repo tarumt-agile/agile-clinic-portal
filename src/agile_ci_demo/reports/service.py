@@ -22,13 +22,16 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-from sqlalchemy import func, select
+from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.appointments.models import Appointment
+from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.reports.schemas import (
     AppointmentActivityReport,
     DailyAppointmentTotal,
+    MonthlyPatientRegistration,
+    MonthlyPatientRegistrationReport,
 )
 
 
@@ -119,6 +122,180 @@ def build_appointment_activity_report(
         total_appointments=sum(item.total for item in daily_totals),
         daily_totals=daily_totals,
     )
+
+
+def build_monthly_patient_registration_report(
+    db: Session,
+    year: int,
+) -> MonthlyPatientRegistrationReport:
+    """Count new patients in each calendar month of the selected year."""
+    year_start = dt.datetime(year, 1, 1)
+    next_year_start = dt.datetime(year + 1, 1, 1)
+    rows = db.execute(
+        select(
+            extract("month", Patient.created_at),
+            func.count(Patient.id),
+        )
+        .where(
+            Patient.created_at >= year_start,
+            Patient.created_at < next_year_start,
+        )
+        .group_by(extract("month", Patient.created_at))
+        .order_by(extract("month", Patient.created_at))
+    ).all()
+    totals_by_month = {int(month): int(count) for month, count in rows}
+    monthly_registrations = [
+        MonthlyPatientRegistration(
+            month=dt.date(2000, month, 1).strftime("%B"),
+            count=totals_by_month.get(month, 0),
+        )
+        for month in range(1, 13)
+    ]
+    return MonthlyPatientRegistrationReport(
+        year=year,
+        total_registrations=sum(item.count for item in monthly_registrations),
+        monthly_registrations=monthly_registrations,
+    )
+
+
+def patient_registration_years(
+    db: Session,
+    *,
+    current_year: int | None = None,
+) -> list[int]:
+    """Return selectable registration years, always including the current year."""
+    current_year = current_year or dt.date.today().year
+    stored_years = db.execute(
+        select(extract("year", Patient.created_at))
+        .distinct()
+        .order_by(extract("year", Patient.created_at).desc())
+    ).scalars()
+    return sorted(
+        {current_year, *(int(year) for year in stored_years if year is not None)},
+        reverse=True,
+    )
+
+
+def generate_monthly_patient_registration_pdf(
+    report: MonthlyPatientRegistrationReport,
+    *,
+    clinic_name: str,
+    clinic_address: str,
+    clinic_phone: str,
+) -> bytes:
+    """Render the selected year's patient registration totals as a PDF."""
+    buffer = BytesIO()
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=22 * mm,
+        leftMargin=22 * mm,
+        topMargin=20 * mm,
+        bottomMargin=17 * mm,
+        title="Monthly Patient Registration Report",
+        author=clinic_name,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "PatientRegistrationReportTitle",
+        parent=styles["Title"],
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#17395C"),
+        fontName="Helvetica-Bold",
+        fontSize=20,
+        leading=24,
+        spaceAfter=3 * mm,
+    )
+    year_style = ParagraphStyle(
+        "PatientRegistrationYear",
+        parent=styles["Heading2"],
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#40566D"),
+        fontSize=12,
+        leading=15,
+        spaceAfter=6 * mm,
+    )
+    clinic_lines = [escape(clinic_name)]
+    if clinic_address:
+        clinic_lines.append(escape(clinic_address))
+    if clinic_phone:
+        clinic_lines.append(f"Telephone: {escape(clinic_phone)}")
+
+    total_table = Table(
+        [["Total new patient registrations", str(report.total_registrations)]],
+        colWidths=[75 * mm, 30 * mm],
+        hAlign="CENTER",
+    )
+    total_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EAF2FA")),
+                ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#8CB2D9")),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("TOPPADDING", (0, 0), (-1, -1), 9),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+            ]
+        )
+    )
+
+    monthly_rows = [["Month", "Count"]]
+    monthly_rows.extend([item.month, str(item.count)] for item in report.monthly_registrations)
+    monthly_table = LongTable(
+        monthly_rows,
+        repeatRows=1,
+        colWidths=[95 * mm, 40 * mm],
+        hAlign="CENTER",
+    )
+    monthly_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#17395C")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (1, 1), (1, -1), "CENTER"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#B6C4D2")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F7FA")]),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        )
+    )
+
+    story = [
+        Paragraph("<br/>".join(clinic_lines), styles["Normal"]),
+        Spacer(1, 4 * mm),
+        Paragraph("Monthly Patient Registration Report", title_style),
+        Paragraph(str(report.year), year_style),
+        total_table,
+        Spacer(1, 7 * mm),
+        monthly_table,
+    ]
+
+    def add_page_footer(canvas, doc) -> None:
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#C9D4DF"))
+        canvas.line(doc.leftMargin, 12 * mm, A4[0] - doc.rightMargin, 12 * mm)
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.HexColor("#5C6F82"))
+        canvas.drawString(
+            doc.leftMargin,
+            7.5 * mm,
+            f"{clinic_name} - Monthly Patient Registration Report",
+        )
+        canvas.drawRightString(
+            A4[0] - doc.rightMargin,
+            7.5 * mm,
+            f"Page {doc.page}",
+        )
+        canvas.restoreState()
+
+    document.build(
+        story,
+        onFirstPage=add_page_footer,
+        onLaterPages=add_page_footer,
+    )
+    return buffer.getvalue()
 
 
 def _build_bar_chart(

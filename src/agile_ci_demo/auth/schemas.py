@@ -18,7 +18,12 @@ class LoginResponse(BaseModel):
     role: Role
     must_change_password: bool
     redirect_url: str
-    session_token: str
+    session_token: str = Field(
+        description=(
+            "Signed HS256 staff JWT for Bearer authentication. The token expires one hour "
+            "after login."
+        )
+    )
 
 
 class PatientLoginRequest(BaseModel):
