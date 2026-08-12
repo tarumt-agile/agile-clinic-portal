@@ -266,6 +266,44 @@ def backfill_prescription_medications() -> None:
                 """))
 
 
+def encrypt_legacy_patient_pii() -> None:
+    """One-time upgrade: encrypt any patient phone_number/email/address values
+    that predate column-level encryption (see patients/models.py). Runs raw SQL
+    rather than going through the ORM/Patient model, since the model's
+    EncryptedString type would try to decrypt these still-plaintext values on
+    read and fail. Safe to run on every startup - already-encrypted values are
+    detected via is_encrypted() and left untouched.
+    """
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    from agile_ci_demo.core.encryption import encrypt_value, is_encrypted
+
+    with engine.begin() as connection:
+        table_names = set(inspect(connection).get_table_names())
+        if "patients" not in table_names:
+            return
+
+        rows = connection.execute(
+            text("SELECT id, phone_number, email, address FROM patients")
+        ).fetchall()
+
+        for row in rows:
+            updates: dict[str, str] = {}
+            for column in ("phone_number", "email", "address"):
+                value = getattr(row, column)
+                if value is None or is_encrypted(value):
+                    continue
+                updates[column] = encrypt_value(value)
+
+            if updates:
+                set_clause = ", ".join(f"{column} = :{column}" for column in updates)
+                connection.execute(
+                    text(f"UPDATE patients SET {set_clause} WHERE id = :id"),
+                    {**updates, "id": row.id},
+                )
+
+
 def init_db() -> None:
     """Create all tables and update older SQLite tables."""
 
@@ -306,6 +344,7 @@ def init_db() -> None:
         seed_default_medications(db)
 
     backfill_prescription_medications()
+    encrypt_legacy_patient_pii()
 
 
 def get_db() -> Generator[

@@ -42,5 +42,14 @@ class Settings:
     # production.
     secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
+    # Encrypts patient PII columns at rest (see core/encryption.py). Same
+    # fallback approach as SECRET_KEY - fine for local runs and tests, but
+    # must be set to a real, secret value in production. Changing it makes
+    # existing encrypted data unreadable, so treat it like a real secret:
+    # generate once, store securely, never rotate without a re-encryption pass.
+    patient_encryption_key: str = os.getenv(
+        "PATIENT_ENCRYPTION_KEY", "dev-patient-encryption-key-change-in-production"
+    )
+
 
 settings = Settings()
