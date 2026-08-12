@@ -96,22 +96,16 @@ def create_patient_and_login(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize("role", ["receptionist", "nurse"])
-def test_receptionist_and_nurse_see_front_desk_sidebar_links(
-    client: TestClient, role: str
-) -> None:
+def test_receptionist_and_nurse_see_front_desk_sidebar_links(client: TestClient, role: str) -> None:
     create_staff_and_login(client, role)
 
     response = client.get("/patients")
 
     assert response.status_code == 200
     assert '<a class="sidebar-link active" href="/patients">Patients</a>' in response.text
+    assert '<a class="sidebar-link" href="/patients/register">Register Patient</a>' in response.text
     assert (
-        '<a class="sidebar-link" href="/patients/register">Register Patient</a>'
-        in response.text
-    )
-    assert (
-        '<a class="sidebar-link" href="/appointments/create">Book Appointment</a>'
-        in response.text
+        '<a class="sidebar-link" href="/appointments/create">Book Appointment</a>' in response.text
     )
     assert (
         '<a class="sidebar-link" href="/appointments/doctor-schedule">Doctor Schedule</a>'
@@ -163,13 +157,9 @@ def test_patient_sees_only_patient_sidebar_links(client: TestClient) -> None:
         in response.text
     )
     assert (
-        '<a class="sidebar-link" href="/appointments/book">Book My Appointment</a>'
-        in response.text
+        '<a class="sidebar-link" href="/appointments/book">Book My Appointment</a>' in response.text
     )
-    assert (
-        '<a class="sidebar-link" href="/appointments/mine">My Appointments</a>'
-        in response.text
-    )
+    assert '<a class="sidebar-link" href="/appointments/mine">My Appointments</a>' in response.text
     assert 'href="/staff"' not in response.text
 
 
