@@ -90,3 +90,18 @@ def require_patient(request: Request, db: Session = Depends(get_db)) -> Patient:
     if patient is None:
         raise NotAuthenticatedError()
     return patient
+
+
+def require_booking_actor(
+    request: Request,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(staff_bearer),
+) -> Staff | Patient:
+    """Require either front-desk staff (receptionist, nurse, or admin) or a
+    patient - the two audiences allowed to create or cancel appointments.
+    Doctors are read-only for appointments, so a doctor session is rejected
+    here the same way an unauthenticated request would be.
+    """
+    if credentials is not None or request.session.get("staff_id"):
+        return require_role(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN)(request, db, credentials)
+    return require_patient(request, db)

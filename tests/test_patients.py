@@ -959,7 +959,11 @@ def valid_doctor_payload(**overrides: object) -> dict[str, object]:
 
 
 def _login_as(client: TestClient, email: str) -> None:
-    body = get_outbox()[-1].body
+    """Log in using the temp password from the account's welcome email - looked
+    up by recipient rather than assumed to be the most recently sent email,
+    since another account (e.g. a receptionist logged in just to book an
+    appointment) may have been registered more recently."""
+    body = next(e.body for e in reversed(get_outbox()) if e.to == email)
     match = re.search(r"temporary password is: (\S+)", body)
     assert match is not None
     r = client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
@@ -991,6 +995,14 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
     prescription for that patient. Returns (patient_id, doctor_id, attachment_id)."""
     patient_id = client.post("/api/patients", json=valid_patient_payload()).json()["patient_id"]
     doctor_id = _register_doctor(client)
+
+    receptionist_email = "receptionist@example.com"
+    r = client.post(
+        "/api/staff",
+        json={"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"},
+    )
+    assert r.status_code == 201, r.json()
+    _login_as(client, receptionist_email)
 
     appt = client.post(
         "/api/appointments",

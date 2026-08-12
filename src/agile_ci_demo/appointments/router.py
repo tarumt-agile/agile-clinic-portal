@@ -35,7 +35,7 @@ from agile_ci_demo.appointments.service import (
     get_doctor_schedule_stats,
     get_patient_appointments,
 )
-from agile_ci_demo.auth.deps import require_patient, require_role
+from agile_ci_demo.auth.deps import require_booking_actor, require_patient, require_role
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.patients.models import Patient
@@ -68,8 +68,14 @@ def _serialize(appointment: Appointment) -> AppointmentOut:
 
 
 @api_router.post("", response_model=AppointmentOut, status_code=status.HTTP_201_CREATED)
-def book_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)) -> AppointmentOut:
-    """Book a new appointment. Validates slot availability and rejects double-booking."""
+def book_appointment(
+    payload: AppointmentCreate,
+    db: Session = Depends(get_db),
+    _actor: Staff | Patient = Depends(require_booking_actor),
+) -> AppointmentOut:
+    """Book a new appointment. Validates slot availability and rejects double-booking.
+    Front-desk staff (receptionist, nurse, admin) can book for any patient; a
+    patient can book for themselves. Doctors are read-only for appointments."""
     try:
         appointment = create_appointment(db, payload)
     except (PatientNotFoundError, DoctorNotFoundError) as exc:
@@ -245,9 +251,21 @@ def get_appointment(reference_number: str, db: Session = Depends(get_db)) -> App
 
 @api_router.patch("/{reference_number}/cancel", response_model=AppointmentOut)
 def cancel_appointment_endpoint(
-    reference_number: str, payload: AppointmentCancel, db: Session = Depends(get_db)
+    reference_number: str,
+    payload: AppointmentCancel,
+    db: Session = Depends(get_db),
+    actor: Staff | Patient = Depends(require_booking_actor),
 ) -> AppointmentOut:
-    """Cancel a scheduled appointment. Frees its slot for other patients."""
+    """Cancel a scheduled appointment. Frees its slot for other patients.
+    Front-desk staff (receptionist, nurse, admin) can cancel any appointment;
+    a patient can only cancel their own."""
+    if isinstance(actor, Patient):
+        existing = get_appointment_by_reference(db, reference_number)
+        if existing is not None and existing.patient_id != actor.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only cancel your own appointments.",
+            )
     try:
         appointment = cancel_appointment(db, reference_number, payload.cancellation_reason)
     except AppointmentNotFoundError as exc:

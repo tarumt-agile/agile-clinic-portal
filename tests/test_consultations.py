@@ -121,9 +121,20 @@ def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
 
 
 def _book_appointment(
-    client: TestClient, patient_id: str, doctor_id: str, **overrides: object
+    client: TestClient,
+    patient_id: str,
+    doctor_id: str,
+    doctor_email: str = "alan.chua@example.com",
+    **overrides: object,
 ) -> str:
-    """Book an appointment and return its reference_number."""
+    """Book an appointment and return its reference_number.
+
+    Booking now requires a receptionist/nurse/admin (or patient) session, not
+    a doctor one, so this logs in as a receptionist to book, then logs back in
+    as the doctor - every caller books while a doctor is already logged in for
+    a later doctor-only call (starting/ending a consultation, viewing their
+    own schedule), and expects that doctor session to still be active after.
+    """
     payload: dict[str, object] = {
         "patient_id": patient_id,
         "doctor_id": doctor_id,
@@ -132,8 +143,29 @@ def _book_appointment(
         "reason": "Fever and cough",
     }
     payload.update(overrides)
+
+    receptionist_email = "receptionist@example.com"
+    response = client.post(
+        "/api/staff",
+        json={"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"},
+    )
+    assert response.status_code == 201, response.json()
+    receptionist_body = next(e.body for e in reversed(get_outbox()) if e.to == receptionist_email)
+    receptionist_match = re.search(r"temporary password is: (\S+)", receptionist_body)
+    assert receptionist_match is not None
+    client.post(
+        "/api/auth/login",
+        json={"email": receptionist_email, "password": receptionist_match.group(1)},
+    )
+
     r = client.post("/api/appointments", json=payload)
     assert r.status_code == 201, r.json()
+
+    doctor_body = next(e.body for e in reversed(get_outbox()) if e.to == doctor_email)
+    doctor_match = re.search(r"temporary password is: (\S+)", doctor_body)
+    assert doctor_match is not None
+    client.post("/api/auth/login", json={"email": doctor_email, "password": doctor_match.group(1)})
+
     return str(r.json()["reference_number"])
 
 
