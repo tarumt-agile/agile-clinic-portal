@@ -190,6 +190,43 @@ def login_doctor(
     assert response.status_code == 200, response.json()
 
 
+def register_non_doctor_staff(
+    client: TestClient,
+    role: str,
+) -> tuple[str, str]:
+    email = f"prescriptions.{role}@example.com"
+    clear_outbox()
+    response = client.post(
+        "/api/staff",
+        json={
+            "full_name": f"Prescription {role.title()}",
+            "email": email,
+            "role": role,
+        },
+    )
+    assert response.status_code == 201, response.json()
+    welcome_email = next(message for message in reversed(get_outbox()) if message.to == email)
+    match = re.search(r"temporary password is: (\S+)", welcome_email.body)
+    assert match is not None
+    return email, match.group(1)
+
+
+def login_staff_and_get_jwt(
+    client: TestClient,
+    email: str,
+    password: str,
+) -> str:
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "email": email,
+            "password": password,
+        },
+    )
+    assert response.status_code == 200, response.json()
+    return str(response.json()["session_token"])
+
+
 def create_consultation(
     client: TestClient,
     patient_id: str,
@@ -371,6 +408,37 @@ def test_doctor_can_create_prescription(
     assert prescription["can_edit"] is True
 
 
+@pytest.mark.parametrize("role", ["nurse", "receptionist", "admin"])
+def test_non_doctor_jwt_cannot_create_prescription_or_mutate_database(
+    client: TestClient,
+    role: str,
+) -> None:
+    prepared = prepare_consultation(client)
+    email, password = register_non_doctor_staff(client, role)
+    token = login_staff_and_get_jwt(client, email, password)
+    client.cookies.clear()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post(
+        "/api/prescriptions",
+        json=valid_prescription_payload(
+            prepared.record_id,
+            prepared.diagnosis_id,
+            prepared.medication_id,
+        ),
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Doctor role required."}
+    history = client.get(
+        f"/api/prescriptions/patient/{prepared.patient_id}",
+        headers=headers,
+    )
+    assert history.status_code == 200
+    assert history.json()["total"] == 0
+
+
 @pytest.mark.parametrize(
     "missing_field",
     [
@@ -540,6 +608,55 @@ def test_prescribing_doctor_can_update_instructions(
     assert revision["new_frequency"] == "Twice daily"
     assert revision["change_reason"] == "Instructions corrected after review."
     assert revision["changed_by_doctor_name"] == "Dr. Alan Chua"
+
+
+@pytest.mark.parametrize("role", ["nurse", "receptionist", "admin"])
+@pytest.mark.parametrize("endpoint_suffix", ["instructions", "dosage"])
+def test_non_doctor_jwt_cannot_patch_prescription_or_mutate_database(
+    client: TestClient,
+    role: str,
+    endpoint_suffix: str,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
+    email, password = register_non_doctor_staff(client, role)
+    token = login_staff_and_get_jwt(client, email, password)
+    client.cookies.clear()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.patch(
+        f"/api/prescriptions/{prescription['prescription_id']}/{endpoint_suffix}",
+        json=valid_instruction_update(),
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Doctor role required."}
+    details = client.get(
+        f"/api/prescriptions/{prescription['prescription_id']}",
+        headers=headers,
+    )
+    assert details.status_code == 200
+    assert details.json()["dosage"] == "1 capsule"
+    assert details.json()["frequency"] == "Three times daily"
+    assert details.json()["duration"] == "7 days"
+    assert details.json()["history"] == []
+
+
+def test_prescription_mutation_openapi_documents_doctor_security_and_403(
+    client: TestClient,
+) -> None:
+    document = client.get("/openapi.json").json()
+    operations = [
+        document["paths"]["/api/prescriptions"]["post"],
+        document["paths"]["/api/prescriptions/{prescription_id}/instructions"]["patch"],
+        document["paths"]["/api/prescriptions/{prescription_id}/dosage"]["patch"],
+    ]
+
+    for operation in operations:
+        assert {"HTTPBearer": []} in operation["security"]
+        assert "doctor role" in operation["description"].lower()
+        assert operation["responses"]["403"]["description"].startswith("Forbidden:")
 
 
 def test_update_requires_reason_and_all_instruction_fields(
