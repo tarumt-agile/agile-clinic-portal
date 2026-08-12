@@ -142,6 +142,14 @@ a:hover {
   padding: 1rem 0;
   background-color: var(--clinic-sidebar-bg);
   color: var(--clinic-sidebar-text);
+  /* Pinned to the viewport height rather than growing with its own content -
+     without this, a role with enough nav links (e.g. admin, receptionist)
+     pushes the sidebar taller than a shorter screen, and Logout at the
+     bottom ends up below the fold with no way to scroll to just it (the
+     whole page scrolls instead, taking the sidebar's top links with it). */
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
 
 .sidebar-brand {
@@ -161,6 +169,11 @@ a:hover {
   display: flex;
   flex: 1;
   flex-direction: column;
+  overflow-y: auto;
+  /* Flex items default to min-height: auto, which stops them shrinking below
+     their own content size - without this, overflow-y above never actually
+     gets a chance to kick in and the parent grows instead. */
+  min-height: 0;
 }
 
 .sidebar-link {
@@ -187,6 +200,9 @@ a:hover {
 .sidebar-user {
   padding: 0.75rem 0 0;
   border-top: 1px solid var(--clinic-sidebar-border);
+  /* Never shrinks or scrolls away with the nav links above it - Logout must
+     always be visible without hunting for it. */
+  flex-shrink: 0;
 }
 
 .sidebar-user-identity {

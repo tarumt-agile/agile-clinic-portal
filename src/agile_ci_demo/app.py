@@ -2,7 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
@@ -40,6 +40,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Agile Clinic Portal", version="0.1.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+
+
+@app.middleware("http")
+async def no_store_pages(request: Request, call_next):
+    """Stop browsers restoring pages (e.g. via the back/forward button) from
+    their cache after logout. Without this, the back-forward cache can show a
+    frozen snapshot of an authenticated page - complete with sidebar and data
+    - without ever asking the server whether the session is still valid.
+    Applied to everything except static assets, which are safe to cache since
+    they carry no per-user session state.
+    """
+    response = await call_next(request)
+    if not request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.exception_handler(NotAuthenticatedError)
