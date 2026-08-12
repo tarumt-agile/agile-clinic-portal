@@ -199,6 +199,7 @@ def test_new_record_page_renders(client: TestClient) -> None:
     r = client.get("/consultations/new?patient_id=P00001")
     assert r.status_code == 200
     assert "New Consultation Note" in r.text
+    assert 'id="view-patient-link" target="_self"' in r.text
 
 
 def test_record_detail_page_renders(client: TestClient) -> None:

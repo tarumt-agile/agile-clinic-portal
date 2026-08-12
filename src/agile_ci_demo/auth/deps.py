@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
+from agile_ci_demo.core.security import InvalidSessionTokenError, decode_session_token
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.patients.service import get_patient_by_patient_id
 from agile_ci_demo.staff.models import Staff
@@ -15,6 +18,12 @@ from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 class NotAuthenticatedError(Exception):
     """Raised when a page needs a session that isn't there, or the wrong role is signed in."""
+
+
+staff_bearer = HTTPBearer(
+    auto_error=False,
+    description="Staff JWT returned by POST /api/auth/login.",
+)
 
 
 def login_staff(request: Request, staff: Staff) -> None:
@@ -34,14 +43,41 @@ def logout(request: Request) -> None:
     request.session.clear()
 
 
-def require_role(*roles: Role) -> Callable[..., Staff]:
-    """Dependency factory: only lets the given staff roles through, otherwise redirects to login."""
+def require_role(
+    *roles: Role,
+    forbidden_for_wrong_role: bool = False,
+) -> Callable[..., Staff]:
+    """Require an active staff cookie session or Bearer JWT with an allowed role."""
     allowed = {role.value for role in roles}
 
-    def dependency(request: Request, db: Session = Depends(get_db)) -> Staff:
-        staff_id = request.session.get("staff_id")
+    def dependency(
+        request: Request,
+        db: Session = Depends(get_db),
+        credentials: HTTPAuthorizationCredentials | None = Depends(staff_bearer),
+    ) -> Staff:
+        staff_id: str | None = None
+        token_role: str | None = None
+        if credentials is not None:
+            try:
+                payload = decode_session_token(credentials.credentials, settings.secret_key)
+            except InvalidSessionTokenError as exc:
+                raise NotAuthenticatedError() from exc
+            staff_id = payload["sub"]
+            token_role = payload["role"]
+        else:
+            staff_id = request.session.get("staff_id")
+
         staff = get_staff_by_staff_id(db, staff_id) if staff_id else None
-        if staff is None or staff.role not in allowed or not staff.is_active:
+        if staff is None or not staff.is_active:
+            raise NotAuthenticatedError()
+        if token_role is not None and token_role != staff.role:
+            raise NotAuthenticatedError()
+        if staff.role not in allowed:
+            if forbidden_for_wrong_role:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Admin role required.",
+                )
             raise NotAuthenticatedError()
         return staff
 

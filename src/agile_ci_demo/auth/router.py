@@ -24,6 +24,7 @@ from agile_ci_demo.auth.service import (
     request_password_reset,
     reset_password,
 )
+from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import generate_session_token
@@ -53,7 +54,11 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         role=role,
         must_change_password=staff.must_change_password,
         redirect_url=redirect_url_for_role(role),
-        session_token=generate_session_token(),
+        session_token=generate_session_token(
+            staff_id=cast(str, staff.staff_id),
+            role=staff.role,
+            secret_key=settings.secret_key,
+        ),
     )
 
 

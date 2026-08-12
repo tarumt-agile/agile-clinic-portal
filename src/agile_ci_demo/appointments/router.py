@@ -11,6 +11,7 @@ from agile_ci_demo.appointments.schemas import (
     AppointmentOut,
     DoctorSchedule,
     DoctorScheduleDates,
+    DoctorScheduleStats,
     DoctorSlots,
     PatientAppointments,
     ScheduleDateSummary,
@@ -30,6 +31,8 @@ from agile_ci_demo.appointments.service import (
     get_available_slots,
     get_doctor_schedule,
     get_doctor_schedule_dates,
+    get_doctor_schedule_range,
+    get_doctor_schedule_stats,
     get_patient_appointments,
 )
 from agile_ci_demo.auth.deps import require_patient, require_role
@@ -82,13 +85,28 @@ def book_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)) 
 
 @api_router.get("/schedule", response_model=DoctorSchedule)
 def get_my_schedule(
-    schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    schedule_date: dt.date | None = Query(default=None, alias="date"),
+    start_date: dt.date | None = Query(default=None),
+    end_date: dt.date | None = Query(default=None),
     doctor: Staff = Depends(require_role(Role.DOCTOR)),
     db: Session = Depends(get_db),
 ) -> DoctorSchedule:
-    """The logged-in doctor's appointments for a given date (defaults to today)."""
+    """The logged-in doctor's appointments for a given date (defaults to today),
+    or for a date range when start_date/end_date are both provided instead -
+    used by the calendar view to fetch a whole visible month/week at once."""
+    if start_date is not None and end_date is not None:
+        appointments = get_doctor_schedule_range(db, doctor.id, start_date, end_date)
+        return DoctorSchedule(
+            doctor_id=doctor.staff_id or "",
+            doctor_name=doctor.full_name,
+            start_date=start_date,
+            end_date=end_date,
+            appointments=[_serialize(a) for a in appointments],
+        )
+
+    resolved_date = schedule_date or dt.date.today()
     try:
-        appointments = get_doctor_schedule(db, doctor.id, schedule_date)
+        appointments = get_doctor_schedule(db, doctor.id, resolved_date)
     except PastDateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -97,9 +115,20 @@ def get_my_schedule(
     return DoctorSchedule(
         doctor_id=doctor.staff_id or "",
         doctor_name=doctor.full_name,
-        schedule_date=schedule_date,
+        schedule_date=resolved_date,
         appointments=[_serialize(a) for a in appointments],
     )
+
+
+@api_router.get("/schedule/stats", response_model=DoctorScheduleStats)
+def get_my_schedule_stats(
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    db: Session = Depends(get_db),
+) -> DoctorScheduleStats:
+    """Summary counts for the doctor dashboard stat cards: total, today's,
+    future, and completed appointments."""
+    stats = get_doctor_schedule_stats(db, doctor.id)
+    return DoctorScheduleStats(**stats)
 
 
 @api_router.get("/schedule/dates", response_model=DoctorScheduleDates)
@@ -121,12 +150,15 @@ def get_my_schedule_dates(
 @api_router.get("/schedule/by-doctor", response_model=DoctorSchedule)
 def get_schedule_for_doctor(
     doctor_id: str = Query(..., description="Doctor's public staff_id, e.g. S00001"),
-    schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    schedule_date: dt.date | None = Query(default=None, alias="date"),
+    start_date: dt.date | None = Query(default=None),
+    end_date: dt.date | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> DoctorSchedule:
-    """A specific doctor's appointments for a given date (defaults to today), for
-    front-desk staff looking up any doctor's schedule - unlike /schedule, which is
-    always the current doctor's own."""
+    """A specific doctor's appointments for a given date (defaults to today), or
+    for a date range when start_date/end_date are both provided instead - for
+    front-desk staff looking up any doctor's schedule (unlike /schedule, which
+    is always the current doctor's own)."""
     doctor = get_staff_by_staff_id(db, doctor_id)
     if doctor is None or doctor.role != Role.DOCTOR.value:
         raise HTTPException(
@@ -134,8 +166,19 @@ def get_schedule_for_doctor(
             detail=f"No doctor found with staff_id '{doctor_id}'",
         )
 
+    if start_date is not None and end_date is not None:
+        appointments = get_doctor_schedule_range(db, doctor.id, start_date, end_date)
+        return DoctorSchedule(
+            doctor_id=doctor.staff_id or "",
+            doctor_name=doctor.full_name,
+            start_date=start_date,
+            end_date=end_date,
+            appointments=[_serialize(a) for a in appointments],
+        )
+
+    resolved_date = schedule_date or dt.date.today()
     try:
-        appointments = get_doctor_schedule(db, doctor.id, schedule_date)
+        appointments = get_doctor_schedule(db, doctor.id, resolved_date)
     except PastDateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -144,7 +187,7 @@ def get_schedule_for_doctor(
     return DoctorSchedule(
         doctor_id=doctor.staff_id or "",
         doctor_name=doctor.full_name,
-        schedule_date=schedule_date,
+        schedule_date=resolved_date,
         appointments=[_serialize(a) for a in appointments],
     )
 

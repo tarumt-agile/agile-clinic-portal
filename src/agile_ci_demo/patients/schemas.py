@@ -97,7 +97,13 @@ class PatientUpdate(PatientCreate):
 
 
 class PatientOut(BaseModel):
-    """Patient details returned by the API, including the generated patient ID."""
+    """Patient details returned by the API, including the generated patient ID.
+
+    Creation and updates use ``PatientCreate``/``PatientUpdate`` and therefore
+    still validate new email addresses with ``EmailStr``.  Output deliberately
+    uses the database's string value so a legacy or imported row cannot turn a
+    patient-details request into a 500 response during response serialization.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -106,7 +112,7 @@ class PatientOut(BaseModel):
     date_of_birth: dt.date
     gender: Gender
     phone_number: str
-    email: EmailStr | None
+    email: str | None
     ic_or_passport: str
     address: str | None
     created_at: dt.datetime

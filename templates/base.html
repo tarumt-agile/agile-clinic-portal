@@ -9,65 +9,154 @@
   {% block extra_head %}{% endblock %}
   {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-light">
+<body>
   {% set role = request.session.get("role") %}
   {% set is_patient = request.session.get("user_type") == "patient" %}
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-2">
-    <div class="container">
-      {% if role == "doctor" %}
-        <a class="navbar-brand" href="/appointments/schedule">Agile Clinic Portal</a>
-      {% elif is_patient %}
-        <a class="navbar-brand" href="/patients/dashboard">Agile Clinic Portal</a>
-      {% else %}
-        <a class="navbar-brand" href="/patients">Agile Clinic Portal</a>
-      {% endif %}
-      <div class="navbar-nav">
-        {% if role in ["receptionist", "nurse", "admin"] %}
-          <a class="nav-link" href="/patients">Patients</a>
-          <a class="nav-link" href="/patients/register">Register Patient</a>
-        {% endif %}
-          {% if role in ["receptionist", "nurse", "admin"] %}
-            <a class="nav-link" href="/appointments/create">Book Appointment</a>
-            <a class="nav-link" href="/appointments/doctor-schedule">Doctor Schedule</a>
-          {% endif %}
-          {% if role in ["receptionist", "admin"] %}
-            <a class="nav-link" href="/pharmacy">Pharmacy</a>
-          {% endif %}
-          {% if role == "doctor" %}
-          <a class="nav-link" href="/appointments/schedule">My Schedule</a>
-          <a class="nav-link" href="/appointments/consultations">Start Consultation</a>
-        {% endif %}
-        {% if is_patient %}
-          <a class="nav-link" href="/patients/dashboard">My Dashboard</a>
-          <a class="nav-link" href="/appointments/book">Book My Appointment</a>
-          <a class="nav-link" href="/appointments/mine">My Appointments</a>
-        {% endif %}
-        {% if role == "admin" %}
-          <a class="nav-link" href="/staff">Staff</a>
-          <a class="nav-link" href="/reports">Reports</a>
-        {% endif %}
-        {% if role or is_patient %}
-          <a class="nav-link" href="#" id="logout-link">Logout</a>
+  {% set authed = role or is_patient %}
+  {% set current_path = request.url.path %}
+  {% if authed %}
+  <div class="app-shell">
+    <button
+      type="button"
+      class="sidebar-toggle"
+      id="sidebar-toggle"
+      aria-label="Toggle navigation"
+      aria-controls="app-sidebar"
+      aria-expanded="false"
+    >&#9776;</button>
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        {% if role == "doctor" %}
+          <a href="/appointments/schedule">Agile Clinic Portal</a>
+        {% elif is_patient %}
+          <a href="/patients/dashboard">Agile Clinic Portal</a>
         {% else %}
-          <a class="nav-link" href="/auth/login">Login</a>
+          <a href="/patients">Agile Clinic Portal</a>
         {% endif %}
       </div>
+      <nav class="sidebar-nav">
+        {% if role in ["receptionist", "nurse", "admin"] %}
+          <a class="sidebar-link{{ ' active' if current_path == '/patients' else '' }}" href="/patients">Patients</a>
+          <a class="sidebar-link{{ ' active' if current_path == '/patients/register' else '' }}" href="/patients/register">Register Patient</a>
+          <a class="sidebar-link{{ ' active' if current_path == '/appointments/create' else '' }}" href="/appointments/create">Book Appointment</a>
+          <a class="sidebar-link{{ ' active' if current_path == '/appointments/doctor-schedule' else '' }}" href="/appointments/doctor-schedule">Doctor Schedule</a>
+        {% endif %}
+        {% if role in ["receptionist", "admin"] %}
+          <a class="sidebar-link{{ ' active' if current_path == '/pharmacy' else '' }}" href="/pharmacy">Pharmacy</a>
+        {% endif %}
+        {% if role == "doctor" %}
+          <a class="sidebar-link{{ ' active' if current_path == '/appointments/schedule' else '' }}" href="/appointments/schedule">My Schedule</a>
+          <a class="sidebar-link{{ ' active' if current_path == '/appointments/consultations' else '' }}" href="/appointments/consultations">Start Consultation</a>
+        {% endif %}
+        {% if is_patient %}
+          <a class="sidebar-link{{ ' active' if current_path == '/patients/dashboard' else '' }}" href="/patients/dashboard">My Dashboard</a>
+          <a class="sidebar-link{{ ' active' if current_path == '/appointments/book' else '' }}" href="/appointments/book">Book My Appointment</a>
+          <a class="sidebar-link{{ ' active' if current_path == '/appointments/mine' else '' }}" href="/appointments/mine">My Appointments</a>
+        {% endif %}
+        {% if role == "admin" %}
+          <a class="sidebar-link{{ ' active' if current_path == '/staff' else '' }}" href="/staff">Staff</a>
+          <a class="sidebar-link{{ ' active' if current_path == '/reports' else '' }}" href="/reports">Reports</a>
+        {% endif %}
+      </nav>
+      <div class="sidebar-user">
+        {% if is_patient %}
+          {% set identity_initials = "PT" %}
+          {% set identity_label = "Patient" %}
+        {% elif role == "doctor" %}
+          {% set identity_initials = "DR" %}
+          {% set identity_label = "Doctor" %}
+        {% elif role == "admin" %}
+          {% set identity_initials = "AD" %}
+          {% set identity_label = "Admin" %}
+        {% elif role == "receptionist" %}
+          {% set identity_initials = "RC" %}
+          {% set identity_label = "Receptionist" %}
+        {% elif role == "nurse" %}
+          {% set identity_initials = "NR" %}
+          {% set identity_label = "Nurse" %}
+        {% else %}
+          {% set identity_initials = "" %}
+          {% set identity_label = "" %}
+        {% endif %}
+        <div class="sidebar-user-identity">
+          <span class="sidebar-user-avatar">{{ identity_initials }}</span>
+          <span class="sidebar-user-label">{{ identity_label }}</span>
+        </div>
+        <a class="sidebar-link" href="#" id="logout-link">Logout</a>
+      </div>
+    </aside>
+    <div class="app-main">
+      <main class="app-content">
+  {% else %}
+  <div class="auth-shell">
+    <div class="auth-card-wrap">
+  {% endif %}
+        {% block content %}{% endblock %}
+  {% if authed %}
+      </main>
     </div>
-  </nav>
+  </div>
+  {% else %}
+    </div>
+  </div>
+  {% endif %}
 
-  <main class="container pt-3 pb-5">
-    {% block content %}{% endblock %}
-  </main>
+  {% if authed %}
+  <div class="modal fade" id="logout-confirm-modal" tabindex="-1" aria-labelledby="logout-confirm-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="logout-confirm-modal-label">Log Out</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-0">Are you sure you want to log out?</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="confirm-logout-btn">Log Out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const logoutLink = document.getElementById("logout-link");
+    const logoutConfirmModalEl = document.getElementById("logout-confirm-modal");
+    const logoutConfirmModal =
+      logoutConfirmModalEl && window.bootstrap ? new bootstrap.Modal(logoutConfirmModalEl) : null;
+    const confirmLogoutBtn = document.getElementById("confirm-logout-btn");
+
+    async function performLogout() {
+      await fetch("/api/auth/session", { method: "DELETE" });
+      localStorage.removeItem("clinicSessionToken");
+      window.location.href = "/auth/login";
+    }
+
     if (logoutLink) {
-      logoutLink.addEventListener("click", async (event) => {
+      logoutLink.addEventListener("click", (event) => {
         event.preventDefault();
-        await fetch("/api/auth/session", { method: "DELETE" });
-        localStorage.removeItem("clinicSessionToken");
-        window.location.href = "/auth/login";
+        if (logoutConfirmModal) {
+          logoutConfirmModal.show();
+        } else {
+          performLogout();
+        }
+      });
+    }
+
+    if (confirmLogoutBtn) {
+      confirmLogoutBtn.addEventListener("click", performLogout);
+    }
+  </script>
+  <script>
+    const sidebarToggle = document.getElementById("sidebar-toggle");
+    const sidebar = document.getElementById("app-sidebar");
+    if (sidebarToggle && sidebar) {
+      sidebarToggle.addEventListener("click", () => {
+        const isOpen = sidebar.classList.toggle("is-open");
+        sidebarToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
       });
     }
   </script>

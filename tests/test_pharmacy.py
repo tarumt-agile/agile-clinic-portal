@@ -365,7 +365,7 @@ def test_receptionist_and_admin_can_open_pharmacy_page(
     assert 'id="add-medication-button"' in response.text
     assert 'id="stock-modal"' in response.text
     assert "/static/js/pharmacy-management.js" in response.text
-    assert '<a class="nav-link" href="/pharmacy">Pharmacy</a>' in response.text
+    assert 'class="sidebar-link' in response.text and 'href="/pharmacy">Pharmacy</a>' in response.text
 
 
 def test_pharmacy_form_uses_controlled_dropdowns(
