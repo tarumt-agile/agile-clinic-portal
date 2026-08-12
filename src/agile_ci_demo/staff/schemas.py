@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 from enum import Enum
 
@@ -221,3 +222,22 @@ class DoctorOut(BaseModel):
 
 class DoctorUpdate(DoctorRegister):
     pass
+
+
+class DoctorAuditLogEntry(BaseModel):
+    """One audit trail entry for a doctor's staff/profile record. `changes`
+    is stored in the database as a JSON string, so `changes` is parsed back
+    into a dict here (old/new value pairs, keyed by field name)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    action: str
+    changes: dict[str, dict[str, object | None]]
+    changed_by_staff_id: str | None
+    changed_at: dt.datetime
+
+    @field_validator("changes", mode="before")
+    @classmethod
+    def parse_changes(cls, value: object) -> object:
+        return json.loads(value) if isinstance(value, str) else value

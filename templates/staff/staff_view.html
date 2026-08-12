@@ -7,7 +7,7 @@ Staff Details - Agile Clinic Portal
 {% block extra_css %}
 <link
   rel="stylesheet"
-  href="/static/css/staff_view.css?v=2"
+  href="/static/css/staff_view.css?v=3"
 >
 {% endblock %}
 
@@ -193,6 +193,19 @@ Staff Details - Agile Clinic Portal
         </dl>
       </section>
     </div>
+
+    <section
+      id="doctor-audit-log-card"
+      class="staff-detail-card d-none"
+    >
+      <h2>Audit Log</h2>
+
+      <p id="doctor-audit-log-empty" class="staff-audit-empty d-none">
+        No changes have been recorded for this doctor yet.
+      </p>
+
+      <ul id="doctor-audit-log-list" class="staff-audit-log-list"></ul>
+    </section>
 
     <section
       id="staff-edit-section"
@@ -484,5 +497,5 @@ Staff Details - Agile Clinic Portal
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/staff_view.js?v=3"></script>
+<script src="/static/js/staff_view.js?v=4"></script>
 {% endblock %}

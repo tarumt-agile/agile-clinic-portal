@@ -58,6 +58,27 @@
     admin: "Administration"
   };
 
+  const auditActionLabels = {
+    create: "Created",
+    update: "Updated",
+    activate: "Activated",
+    deactivate: "Deactivated"
+  };
+
+  const auditFieldLabels = {
+    full_name: "Full Name",
+    email: "Email Address",
+    is_active: "Account Status",
+    license_number: "MMC Registration Number",
+    specialty: "Specialty",
+    doctor_status: "Doctor Status",
+    start_time: "Working Hours Start",
+    end_time: "Working Hours End",
+    next_start_time: "Queued Working Hours Start",
+    next_end_time: "Queued Working Hours End",
+    next_effective_date: "Queued Working Hours Effective Date"
+  };
+
   const emailPattern =
     /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -98,6 +119,114 @@
         year: "numeric"
       }
     ).format(new Date(value));
+  }
+
+  function formatDateTime(value) {
+    if (!value) {
+      return "—";
+    }
+
+    return new Intl.DateTimeFormat(
+      "en-MY",
+      {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }
+    ).format(new Date(value));
+  }
+
+  function formatAuditValue(field, value) {
+    if (value === null || value === undefined) {
+      return "—";
+    }
+
+    if (field === "is_active") {
+      return value ? "Active" : "Inactive";
+    }
+
+    if (
+      field === "start_time" ||
+      field === "end_time" ||
+      field === "next_start_time" ||
+      field === "next_end_time"
+    ) {
+      return String(value).slice(0, 5);
+    }
+
+    if (field === "next_effective_date") {
+      return formatDate(value);
+    }
+
+    return String(value);
+  }
+
+  function renderAuditLog(entries) {
+    const list = byId("doctor-audit-log-list");
+    const empty = byId("doctor-audit-log-empty");
+
+    list.innerHTML = "";
+
+    if (!entries.length) {
+      empty.classList.remove("d-none");
+      return;
+    }
+
+    empty.classList.add("d-none");
+
+    entries.forEach(function (entry) {
+      const item = document.createElement("li");
+      item.className = "staff-audit-log-item";
+
+      const header = document.createElement("div");
+      header.className = "staff-audit-log-header";
+      header.textContent =
+        (auditActionLabels[entry.action] || entry.action) +
+        " by " +
+        (entry.changed_by_staff_id || "unknown") +
+        " on " +
+        formatDateTime(entry.changed_at);
+      item.appendChild(header);
+
+      const changesList = document.createElement("ul");
+      changesList.className = "staff-audit-log-changes";
+
+      Object.keys(entry.changes).forEach(function (field) {
+        const change = entry.changes[field];
+        const line = document.createElement("li");
+        line.textContent =
+          (auditFieldLabels[field] || field) +
+          ": " +
+          formatAuditValue(field, change.old) +
+          " → " +
+          formatAuditValue(field, change.new);
+        changesList.appendChild(line);
+      });
+
+      item.appendChild(changesList);
+      list.appendChild(item);
+    });
+  }
+
+  async function loadAuditLog() {
+    try {
+      const response = await fetch(
+        "/api/staff/" +
+        encodeURIComponent(staffId) +
+        "/audit-log"
+      );
+
+      if (!response.ok) {
+        return;
+      }
+
+      renderAuditLog(await response.json());
+    } catch (error) {
+      // Audit log is supplementary - a failure here shouldn't block the
+      // rest of the staff detail page from working.
+    }
   }
 
   function showAlert(id, message) {
@@ -262,7 +391,16 @@
       !isDoctor
     );
 
+    byId(
+      "doctor-audit-log-card"
+    ).classList.toggle(
+      "d-none",
+      !isDoctor
+    );
+
     if (isDoctor) {
+      loadAuditLog();
+
       setText(
         "view-license-number",
         staff.license_number

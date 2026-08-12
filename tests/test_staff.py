@@ -794,3 +794,206 @@ def test_delete_staff_requires_admin_login(client: TestClient) -> None:
 
     r = client.delete(f"/api/staff/{created['staff_id']}", follow_redirects=False)
     assert r.status_code == 303
+
+
+# --- Doctor audit log -----------------------------------------------------------
+
+
+def test_creating_a_doctor_writes_an_audit_entry(client: TestClient) -> None:
+    """
+    Scenario: Creating a doctor is audited
+      Given an admin registers a new doctor
+      When I GET that doctor's audit log
+      Then a "create" entry is recorded with the doctor's starting values
+    """
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="Cardiology",
+            status="active",
+        ),
+    ).json()
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log")
+    assert r.status_code == 200
+    entries = r.json()
+    assert len(entries) == 1
+    assert entries[0]["action"] == "create"
+    assert entries[0]["changes"]["full_name"] == {"old": None, "new": "Alice Wong"}
+    assert entries[0]["changes"]["specialty"] == {"old": None, "new": "Cardiology"}
+    assert entries[0]["changed_by_staff_id"] == "S00001"  # the logged-in admin
+
+
+def test_creating_a_non_doctor_writes_no_audit_entry(client: TestClient) -> None:
+    """The audit story is scoped to doctor profiles - a nurse/receptionist/admin
+    hire shouldn't show up here at all."""
+    _login_as_admin(client)
+    created = client.post("/api/staff", json=valid_staff_payload(role="nurse")).json()
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_updating_a_doctor_writes_an_audit_entry_with_only_changed_fields(
+    client: TestClient,
+) -> None:
+    """
+    Scenario: Editing a doctor's profile is audited
+      Given an existing doctor whose queued hours are already 10:00-16:00
+      When admin PATCHes only their specialty (same hours resubmitted)
+      Then the audit entry's diff contains only the specialty change
+    """
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+    # Establishes the 10:00-16:00 queue so the next PATCH below doesn't also
+    # show next_start_time/next_end_time/next_effective_date as "changed"
+    # purely from being set for the first time.
+    client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+
+    r = client.patch(
+        f"/api/staff/{staff_id}",
+        json=_doctor_update_payload(specialty="Dermatology"),
+    )
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{staff_id}/audit-log").json()
+    assert entries[0]["action"] == "update"
+    assert entries[0]["changes"] == {
+        "specialty": {"old": "Cardiology", "new": "Dermatology"},
+    }
+
+
+def test_updating_a_doctor_with_no_real_changes_writes_no_audit_entry(
+    client: TestClient,
+) -> None:
+    """Re-submitting the exact same PATCH twice queues nothing new the second
+    time (the hours are already queued from the first), so it must not add a
+    second audit entry - only "create" and the first "update" are recorded."""
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    r = client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{staff_id}/audit-log").json()
+    assert [e["action"] for e in entries] == ["update", "create"]
+
+
+def test_deactivating_a_doctor_writes_an_audit_entry(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{created['staff_id']}/audit-log").json()
+    assert len(entries) == 2  # create, then deactivate
+    assert entries[0]["action"] == "deactivate"  # newest first
+    assert entries[0]["changes"]["is_active"] == {"old": True, "new": False}
+    assert entries[0]["changes"]["doctor_status"] == {"old": "active", "new": "inactive"}
+
+
+def test_reactivating_a_deactivated_doctor_writes_its_own_audit_entry(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+    client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": True})
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{created['staff_id']}/audit-log").json()
+    assert len(entries) == 3  # create, deactivate, activate
+    assert entries[0]["action"] == "activate"
+    assert entries[0]["changes"]["is_active"] == {"old": False, "new": True}
+
+
+def test_deactivating_a_non_doctor_writes_no_audit_entry(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post("/api/staff", json=valid_staff_payload(role="receptionist")).json()
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{created['staff_id']}/audit-log").json()
+    assert entries == []
+
+
+def test_audit_log_survives_further_unrelated_changes(client: TestClient) -> None:
+    """A basic stand-in for "retained for at least 12 months": earlier entries
+    are never deleted or overwritten by later ones."""
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload(specialty="Dermatology"))
+    client.patch(f"/api/staff/{staff_id}/status", json={"is_active": False})
+    client.patch(f"/api/staff/{staff_id}/status", json={"is_active": True})
+
+    entries = client.get(f"/api/staff/{staff_id}/audit-log").json()
+    assert [e["action"] for e in entries] == ["activate", "deactivate", "update", "create"]
+
+
+def test_audit_log_requires_admin_login(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+    client.post("/api/auth/logout")
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_audit_log_rejects_a_non_admin_login(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse3@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse3@example.com", "password": temp_password})
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_audit_log_unknown_staff_returns_404(client: TestClient) -> None:
+    _login_as_admin(client)
+    r = client.get("/api/staff/S99999/audit-log")
+    assert r.status_code == 404

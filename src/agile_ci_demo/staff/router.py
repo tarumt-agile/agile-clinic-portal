@@ -14,6 +14,7 @@ from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
 from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.schemas import (
+    DoctorAuditLogEntry,
     DoctorOut,
     StaffCreate,
     StaffOut,
@@ -30,6 +31,7 @@ from agile_ci_demo.staff.service import (
     delete_staff,
     get_doctor_by_doctor_id,
     get_staff_by_staff_id,
+    list_doctor_audit_log,
     list_doctors,
     list_staff,
     set_staff_active_status,
@@ -59,6 +61,7 @@ pages_router = APIRouter(
     status_code=status.HTTP_201_CREATED,
 )
 def register_staff(
+    request: Request,
     payload: StaffCreate,
     db: Session = Depends(get_db),
 ) -> StaffOut:
@@ -66,6 +69,11 @@ def register_staff(
         staff = create_staff(
             db,
             payload,
+            # This endpoint has no auth requirement of its own, so there
+            # isn't always a signed-in staff member to credit - the audit
+            # entry records whoever's session happens to be active, and is
+            # left blank rather than guessed at when there is none.
+            changed_by_staff_id=request.session.get("staff_id"),
         )
 
     except DuplicateStaffEmailError as exc:
@@ -148,13 +156,14 @@ def update_staff_status(
     staff_id: str,
     payload: StaffStatusUpdate,
     db: Session = Depends(get_db),
-    _staff: Staff = Depends(require_role(Role.ADMIN)),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = set_staff_active_status(
             db,
             staff_id,
             payload.is_active,
+            changed_by_staff_id=admin.staff_id,
         )
 
     except StaffNotFoundError as exc:
@@ -214,6 +223,28 @@ def get_staff_details(
     return StaffOut.model_validate(staff)
 
 
+# This route returns a doctor's audit trail (create/update/activate/
+# deactivate), newest first - admin only.
+@api_router.get(
+    "/{staff_id}/audit-log",
+    response_model=list[DoctorAuditLogEntry],
+)
+def get_doctor_audit_log(
+    staff_id: str,
+    db: Session = Depends(get_db),
+    _admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> list[DoctorAuditLogEntry]:
+    staff = get_staff_by_staff_id(db, staff_id)
+    if staff is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No staff account found with staff_id '{staff_id}'.",
+        )
+
+    entries = list_doctor_audit_log(db, staff_id)
+    return [DoctorAuditLogEntry.model_validate(entry) for entry in entries]
+
+
 # This route updates the details of one staff account.
 @api_router.patch(
     "/{staff_id}",
@@ -223,13 +254,14 @@ def update_staff_details(
     staff_id: str,
     payload: StaffUpdate,
     db: Session = Depends(get_db),
-    _staff: Staff = Depends(require_role(Role.ADMIN)),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = update_staff(
             db,
             staff_id,
             payload,
+            changed_by_staff_id=admin.staff_id,
         )
 
     except StaffNotFoundError as exc:
