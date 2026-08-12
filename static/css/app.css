@@ -357,3 +357,16 @@ a:hover {
   background-color: var(--clinic-content-bg);
   border-left-color: var(--clinic-accent-soft);
 }
+
+/* ===== Pagination ===== */
+/* Windowed pagination keeps the button count small and fixed regardless of
+   how many pages exist, but on narrow screens even that fixed set can be
+   tight - scroll within the bar itself rather than letting it push the
+   page layout wider than the viewport. */
+.pagination-scroll {
+  overflow-x: auto;
+}
+
+.pagination-scroll .pagination {
+  flex-wrap: nowrap;
+}

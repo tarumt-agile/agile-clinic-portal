@@ -134,6 +134,22 @@
   overflow-wrap: anywhere;
 }
 
+/* The queued-hours notice is a full sentence, not a short label - left to
+   Bootstrap's default badge sizing (nowrap, stretched to fill its grid
+   cell as the row's 3rd auto-placed item) it can render wider than the
+   card or spill past its own pill background on narrow screens. Span the
+   full row, hug its own content instead of stretching, and wrap instead
+   of forcing a single line. */
+#view-next-hours-badge {
+  grid-column: 1 / -1;
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+
 .staff-edit-card {
   padding: 1.4rem;
   margin-top: 1.2rem;
