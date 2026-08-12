@@ -21,6 +21,8 @@ from agile_ci_demo.pharmacy.service import seed_default_medications
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.prescriptions import models as _prescription_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -970,20 +972,28 @@ def _login_as(client: TestClient, email: str) -> None:
     assert r.status_code == 200, r.json()
 
 
+def _create_staff_direct(client: TestClient, payload: dict[str, object]) -> str:
+    """Create a staff account directly through the service layer, bypassing
+    the API (POST /api/staff now requires an admin session) - this is pure
+    test setup, not the thing under test, and is often needed before any
+    admin session can exist at all. Returns the new account's public staff_id."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff = create_staff(db, StaffCreate(**payload))
+        return str(staff.staff_id)
+    finally:
+        db.close()
+
+
 def _login_as_admin(client: TestClient) -> None:
-    r = client.post(
-        "/api/staff",
-        json={"full_name": "Admin User", "email": "admin@example.com", "role": "admin"},
+    _create_staff_direct(
+        client, {"full_name": "Admin User", "email": "admin@example.com", "role": "admin"}
     )
-    assert r.status_code == 201, r.json()
     _login_as(client, "admin@example.com")
 
 
 def _register_doctor(client: TestClient, **overrides: object) -> str:
-    payload = valid_doctor_payload(**overrides)
-    r = client.post("/api/staff", json=payload)
-    assert r.status_code == 201, r.json()
-    return str(r.json()["staff_id"])
+    return _create_staff_direct(client, valid_doctor_payload(**overrides))
 
 
 TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
@@ -997,11 +1007,9 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
     doctor_id = _register_doctor(client)
 
     receptionist_email = "receptionist@example.com"
-    r = client.post(
-        "/api/staff",
-        json={"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"},
+    _create_staff_direct(
+        client, {"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"}
     )
-    assert r.status_code == 201, r.json()
     _login_as(client, receptionist_email)
 
     appt = client.post(

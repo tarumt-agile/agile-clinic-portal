@@ -18,6 +18,8 @@ from agile_ci_demo.appointments import models as _appointments_models  # noqa: F
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
@@ -84,17 +86,22 @@ def _register_patient(client: TestClient, **overrides: object) -> str:
     return str(body["patient_id"])
 
 
+def _create_staff_direct(client: TestClient, payload: dict[str, object]) -> str:
+    """Create a staff account directly through the service layer, bypassing
+    the API (POST /api/staff now requires an admin session) - this is pure
+    test setup, not the thing under test, and is often needed before any
+    admin session can exist at all. Returns the new account's public staff_id."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff = create_staff(db, StaffCreate(**payload))
+        return str(staff.staff_id)
+    finally:
+        db.close()
+
+
 def _register_doctor(client: TestClient, **overrides: object) -> str:
     """Create a doctor account (no session/login) and return its staff_id."""
-    response = client.post(
-        "/api/staff",
-        json=valid_staff_payload(**overrides),
-    )
-
-    assert response.status_code == 201, response.json()
-
-    body = response.json()
-    return str(body["staff_id"])
+    return _create_staff_direct(client, valid_staff_payload(**overrides))
 
 
 def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
@@ -104,12 +111,10 @@ def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
     from the session, so most tests need an actual logged-in doctor, not just
     a doctor row in the database.
     """
-    response = client.post("/api/staff", json=valid_staff_payload(**overrides))
-    assert response.status_code == 201, response.json()
-    body = response.json()
+    staff_id = _create_staff_direct(client, valid_staff_payload(**overrides))
 
     email = str(overrides.get("email", "alan.chua@example.com"))
-    outbox_body = get_outbox()[-1].body
+    outbox_body = next(e.body for e in reversed(get_outbox()) if e.to == email)
     match = re.search(r"temporary password is: (\S+)", outbox_body)
     assert match is not None
     temp_password = match.group(1)
@@ -117,7 +122,7 @@ def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
     login = client.post("/api/auth/login", json={"email": email, "password": temp_password})
     assert login.status_code == 200, login.json()
 
-    return str(body["staff_id"])
+    return staff_id
 
 
 def _book_appointment(
@@ -145,11 +150,10 @@ def _book_appointment(
     payload.update(overrides)
 
     receptionist_email = "receptionist@example.com"
-    response = client.post(
-        "/api/staff",
-        json={"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"},
+    _create_staff_direct(
+        client,
+        {"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"},
     )
-    assert response.status_code == 201, response.json()
     receptionist_body = next(e.body for e in reversed(get_outbox()) if e.to == receptionist_email)
     receptionist_match = re.search(r"temporary password is: (\S+)", receptionist_body)
     assert receptionist_match is not None

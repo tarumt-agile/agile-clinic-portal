@@ -16,6 +16,8 @@ from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
 from agile_ci_demo.auth import models as _auth_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -54,7 +56,16 @@ _next_license_number = itertools.count(10000)
 def _create_staff_and_get_temp_password(
     client: TestClient, email: str = "alice.wong@example.com", role: str = "nurse"
 ) -> str:
-    """Create a staff account via the API and pull the temp password out of the welcome email."""
+    """Create a staff account directly through the service layer and pull the
+    temp password out of the welcome email.
+
+    Goes around the API (POST /api/staff now requires an admin session) since
+    this is pure test setup, not the thing under test - most tests need a
+    first account to exist before any admin session can be established at
+    all. Uses the same `create_staff` the API itself calls, so it still sends
+    the real welcome email and runs the real ID-generation/doctor-profile
+    logic - only the HTTP/auth layer is skipped.
+    """
     payload: dict[str, object] = {"full_name": "Alice Wong", "email": email, "role": role}
     if role == "doctor":
         # Each doctor needs a unique license_number (the field is unique in the
@@ -67,8 +78,12 @@ def _create_staff_and_get_temp_password(
                 "status": "active",
             }
         )
-    r = client.post("/api/staff", json=payload)
-    assert r.status_code == 201
+
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        create_staff(db, StaffCreate(**payload))
+    finally:
+        db.close()
 
     body = get_outbox()[-1].body
     match = re.search(r"temporary password is: (\S+)", body)

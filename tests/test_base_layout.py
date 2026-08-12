@@ -12,6 +12,8 @@ from sqlalchemy.pool import StaticPool
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 
 @pytest.fixture
@@ -55,8 +57,14 @@ def create_staff_and_login(client: TestClient, role: str = "receptionist") -> No
                 "status": "active",
             }
         )
-    create_response = client.post("/api/staff", json=payload)
-    assert create_response.status_code == 201, create_response.json()
+    # Staff creation directly through the service layer, bypassing the API
+    # (POST /api/staff now requires an admin session) - this is pure test
+    # setup, not the thing under test.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        create_staff(db, StaffCreate(**payload))
+    finally:
+        db.close()
 
     welcome_email = next(
         message for message in reversed(get_outbox()) if message.to == payload["email"]

@@ -61,19 +61,15 @@ pages_router = APIRouter(
     status_code=status.HTTP_201_CREATED,
 )
 def register_staff(
-    request: Request,
     payload: StaffCreate,
     db: Session = Depends(get_db),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = create_staff(
             db,
             payload,
-            # This endpoint has no auth requirement of its own, so there
-            # isn't always a signed-in staff member to credit - the audit
-            # entry records whoever's session happens to be active, and is
-            # left blank rather than guessed at when there is none.
-            changed_by_staff_id=request.session.get("staff_id"),
+            changed_by_staff_id=admin.staff_id,
         )
 
     except DuplicateStaffEmailError as exc:

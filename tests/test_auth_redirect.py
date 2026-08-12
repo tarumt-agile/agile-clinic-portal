@@ -14,6 +14,8 @@ from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -60,8 +62,14 @@ def _create_staff_and_login(client: TestClient, email: str, role: str) -> dict:
                 "status": "active",
             }
         )
-    r = client.post("/api/staff", json=payload)
-    assert r.status_code == 201
+    # Staff creation directly through the service layer, bypassing the API
+    # (POST /api/staff now requires an admin session) - this is pure test
+    # setup, not the thing under test.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        create_staff(db, StaffCreate(**payload))
+    finally:
+        db.close()
 
     body = get_outbox()[-1].body
     match = re.search(r"temporary password is: (\S+)", body)

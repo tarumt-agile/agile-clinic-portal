@@ -17,6 +17,8 @@ from agile_ci_demo.appointments.service import get_appointment_by_reference
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -79,16 +81,21 @@ def _register_patient(client: TestClient, **overrides: object) -> str:
     return str(body["patient_id"])
 
 
+def _create_staff_direct(client: TestClient, payload: dict[str, object]) -> str:
+    """Create a staff account directly through the service layer, bypassing
+    the API (POST /api/staff now requires an admin session) - this is pure
+    test setup, not the thing under test, and is often needed before any
+    admin session can exist at all. Returns the new account's public staff_id."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff = create_staff(db, StaffCreate(**payload))
+        return str(staff.staff_id)
+    finally:
+        db.close()
+
+
 def _register_doctor(client: TestClient, **overrides: object) -> str:
-    response = client.post(
-        "/api/staff",
-        json=valid_staff_payload(**overrides),
-    )
-
-    assert response.status_code == 201, response.json()
-
-    body = response.json()
-    return str(body["staff_id"])
+    return _create_staff_direct(client, valid_staff_payload(**overrides))
 
 
 def _login_as_doctor(client: TestClient, email: str) -> None:
@@ -106,38 +113,28 @@ def _login_as_doctor(client: TestClient, email: str) -> None:
     client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
 
 
-def _login_as_admin(client: TestClient) -> None:
-    response = client.post(
-        "/api/staff",
-        json={
-            "full_name": "Admin User",
-            "email": "admin@example.com",
-            "role": "admin",
-        },
-    )
-    assert response.status_code == 201, response.json()
+def _login_as_admin(client: TestClient, email: str = "admin@example.com") -> None:
+    _create_staff_direct(client, {"full_name": "Admin User", "email": email, "role": "admin"})
 
     from agile_ci_demo.core.email import get_outbox
 
-    body = get_outbox()[-1].body
+    body = next(e.body for e in reversed(get_outbox()) if e.to == email)
     match = re.search(r"temporary password is: (\S+)", body)
     assert match is not None
-    client.post("/api/auth/login", json={"email": "admin@example.com", "password": match.group(1)})
+    client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
 
 
 def _login_as_receptionist(client: TestClient, email: str = "receptionist@example.com") -> None:
     """Register and log in as a receptionist - the default front-desk session
     used by tests that book or cancel appointments through the API, now that
     those actions require a receptionist/nurse/admin (or patient) session."""
-    response = client.post(
-        "/api/staff",
-        json={"full_name": "Reception User", "email": email, "role": "receptionist"},
+    _create_staff_direct(
+        client, {"full_name": "Reception User", "email": email, "role": "receptionist"}
     )
-    assert response.status_code == 201, response.json()
 
     from agile_ci_demo.core.email import get_outbox
 
-    body = get_outbox()[-1].body
+    body = next(e.body for e in reversed(get_outbox()) if e.to == email)
     match = re.search(r"temporary password is: (\S+)", body)
     assert match is not None
     client.post("/api/auth/login", json={"email": email, "password": match.group(1)})

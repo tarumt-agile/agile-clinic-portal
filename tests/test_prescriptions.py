@@ -20,6 +20,8 @@ from agile_ci_demo.pharmacy.service import seed_default_medications
 from agile_ci_demo.prescriptions import models as _prescription_models  # noqa: F401
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 
 @pytest.fixture
@@ -165,14 +167,20 @@ def register_doctor(
     email = str(payload["email"])
 
     clear_outbox()
-    response = client.post("/api/staff", json=payload)
-    assert response.status_code == 201, response.json()
+    # Staff creation directly through the service layer, bypassing the API
+    # (POST /api/staff now requires an admin session) - this is pure test
+    # setup, not the thing under test.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff_id = str(create_staff(db, StaffCreate(**payload)).staff_id)
+    finally:
+        db.close()
 
     welcome_email = next(message for message in reversed(get_outbox()) if message.to == email)
     match = re.search(r"temporary password is: (\S+)", welcome_email.body)
     assert match is not None
 
-    return str(response.json()["staff_id"]), email, match.group(1)
+    return staff_id, email, match.group(1)
 
 
 def login_doctor(
