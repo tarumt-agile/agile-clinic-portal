@@ -63,17 +63,23 @@ def get_patient_by_ic(db: Session, ic_or_passport: str) -> Patient | None:
 def search_patients_by_ic_prefix(db: Session, prefix: str, limit: int = 8) -> list[Patient]:
     """Patients whose IC/passport number starts with the given digits/characters -
     powers the autocomplete suggestions on the appointment booking form, so
-    front-desk staff don't need to type the full IC before anything resolves."""
+    front-desk staff don't need to type the full IC before anything resolves.
+
+    ic_or_passport is encrypted at rest (see core/encryption.py), and only
+    exact-match comparisons survive encryption - a SQL `LIKE 'prefix%'` can no
+    longer see the plaintext to match against. There's no way around reading
+    every row to filter by prefix once the column is encrypted, so this loads
+    the whole table and filters/sorts in Python instead; fine at this app's
+    scale (single-clinic patient counts), not something that would scale to a
+    multi-tenant deployment with millions of patients.
+    """
     prefix = prefix.strip()
     if not prefix:
         return []
-    stmt = (
-        select(Patient)
-        .where(Patient.ic_or_passport.like(f"{prefix}%"))
-        .order_by(Patient.ic_or_passport)
-        .limit(limit)
-    )
-    return list(db.execute(stmt).scalars().all())
+    all_patients = db.execute(select(Patient)).scalars().all()
+    matches = [p for p in all_patients if p.ic_or_passport.startswith(prefix)]
+    matches.sort(key=lambda p: p.ic_or_passport)
+    return matches[:limit]
 
 
 def _local_day_bounds_utc(date: dt.date) -> tuple[dt.datetime, dt.datetime]:

@@ -267,17 +267,23 @@ def backfill_prescription_medications() -> None:
 
 
 def encrypt_legacy_patient_pii() -> None:
-    """One-time upgrade: encrypt any patient phone_number/email/address values
-    that predate column-level encryption (see patients/models.py). Runs raw SQL
-    rather than going through the ORM/Patient model, since the model's
-    EncryptedString type would try to decrypt these still-plaintext values on
-    read and fail. Safe to run on every startup - already-encrypted values are
-    detected via is_encrypted() and left untouched.
+    """One-time upgrade: encrypt any patient phone_number/email/address/
+    ic_or_passport values that predate column-level encryption (see
+    patients/models.py). Runs raw SQL rather than going through the ORM/
+    Patient model, since the model's EncryptedString/DeterministicEncryptedString
+    types would try to decrypt these still-plaintext values on read and fail.
+    Safe to run on every startup - already-encrypted values are detected via
+    is_encrypted() and left untouched.
     """
     if not settings.database_url.startswith("sqlite"):
         return
 
-    from agile_ci_demo.core.encryption import encrypt_value, is_encrypted
+    from agile_ci_demo.core.encryption import encrypt_deterministic, encrypt_value, is_encrypted
+
+    # ic_or_passport is encrypted deterministically (see core/encryption.py)
+    # so exact-match lookups keep working; the others use a random nonce.
+    randomly_encrypted_columns = ("phone_number", "email", "address")
+    deterministically_encrypted_columns = ("ic_or_passport",)
 
     with engine.begin() as connection:
         table_names = set(inspect(connection).get_table_names())
@@ -285,16 +291,21 @@ def encrypt_legacy_patient_pii() -> None:
             return
 
         rows = connection.execute(
-            text("SELECT id, phone_number, email, address FROM patients")
+            text("SELECT id, phone_number, email, address, ic_or_passport FROM patients")
         ).fetchall()
 
         for row in rows:
             updates: dict[str, str] = {}
-            for column in ("phone_number", "email", "address"):
+            for column in randomly_encrypted_columns:
                 value = getattr(row, column)
                 if value is None or is_encrypted(value):
                     continue
                 updates[column] = encrypt_value(value)
+            for column in deterministically_encrypted_columns:
+                value = getattr(row, column)
+                if value is None or is_encrypted(value):
+                    continue
+                updates[column] = encrypt_deterministic(value)
 
             if updates:
                 set_clause = ", ".join(f"{column} = :{column}" for column in updates)
