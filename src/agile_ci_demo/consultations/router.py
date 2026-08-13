@@ -110,7 +110,7 @@ def start_consultation_endpoint(
         )
     except PatientNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ConsultationNoteConflictError as exc:
+    except (ConsultationNoteConflictError, ConsultationAlreadyEndedError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _serialize(note)
 

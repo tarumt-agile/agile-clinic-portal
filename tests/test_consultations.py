@@ -726,6 +726,31 @@ def test_starting_a_consultation_does_not_complete_its_appointment(client: TestC
     assert appt["status"] == "scheduled"
 
 
+def test_starting_an_appointment_whose_consultation_already_ended_returns_409(
+    client: TestClient,
+) -> None:
+    """Reopening the note URL for an appointment whose consultation was already
+    completed (e.g. via a stale "Continue Consultation" link or the browser's
+    back button) must not silently hand back the completed note as an editable
+    draft - that only leads to the doctor filling in the form and getting a
+    confusing error when they try to save."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    appointment_reference = _book_appointment(client, patient_id, doctor_id)
+
+    started = client.post(
+        "/api/consultations/start",
+        json={"patient_id": patient_id, "appointment_reference": appointment_reference},
+    ).json()
+    client.patch(f"/api/consultations/{started['record_id']}/end")
+
+    r = client.post(
+        "/api/consultations/start",
+        json={"patient_id": patient_id, "appointment_reference": appointment_reference},
+    )
+    assert r.status_code == 409
+
+
 def test_update_consultation_note_success(client: TestClient) -> None:
     """
     Scenario: Doctor fills in a started consultation
