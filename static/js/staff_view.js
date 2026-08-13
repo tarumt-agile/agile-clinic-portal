@@ -384,6 +384,16 @@
       !isDoctor
     );
 
+    // Non-doctor staff only have the Staff Information card - without this,
+    // the grid still reserves a second column for the hidden Doctor
+    // Information card, leaving half the row visually empty.
+    document
+      .querySelector(".staff-detail-grid")
+      .classList.toggle(
+        "staff-detail-grid--single",
+        !isDoctor
+      );
+
     byId(
       "doctor-edit-fields"
     ).classList.toggle(

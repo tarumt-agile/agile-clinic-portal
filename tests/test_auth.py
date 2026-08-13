@@ -106,6 +106,52 @@ def test_login_page_renders(client: TestClient) -> None:
     assert r.status_code == 200
 
 
+def test_login_page_redirects_when_already_logged_in_as_staff(client: TestClient) -> None:
+    """A still-valid session must never render the login form - session
+    cookies outlive the server process (same secret key, 14-day expiry), so
+    without this a restarted dev server would show the login page wrapped in
+    the full authenticated sidebar for anyone who never explicitly logged out."""
+    _login_as_admin(client)
+
+    r = client.get("/auth/login", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/staff"
+
+
+def test_login_page_redirects_to_the_right_dashboard_per_role(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="doctor@example.com", role="doctor"
+    )
+    client.post("/api/auth/login", json={"email": "doctor@example.com", "password": temp_password})
+
+    r = client.get("/auth/login", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/appointments/schedule"
+
+
+def test_login_page_redirects_when_already_logged_in_as_patient(client: TestClient) -> None:
+    created = client.post(
+        "/api/patients",
+        json={
+            "full_name": "Jane Tan",
+            "date_of_birth": "1990-05-20",
+            "gender": "female",
+            "phone_number": "012-3456789",
+            "email": "jane.tan@example.com",
+            "ic_or_passport": "900520-10-1234",
+            "address": "1 Jalan Testing, Kuala Lumpur",
+        },
+    ).json()
+    client.post(
+        "/api/auth/patient-login",
+        json={"ic_or_passport": created["ic_or_passport"], "phone_number": created["phone_number"]},
+    )
+
+    r = client.get("/auth/login", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/patients/dashboard"
+
+
 def test_login_success(client: TestClient) -> None:
     """
     Scenario: Log in with a valid temp password

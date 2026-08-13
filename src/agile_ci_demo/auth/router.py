@@ -1,7 +1,7 @@
 from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from agile_ci_demo.auth.deps import login_patient, login_staff, logout
@@ -87,8 +87,24 @@ def delete_session(request: Request) -> dict:
     return {"status": "ok"}
 
 
-@pages_router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request) -> HTMLResponse:
+@pages_router.get("/login", response_class=HTMLResponse, response_model=None)
+def login_page(request: Request) -> HTMLResponse | RedirectResponse:
+    """Renders the login form - unless a still-valid session already exists,
+    in which case it sends the visitor straight to their dashboard instead.
+
+    Session cookies are signed and outlive the server process (14-day expiry,
+    same secret key across restarts), so restarting the dev server does not
+    log anyone out. Without this check, a still-authenticated visitor landing
+    here would see the login form wrapped in the full authenticated app shell
+    (sidebar included) - base.html's `authed` gating is keyed off the same
+    session, so it has no way to know this particular page should always
+    render as logged-out.
+    """
+    role = request.session.get("role")
+    if role:
+        return RedirectResponse(redirect_url_for_role(Role(role)), status_code=303)
+    if request.session.get("user_type") == "patient":
+        return RedirectResponse("/patients/dashboard", status_code=303)
     return templates.TemplateResponse(request, "auth/login.html", {})
 
 

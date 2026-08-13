@@ -96,6 +96,13 @@
   gap: 1.2rem;
 }
 
+/* Non-doctor staff only ever show the Staff Information card - without this,
+   the second column stays reserved for the hidden Doctor Information card,
+   leaving half the row empty. */
+.staff-detail-grid.staff-detail-grid--single {
+  grid-template-columns: 1fr;
+}
+
 .staff-detail-card {
   padding: 1.3rem;
 }

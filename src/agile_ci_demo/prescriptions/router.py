@@ -9,7 +9,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.auth.deps import require_role
+from agile_ci_demo.auth.deps import require_patient, require_role
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
@@ -45,6 +45,7 @@ from agile_ci_demo.prescriptions.service import (
     get_prescription_options,
     update_prescription_instructions,
 )
+from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.staff.models import Staff
 
 api_router = APIRouter(
@@ -320,6 +321,43 @@ def get_prescriptions_for_consultation(
         serialize_prescription(
             item,
             current_doctor_id,
+        )
+        for item in prescriptions
+    ]
+
+    return PrescriptionList(
+        items=items,
+        total=len(items),
+    )
+
+
+# This route returns the logged-in patient's own prescriptions. Registered
+# before the generic "/{prescription_id}" route below - FastAPI matches
+# routes in registration order, so "mine" would otherwise be captured as a
+# prescription_id path parameter instead of reaching this handler.
+@api_router.get(
+    "/mine",
+    response_model=PrescriptionList,
+)
+def get_my_prescriptions(
+    db: Session = Depends(get_db),
+    patient: Patient = Depends(require_patient),
+) -> PrescriptionList:
+    try:
+        prescriptions = get_patient_prescriptions(
+            db,
+            patient.patient_id or "",
+        )
+    except PrescriptionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    items = [
+        serialize_prescription(
+            item,
+            None,
         )
         for item in prescriptions
     ]
