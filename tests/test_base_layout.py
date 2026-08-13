@@ -96,22 +96,16 @@ def create_patient_and_login(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize("role", ["receptionist", "nurse"])
-def test_receptionist_and_nurse_see_front_desk_sidebar_links(
-    client: TestClient, role: str
-) -> None:
+def test_receptionist_and_nurse_see_front_desk_sidebar_links(client: TestClient, role: str) -> None:
     create_staff_and_login(client, role)
 
     response = client.get("/patients")
 
     assert response.status_code == 200
     assert '<a class="sidebar-link active" href="/patients">Patients</a>' in response.text
+    assert '<a class="sidebar-link" href="/patients/register">Register Patient</a>' in response.text
     assert (
-        '<a class="sidebar-link" href="/patients/register">Register Patient</a>'
-        in response.text
-    )
-    assert (
-        '<a class="sidebar-link" href="/appointments/create">Book Appointment</a>'
-        in response.text
+        '<a class="sidebar-link" href="/appointments/create">Book Appointment</a>' in response.text
     )
     assert (
         '<a class="sidebar-link" href="/appointments/doctor-schedule">Doctor Schedule</a>'
@@ -130,6 +124,7 @@ def test_admin_sees_pharmacy_staff_and_reports_sidebar_links(client: TestClient)
     response = client.get("/patients")
 
     assert response.status_code == 200
+    assert '<a class="sidebar-link" href="/dashboard">Dashboard</a>' in response.text
     assert '<a class="sidebar-link" href="/pharmacy">Pharmacy</a>' in response.text
     assert '<a class="sidebar-link" href="/staff">Staff</a>' in response.text
     assert '<a class="sidebar-link" href="/reports">Reports</a>' in response.text
@@ -163,13 +158,9 @@ def test_patient_sees_only_patient_sidebar_links(client: TestClient) -> None:
         in response.text
     )
     assert (
-        '<a class="sidebar-link" href="/appointments/book">Book My Appointment</a>'
-        in response.text
+        '<a class="sidebar-link" href="/appointments/book">Book My Appointment</a>' in response.text
     )
-    assert (
-        '<a class="sidebar-link" href="/appointments/mine">My Appointments</a>'
-        in response.text
-    )
+    assert '<a class="sidebar-link" href="/appointments/mine">My Appointments</a>' in response.text
     assert 'href="/staff"' not in response.text
 
 
@@ -188,8 +179,34 @@ def test_login_page_renders_auth_shell_with_no_sidebar(client: TestClient) -> No
 
     assert response.status_code == 200
     assert 'class="auth-shell"' in response.text
-    assert 'class="auth-card-wrap"' in response.text
+    assert "auth-card-wrap" in response.text
     assert 'id="app-sidebar"' not in response.text
+
+
+def test_login_page_still_has_staff_and_patient_tabs(client: TestClient) -> None:
+    """Regression check for the split-panel redesign: the tab toggle and both
+    login forms must keep their exact ids - static/js/auth-login.js wires up
+    to these ids and is not touched by this redesign."""
+    response = client.get("/auth/login")
+
+    assert response.status_code == 200
+    assert 'id="staff-tab-btn"' in response.text
+    assert 'id="patient-tab-btn"' in response.text
+    assert 'id="staff-login-form"' in response.text
+    assert 'id="patient-login-form"' in response.text
+    assert 'id="staff-submit-btn"' in response.text
+    assert 'id="patient-submit-btn"' in response.text
+    assert 'href="/auth/forgot-password"' in response.text
+    assert "login-split" in response.text
+
+
+def test_forgot_password_page_keeps_single_card_layout(client: TestClient) -> None:
+    """forgot_password.html is explicitly out of scope for the split-panel
+    redesign, so it must render the plain single-class auth-card-wrap."""
+    response = client.get("/auth/forgot-password")
+
+    assert response.status_code == 200
+    assert 'class="auth-card-wrap"' in response.text
 
 
 def test_logout_link_requires_confirmation(client: TestClient) -> None:
@@ -226,3 +243,27 @@ def test_receptionist_doctor_schedule_page_has_view_toggle(client: TestClient) -
     assert 'id="view-list-btn"' in response.text
     assert 'id="view-calendar-btn"' in response.text
     assert 'id="schedule-calendar"' in response.text
+
+
+@pytest.mark.parametrize("role", ["receptionist", "nurse", "doctor", "admin"])
+def test_staff_sidebar_has_my_profile_link(client: TestClient, role: str) -> None:
+    create_staff_and_login(client, role)
+
+    response = client.get("/staff/profile")
+
+    assert response.status_code == 200
+    assert 'class="topbar-user topbar-user-link"' in response.text
+    assert 'href="/staff/profile"' in response.text
+    assert "Nora Ibrahim" in response.text
+
+
+def test_patient_sidebar_has_no_my_profile_link(client: TestClient) -> None:
+    create_patient_and_login(client)
+
+    response = client.get("/patients/dashboard")
+
+    assert response.status_code == 200
+    assert 'href="/staff/profile"' not in response.text
+    assert 'class="topbar-user"' in response.text
+    assert 'class="topbar-user topbar-user-link"' not in response.text
+    assert "Jane Tan" in response.text

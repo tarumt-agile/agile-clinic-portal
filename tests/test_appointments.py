@@ -526,7 +526,9 @@ def test_schedule_range_returns_appointments_across_multiple_days(client: TestCl
         ),
     )
 
-    r = client.get(f"/api/appointments/schedule?start_date={TOMORROW}&end_date={day_after_tomorrow}")
+    r = client.get(
+        f"/api/appointments/schedule?start_date={TOMORROW}&end_date={day_after_tomorrow}"
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["start_date"] == TOMORROW

@@ -41,6 +41,19 @@ def _disable_real_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "smtp_password", None)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter() -> None:
+    """Login-lockout state is a module-level dict (see core/rate_limit.py) that
+    otherwise persists across tests in the same pytest process - tests reusing
+    the same email (e.g. "alice.wong@example.com", the default in test_auth.py)
+    would see stale lockouts from earlier tests without this."""
+    from agile_ci_demo.core.rate_limit import reset_all
+
+    reset_all()
+    yield
+    reset_all()
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     for item in items:
         if not isinstance(item, pytest.Function):

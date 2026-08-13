@@ -123,6 +123,88 @@ def test_login_unknown_email_returns_401(client: TestClient) -> None:
     assert r.status_code == 401
 
 
+# --- 1b. Login rate limiting / lockout ---------------------------------------
+
+
+def test_login_locks_out_after_five_failed_attempts(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+
+    for _ in range(4):
+        r = client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+        assert r.status_code == 401
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "alice.wong@example.com", "password": "wrong-password"},
+    )
+    assert r.status_code == 429
+
+    # Even the correct password is rejected while locked out.
+    r = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert r.status_code == 429
+
+
+def test_login_lockout_sends_admin_alert(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    _login_as_admin(client)
+    client.post("/api/auth/logout")
+
+    for _ in range(5):
+        client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+
+    alert_emails = [e for e in get_outbox() if e.to == "admin@example.com"]
+    assert any("lock" in e.subject.lower() for e in alert_emails)
+
+
+def test_login_lockout_expires_after_the_configured_duration(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agile_ci_demo.core import rate_limit
+
+    temp_password = _create_staff_and_get_temp_password(client)
+    monkeypatch.setattr(rate_limit, "LOCKOUT_DURATION", dt.timedelta(seconds=-1))
+
+    for _ in range(5):
+        client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+
+    r = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert r.status_code == 200
+
+
+def test_successful_login_resets_the_failed_attempt_count(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+
+    for _ in range(4):
+        client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+    r = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert r.status_code == 200
+
+    for _ in range(4):
+        r = client.post(
+            "/api/auth/login",
+            json={"email": "alice.wong@example.com", "password": "wrong-password"},
+        )
+        assert r.status_code == 401
+
+
 # --- 2. Block login for deactivated accounts --------------------------------
 
 
@@ -545,3 +627,163 @@ def test_reset_password_rejects_mismatched_passwords(client: TestClient) -> None
 def test_reset_password_page_renders(client: TestClient) -> None:
     r = client.get("/auth/reset-password?token=whatever")
     assert r.status_code == 200
+
+
+# --- 8. Self-service change password -----------------------------------------
+
+
+def test_change_password_success(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="nurse")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": temp_password,
+            "new_password": "NewPassword123",
+            "confirm_password": "NewPassword123",
+        },
+    )
+    assert r.status_code == 200
+
+    stale = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    assert stale.status_code == 401
+
+    fresh = client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": "NewPassword123"}
+    )
+    assert fresh.status_code == 200
+
+
+def test_change_password_wrong_current_password_returns_400(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="nurse")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": "wrong-password",
+            "new_password": "NewPassword123",
+            "confirm_password": "NewPassword123",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_change_password_mismatched_confirm_returns_422(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="nurse")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": temp_password,
+            "new_password": "NewPassword123",
+            "confirm_password": "SomethingElse123",
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_requires_login(client: TestClient) -> None:
+    r = client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": "whatever",
+            "new_password": "NewPassword123",
+            "confirm_password": "NewPassword123",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+# --- 9. Auth audit log --------------------------------------------------------
+
+
+def test_login_success_is_audit_logged(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client)
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    client.post("/api/auth/logout")
+    _login_as_admin(client)
+
+    r = client.get(
+        "/api/auth/audit-log",
+        params={"from": dt.date.today().isoformat(), "to": dt.date.today().isoformat()},
+    )
+    assert r.status_code == 200
+    events = [item["event"] for item in r.json()["items"]]
+    assert "login_success" in events
+
+
+def test_login_failure_is_audit_logged(client: TestClient) -> None:
+    _create_staff_and_get_temp_password(client)
+    _login_as_admin(client)
+
+    client.post(
+        "/api/auth/login",
+        json={"email": "alice.wong@example.com", "password": "wrong-password"},
+    )
+
+    r = client.get(
+        "/api/auth/audit-log",
+        params={
+            "from": dt.date.today().isoformat(),
+            "to": dt.date.today().isoformat(),
+        },
+    )
+    assert r.status_code == 200
+    events = [item["event"] for item in r.json()["items"]]
+    assert "login_failed" in events
+
+
+def test_logout_is_audit_logged(client: TestClient) -> None:
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.get(
+        "/api/auth/audit-log",
+        params={
+            "from": dt.date.today().isoformat(),
+            "to": dt.date.today().isoformat(),
+        },
+    )
+    events = [item["event"] for item in r.json()["items"]]
+    assert "logout" in events
+
+
+def test_audit_log_requires_admin(client: TestClient) -> None:
+    r = client.get(
+        "/api/auth/audit-log",
+        params={"from": dt.date.today().isoformat(), "to": dt.date.today().isoformat()},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+def test_audit_log_page_renders_for_admin(client: TestClient) -> None:
+    _login_as_admin(client)
+    r = client.get("/auth/audit-log")
+    assert r.status_code == 200
+    assert "Audit Log" in r.text
+
+
+def test_audit_log_page_redirects_for_non_admin(client: TestClient) -> None:
+    r = client.get("/auth/audit-log", follow_redirects=False)
+    assert r.status_code == 303

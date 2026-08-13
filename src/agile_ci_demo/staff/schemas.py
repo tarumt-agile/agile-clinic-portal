@@ -172,6 +172,37 @@ class StaffUpdate(BaseModel):
         return value
 
 
+class StaffSelfUpdate(BaseModel):
+    """A staff member editing their OWN full_name/email. Deliberately excludes
+    is_active, license_number, specialty, and doctor scheduling fields, which
+    stay admin-only via StaffUpdate / PATCH /api/staff/{staff_id}."""
+
+    full_name: str = Field(max_length=120)
+    email: EmailStr
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, value: str) -> str:
+        value = " ".join(value.strip().split())
+        if not value:
+            raise ValueError("Full name must be filled in.")
+        if len(value.split()) < 2:
+            raise ValueError("Full name must contain at least 2 words.")
+        if not all(
+            word.replace("-", "").replace("'", "").replace(".", "").isalpha()
+            for word in value.split()
+        ):
+            raise ValueError(
+                "Full name may only contain letters, spaces, apostrophes, periods and hyphens."
+            )
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def normalise_email(cls, value: EmailStr) -> str:
+        return str(value).strip().lower()
+
+
 class StaffStatusUpdate(BaseModel):
     is_active: bool
 
