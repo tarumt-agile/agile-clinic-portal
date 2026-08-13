@@ -5,7 +5,17 @@
     scheduled: "#4f46e5",
     completed: "#059669",
     cancelled: "#94a3b8",
+    skipped: "#dc2626",
   };
+
+  // A "scheduled" appointment whose slot has already ended was never
+  // cancelled and never turned into a consultation - display-only, since the
+  // stored status is still "scheduled" (nothing server-side marks these).
+  function isSkipped(appointment) {
+    if (appointment.status !== "scheduled") return false;
+    const endDateTime = new Date(`${appointment.appointment_date}T${appointment.end_time}`);
+    return endDateTime.getTime() < Date.now();
+  }
 
   function initScheduleCalendar(config) {
     const el = document.getElementById(config.containerId);
@@ -29,8 +39,10 @@
           })
           .then((data) => {
             const events = data.appointments.map((a) => {
-              const color = STATUS_COLORS[a.status] || "#64748b";
-              const suffix = a.status === "cancelled" ? " (Cancelled)" : "";
+              const skipped = isSkipped(a);
+              const displayStatus = skipped ? "skipped" : a.status;
+              const color = STATUS_COLORS[displayStatus] || "#64748b";
+              const suffix = a.status === "cancelled" ? " (Cancelled)" : skipped ? " (Skipped)" : "";
               return {
                 id: a.reference_number,
                 title: a.start_time.slice(0, 5) + " " + a.patient_name + suffix,

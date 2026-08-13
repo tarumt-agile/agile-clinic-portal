@@ -132,7 +132,7 @@
   }
 
   function actionCell(appointment, locked) {
-    return `<div class="d-flex gap-1">${viewPatientButton(appointment.patient_id)}${consultationAction(appointment, locked)}</div>`;
+    return `<div class="d-flex align-items-center gap-2">${viewPatientButton(appointment.patient_id)}${consultationAction(appointment, locked)}</div>`;
   }
 
   function renderTable(appointments) {
