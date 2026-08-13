@@ -49,6 +49,11 @@ def require_role(
 ) -> Callable[..., Staff]:
     """Require an active staff cookie session or Bearer JWT with an allowed role."""
     allowed = {role.value for role in roles}
+    forbidden_detail = (
+        f"{roles[0].value.title()} role required."
+        if len(roles) == 1
+        else "Required staff role missing."
+    )
 
     def dependency(
         request: Request,
@@ -76,7 +81,7 @@ def require_role(
             if forbidden_for_wrong_role:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin role required.",
+                    detail=forbidden_detail,
                 )
             raise NotAuthenticatedError()
         return staff

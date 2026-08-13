@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -47,6 +49,16 @@ from agile_ci_demo.prescriptions.service import (
 )
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.staff.models import Staff
+
+prescription_doctor = require_role(
+    Role.DOCTOR,
+    forbidden_for_wrong_role=True,
+)
+doctor_only_responses: dict[int | str, dict[str, Any]] = {
+    status.HTTP_403_FORBIDDEN: {
+        "description": ("Forbidden: the authenticated staff member does not have the doctor role.")
+    }
+}
 
 api_router = APIRouter(
     prefix="/api/prescriptions",
@@ -175,11 +187,17 @@ def search_medication_catalogue(
     "",
     response_model=PrescriptionOut,
     status_code=status.HTTP_201_CREATED,
+    responses=doctor_only_responses,
+    summary="Create a prescription",
+    description=(
+        "Issues medication for a consultation diagnosis. Requires an authenticated "
+        "staff JWT with the doctor role."
+    ),
 )
 def create_prescription_endpoint(
     payload: PrescriptionCreate,
     db: Session = Depends(get_db),
-    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    doctor: Staff = Depends(prescription_doctor),
 ) -> PrescriptionOut:
     try:
         prescription = create_prescription(
@@ -401,16 +419,28 @@ def get_prescription_details(
 @api_router.patch(
     "/{prescription_id}/instructions",
     response_model=PrescriptionOut,
+    responses=doctor_only_responses,
+    summary="Update prescription instructions",
+    description=(
+        "Updates dosage, frequency, and duration. Requires the doctor role and the "
+        "authenticated doctor must be the original prescriber."
+    ),
 )
 @api_router.patch(
     "/{prescription_id}/dosage",
     response_model=PrescriptionOut,
+    responses=doctor_only_responses,
+    summary="Update prescription dosage instructions",
+    description=(
+        "Backward-compatible alias for updating prescription instructions. Requires "
+        "the doctor role and the authenticated doctor must be the original prescriber."
+    ),
 )
 def update_prescription_instructions_endpoint(
     prescription_id: str,
     payload: PrescriptionInstructionUpdate,
     db: Session = Depends(get_db),
-    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    doctor: Staff = Depends(prescription_doctor),
 ) -> PrescriptionOut:
     try:
         prescription = update_prescription_instructions(
