@@ -9,7 +9,6 @@ dist/
 .hypothesis/
 *.egg-info/
 *.db
-!clinic.db
 *.db-journal
 .env
 uploads/
