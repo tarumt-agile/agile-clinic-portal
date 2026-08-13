@@ -1,0 +1,346 @@
+from __future__ import annotations
+
+from typing import TypedDict
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import (
+    Session,
+    selectinload,
+)
+
+from agile_ci_demo.patients.service import (
+    get_patient_by_patient_id,
+)
+from agile_ci_demo.pharmacy.service import (
+    MedicationNotFoundError,
+    get_medication_by_public_id,
+    list_medications,
+)
+from agile_ci_demo.prescriptions.models import (
+    Prescription,
+    PrescriptionHistory,
+)
+from agile_ci_demo.prescriptions.schemas import (
+    PrescriptionCreate,
+    PrescriptionInstructionUpdate,
+)
+from agile_ci_demo.consultations.models import Diagnosis
+from agile_ci_demo.consultations.service import (
+    get_consultation_note_by_record_id,
+)
+from agile_ci_demo.staff.models import Staff
+
+DOSAGE_OPTIONS = [
+    "Half tablet",
+    "1 tablet",
+    "2 tablets",
+    "1 capsule",
+    "2 capsules",
+    "2.5 mL",
+    "5 mL",
+    "10 mL",
+    "1 puff",
+    "2 puffs",
+    "Apply a thin layer",
+    "1 sachet",
+]
+
+
+FREQUENCY_OPTIONS = [
+    "Once daily",
+    "Twice daily",
+    "Three times daily",
+    "Four times daily",
+    "Every 4 hours",
+    "Every 6 hours",
+    "Every 8 hours",
+    "Every 12 hours",
+    "At night",
+    "As needed",
+]
+
+
+DURATION_OPTIONS = [
+    "1 day",
+    "3 days",
+    "5 days",
+    "7 days",
+    "10 days",
+    "14 days",
+    "21 days",
+    "30 days",
+    "Until finished",
+    "Ongoing",
+]
+
+
+class PrescriptionNotFoundError(Exception):
+    """Raised when a prescription is not found."""
+
+
+class ConsultationRecordNotFoundError(Exception):
+    """Raised when a consultation record is not found."""
+
+
+class DiagnosisNotFoundError(Exception):
+    """Raised when a diagnosis is not found."""
+
+
+class PrescriptionPermissionError(Exception):
+    """Raised when a doctor lacks permission."""
+
+
+class PrescriptionConflictError(Exception):
+    """Raised when prescription data conflicts."""
+
+
+class PrescriptionOptions(TypedDict):
+    medications: list[dict[str, str]]
+    dosages: list[str]
+    frequencies: list[str]
+    durations: list[str]
+
+
+def get_prescription_options(
+    db: Session,
+) -> PrescriptionOptions:
+    """Return selectable prescription form options."""
+
+    return {
+        "medications": [
+            {
+                "value": item.prescription_value,
+                "label": item.prescription_value,
+            }
+            for item in list_medications(db)
+        ],
+        "dosages": DOSAGE_OPTIONS,
+        "frequencies": FREQUENCY_OPTIONS,
+        "durations": DURATION_OPTIONS,
+    }
+
+
+def _prescription_load_options():
+    """Return relationship-loading options."""
+
+    return (
+        selectinload(Prescription.consultation_note),
+        selectinload(Prescription.diagnosis),
+        selectinload(Prescription.patient),
+        selectinload(Prescription.prescribing_doctor),
+        selectinload(Prescription.medication_record),
+        selectinload(Prescription.history).selectinload(PrescriptionHistory.changed_by_doctor),
+    )
+
+
+def create_prescription(
+    db: Session,
+    data: PrescriptionCreate,
+    doctor: Staff,
+) -> Prescription:
+    """Create a prescription for one diagnosis."""
+
+    consultation = get_consultation_note_by_record_id(
+        db,
+        data.consultation_record_id,
+    )
+
+    if consultation is None:
+        raise ConsultationRecordNotFoundError("Consultation record not found.")
+
+    diagnosis = db.execute(
+        select(Diagnosis)
+        .where(Diagnosis.id == data.diagnosis_id)
+        .where(Diagnosis.consultation_note_id == consultation.id)
+    ).scalar_one_or_none()
+
+    if diagnosis is None:
+        raise DiagnosisNotFoundError(
+            "The selected diagnosis does not belong " "to this consultation."
+        )
+
+    if consultation.doctor_id != doctor.id:
+        raise PrescriptionPermissionError(
+            "Only the doctor who created this " "consultation can add medication."
+        )
+
+    medication = get_medication_by_public_id(
+        db,
+        data.medication_id,
+    )
+    if medication is None or not medication.is_active:
+        raise MedicationNotFoundError("The selected medication was not found or is inactive.")
+
+    prescription = Prescription(
+        consultation_note_id=consultation.id,
+        diagnosis_id=diagnosis.id,
+        patient_id=consultation.patient_id,
+        prescribing_doctor_id=doctor.id,
+        medication_id=medication.id,
+        medication=medication.prescription_value,
+        dosage=data.dosage,
+        frequency=data.frequency,
+        duration=data.duration,
+        status="active",
+    )
+
+    db.add(prescription)
+
+    try:
+        db.flush()
+
+        prescription.prescription_id = f"RX{prescription.id:05d}"
+
+        db.commit()
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise PrescriptionConflictError("The prescription could not be created.") from exc
+
+    return (
+        get_prescription_by_public_id(
+            db,
+            prescription.prescription_id,
+        )
+        or prescription
+    )
+
+
+def get_prescription_by_public_id(
+    db: Session,
+    prescription_id: str,
+) -> Prescription | None:
+    """Return one prescription by public ID."""
+
+    statement = (
+        select(Prescription)
+        .options(*_prescription_load_options())
+        .where(Prescription.prescription_id == prescription_id)
+    )
+
+    return db.execute(statement).scalar_one_or_none()
+
+
+def get_patient_prescriptions(
+    db: Session,
+    patient_id: str,
+) -> list[Prescription]:
+    """Return a patient's prescriptions newest first."""
+
+    patient = get_patient_by_patient_id(
+        db,
+        patient_id,
+    )
+
+    if patient is None:
+        raise PrescriptionNotFoundError(f"No patient found with patient_id " f"'{patient_id}'.")
+
+    statement = (
+        select(Prescription)
+        .options(*_prescription_load_options())
+        .where(Prescription.patient_id == patient.id)
+        .order_by(
+            Prescription.issued_at.desc(),
+            Prescription.id.desc(),
+        )
+    )
+
+    return list(db.execute(statement).scalars().all())
+
+
+def get_consultation_prescriptions(
+    db: Session,
+    record_id: str,
+) -> list[Prescription]:
+    """Return prescriptions for one consultation."""
+
+    consultation = get_consultation_note_by_record_id(
+        db,
+        record_id,
+    )
+
+    if consultation is None:
+        raise ConsultationRecordNotFoundError("Consultation record not found.")
+
+    statement = (
+        select(Prescription)
+        .options(*_prescription_load_options())
+        .where(Prescription.consultation_note_id == consultation.id)
+        .order_by(
+            Prescription.diagnosis_id.asc(),
+            Prescription.issued_at.asc(),
+            Prescription.id.asc(),
+        )
+    )
+
+    return list(db.execute(statement).scalars().all())
+
+
+def update_prescription_instructions(
+    db: Session,
+    prescription_id: str,
+    data: PrescriptionInstructionUpdate,
+    doctor: Staff,
+) -> Prescription:
+    """Update prescription instructions and save history."""
+
+    prescription = get_prescription_by_public_id(
+        db,
+        prescription_id,
+    )
+
+    if prescription is None:
+        raise PrescriptionNotFoundError("Prescription not found.")
+
+    if prescription.prescribing_doctor_id != doctor.id:
+        raise PrescriptionPermissionError(
+            "Only the prescribing doctor can " "update this prescription."
+        )
+
+    if prescription.status != "active":
+        raise PrescriptionConflictError("Only an active prescription can be updated.")
+
+    no_change = (
+        data.dosage == prescription.dosage
+        and data.frequency == prescription.frequency
+        and data.duration == prescription.duration
+    )
+
+    if no_change:
+        raise PrescriptionConflictError("No prescription instruction was changed.")
+
+    revision = PrescriptionHistory(
+        prescription_id=prescription.id,
+        previous_dosage=prescription.dosage,
+        new_dosage=data.dosage,
+        previous_frequency=prescription.frequency,
+        new_frequency=data.frequency,
+        previous_duration=prescription.duration,
+        new_duration=data.duration,
+        change_reason=data.change_reason,
+        changed_by_doctor_id=doctor.id,
+    )
+
+    db.add(revision)
+
+    prescription.dosage = data.dosage
+    prescription.frequency = data.frequency
+    prescription.duration = data.duration
+
+    try:
+        db.commit()
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise PrescriptionConflictError("The prescription update could not be saved.") from exc
+
+    return (
+        get_prescription_by_public_id(
+            db,
+            prescription_id,
+        )
+        or prescription
+    )

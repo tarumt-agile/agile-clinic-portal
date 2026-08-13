@@ -3,10 +3,16 @@ __pycache__/
 .venv/
 .coverage
 coverage.xml
+junit.xml
 dist/
 .cache/
 .hypothesis/
 *.egg-info/
 *.db
+!clinic.db
 *.db-journal
 .env
+uploads/
+.superpowers/
+.claude/worktrees/
+docs/

@@ -11,20 +11,6 @@
   margin-bottom: 1.5rem;
 }
 
-.staff-list-breadcrumb {
-  margin: 0 0 0.25rem;
-  color: #6c757d;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.staff-list-page-header h1 {
-  margin: 0;
-  color: #212529;
-  font-size: 1.8rem;
-  font-weight: 700;
-}
-
 .staff-list-description {
   margin: 0.4rem 0 0;
   color: #6c757d;
@@ -170,7 +156,7 @@
 }
 
 .staff-table tbody tr:hover {
-  background: #f4f8ff;
+  background: var(--clinic-content-bg);
 }
 
 .staff-table tbody tr:last-child td {
@@ -178,7 +164,7 @@
 }
 
 .staff-id {
-  color: #0d6efd;
+  color: var(--clinic-accent);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -309,7 +295,7 @@
 
 .staff-mobile-card-id {
   margin: 0.2rem 0 0;
-  color: #0d6efd;
+  color: var(--clinic-accent);
   font-size: 0.825rem;
   font-weight: 700;
 }
@@ -398,9 +384,5 @@
 
   .staff-filter-action .btn {
     width: 100%;
-  }
-
-  .staff-list-page-header h1 {
-    font-size: 1.5rem;
   }
 }

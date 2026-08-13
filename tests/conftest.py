@@ -22,6 +22,38 @@ import pytest
 _IO_SIGNALS = ("TestClient(", "client.", "db.", "Session", ".execute(", "get_db")
 
 
+@pytest.fixture(autouse=True)
+def _disable_real_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests must never send real email. Every staff-creation test triggers a
+    welcome email (and forgot-password tests trigger a reset email), and a
+    developer's local .env may have live SMTP credentials configured for the
+    running app - without this, a full test run silently sends dozens of real
+    emails through whatever account is configured and can exhaust its daily
+    sending limit (this happened during development: repeated full-suite runs
+    against a live Gmail account triggered Gmail's 550 5.4.5 daily limit).
+    core.email.send_email() always records to the in-memory outbox regardless
+    of these settings, so get_outbox()-based assertions are unaffected.
+    """
+    from agile_ci_demo.core.config import settings
+
+    monkeypatch.setattr(settings, "smtp_host", None)
+    monkeypatch.setattr(settings, "smtp_username", None)
+    monkeypatch.setattr(settings, "smtp_password", None)
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter() -> None:
+    """Login-lockout state is a module-level dict (see core/rate_limit.py) that
+    otherwise persists across tests in the same pytest process - tests reusing
+    the same email (e.g. "alice.wong@example.com", the default in test_auth.py)
+    would see stale lockouts from earlier tests without this."""
+    from agile_ci_demo.core.rate_limit import reset_all
+
+    reset_all()
+    yield
+    reset_all()
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     for item in items:
         if not isinstance(item, pytest.Function):

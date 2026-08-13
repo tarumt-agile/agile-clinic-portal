@@ -33,11 +33,28 @@
     "edit-doctor-status"
   );
 
+  const startTimeInput = byId(
+    "edit-start-time"
+  );
+
+  const endTimeInput = byId(
+    "edit-end-time"
+  );
+
+  const deleteButton = byId(
+    "delete-staff-button"
+  );
+
+  const deleteModalAlert = byId(
+    "delete-staff-modal-alert"
+  );
+
   let currentStaff = null;
 
   const roleLabels = {
     doctor: "Doctor",
-    nurse: "Nurse (Receptionist)",
+    nurse: "Nurse",
+    receptionist: "Receptionist",
     admin: "Administration"
   };
 
@@ -265,6 +282,32 @@
         "view-doctor-status",
         staff.doctor_status
       );
+
+      setText(
+        "view-working-hours",
+        staff.start_time && staff.end_time
+          ? staff.start_time.slice(0, 5) + " - " + staff.end_time.slice(0, 5)
+          : null
+      );
+
+      const nextHoursBadge = byId("view-next-hours-badge");
+      const today = new Date().toISOString().slice(0, 10);
+      const hasQueuedChange =
+        staff.next_effective_date &&
+        staff.next_effective_date > today &&
+        staff.next_start_time &&
+        staff.next_end_time;
+
+      if (hasQueuedChange) {
+        nextHoursBadge.textContent =
+          "New Working Hour Tomorrow Onwards: " +
+          staff.next_start_time.slice(0, 5) +
+          "-" +
+          staff.next_end_time.slice(0, 5);
+        nextHoursBadge.classList.remove("d-none");
+      } else {
+        nextHoursBadge.classList.add("d-none");
+      }
     }
 
     byId(
@@ -278,6 +321,8 @@
     byId(
       "edit-staff-button"
     ).classList.remove("d-none");
+
+    deleteButton.classList.remove("d-none");
   }
 
   function populateForm() {
@@ -303,11 +348,19 @@
       currentStaff.doctor_status ||
       "active";
 
+    startTimeInput.value =
+      (currentStaff.start_time || "").slice(0, 5);
+
+    endTimeInput.value =
+      (currentStaff.end_time || "").slice(0, 5);
+
     [
       nameInput,
       emailInput,
       licenseInput,
-      specialtyInput
+      specialtyInput,
+      startTimeInput,
+      endTimeInput
     ].forEach(function (input) {
       input.classList.remove(
         "is-valid",
@@ -379,6 +432,32 @@
         showFieldValid(
           specialtyInput
         );
+      }
+
+      if (!startTimeInput.value) {
+        isValid = showFieldError(
+          startTimeInput,
+          "Please choose a start time."
+        );
+      } else {
+        showFieldValid(startTimeInput);
+      }
+
+      if (!endTimeInput.value) {
+        isValid = showFieldError(
+          endTimeInput,
+          "Please choose an end time."
+        );
+      } else if (
+        startTimeInput.value &&
+        endTimeInput.value <= startTimeInput.value
+      ) {
+        isValid = showFieldError(
+          endTimeInput,
+          "End time must be after the start time."
+        );
+      } else {
+        showFieldValid(endTimeInput);
       }
     }
 
@@ -507,7 +586,9 @@
           activeInput.value === "true",
         license_number: null,
         specialty: null,
-        doctor_status: null
+        doctor_status: null,
+        start_time: null,
+        end_time: null
       };
 
       if (
@@ -521,6 +602,12 @@
 
         payload.doctor_status =
           doctorStatusInput.value;
+
+        payload.start_time =
+          startTimeInput.value;
+
+        payload.end_time =
+          endTimeInput.value;
       }
 
       try {
@@ -573,6 +660,50 @@
         saveButton.disabled = false;
         saveButton.textContent =
           "Save Changes";
+      }
+    }
+  );
+
+  deleteButton.addEventListener("click", function () {
+    deleteModalAlert.classList.add("d-none");
+    deleteModalAlert.textContent = "";
+
+    const modalElement = byId("delete-staff-modal");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    modal.show();
+  });
+
+  byId("confirm-delete-staff-button").addEventListener(
+    "click",
+    async function () {
+      const confirmButton = byId("confirm-delete-staff-button");
+      confirmButton.disabled = true;
+
+      try {
+        const response = await fetch(
+          "/api/staff/" + encodeURIComponent(staffId),
+          { method: "DELETE" }
+        );
+
+        if (response.status === 204) {
+          window.location.href = "/staff";
+          return;
+        }
+
+        const result = await response.json();
+        deleteModalAlert.textContent =
+          typeof result.detail === "string"
+            ? result.detail
+            : "This staff account could not be deleted.";
+        deleteModalAlert.classList.remove("d-none");
+
+      } catch (error) {
+        deleteModalAlert.textContent =
+          "Unable to reach the server. Please try again.";
+        deleteModalAlert.classList.remove("d-none");
+
+      } finally {
+        confirmButton.disabled = false;
       }
     }
   );

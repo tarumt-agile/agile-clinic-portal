@@ -5,8 +5,18 @@
   if (!tableBody) return;
 
   const heading = document.getElementById("schedule-heading");
-  const dateInput = document.getElementById("schedule-date");
+  const dateListView = document.getElementById("date-list-view");
+  const dateListBody = document.getElementById("date-list-body");
+  const jumpToDateInput = document.getElementById("jump-to-date");
+  const dayDetailView = document.getElementById("day-detail-view");
+  const dayDetailHeading = document.getElementById("day-detail-heading");
+  const backToDatesBtn = document.getElementById("back-to-dates-btn");
   const alertBox = document.getElementById("schedule-alert");
+
+  const statTotal = document.getElementById("stat-total");
+  const statToday = document.getElementById("stat-today");
+  const statFuture = document.getElementById("stat-future");
+  const statCompleted = document.getElementById("stat-completed");
 
   const cancelModalEl = document.getElementById("cancel-modal");
   const cancelModal = window.bootstrap ? new bootstrap.Modal(cancelModalEl) : null;
@@ -19,9 +29,11 @@
   const STATUS_BADGE = {
     scheduled: "text-bg-primary",
     cancelled: "text-bg-secondary",
+    completed: "text-bg-success",
   };
 
   let pendingReferenceNumber = null;
+  let currentDate = null;
 
   function escapeHtml(value) {
     const div = document.createElement("div");
@@ -39,8 +51,99 @@
     alertBox.textContent = "";
   }
 
+  function formatDateLong(dateValue) {
+    const [year, month, day] = dateValue.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }
+
+  function showDateListView() {
+    currentDate = null;
+    heading.textContent = "My Schedule";
+    dayDetailView.classList.add("d-none");
+    dateListView.classList.remove("d-none");
+    loadDateList();
+  }
+
+  function showDayDetailView(dateValue) {
+    currentDate = dateValue;
+    dateListView.classList.add("d-none");
+    dayDetailView.classList.remove("d-none");
+    loadSchedule(dateValue);
+  }
+
+  async function loadStats() {
+    try {
+      const response = await fetch("/api/appointments/schedule/stats");
+      if (!response.ok) return;
+      const body = await response.json();
+      statTotal.textContent = body.total;
+      statToday.textContent = body.today;
+      statFuture.textContent = body.future;
+      statCompleted.textContent = body.completed;
+    } catch (err) {
+      // Stat cards are a summary, not critical path - fail silently and leave
+      // the zeros in place rather than blocking the rest of the page.
+    }
+  }
+
+  async function loadDateList() {
+    hideAlert();
+    dateListBody.innerHTML =
+      '<div class="list-group-item text-center text-muted py-4">Loading...</div>';
+
+    try {
+      const response = await fetch("/api/appointments/schedule/dates");
+      const body = await response.json();
+
+      if (response.status === 404) {
+        dateListBody.innerHTML = "";
+        showAlert(body.detail || "No doctor account found.");
+        return;
+      }
+
+      if (!response.ok) throw new Error("Request failed");
+
+      heading.textContent = `${body.doctor_name}'s Schedule`;
+      renderDateList(body.dates);
+    } catch (err) {
+      dateListBody.innerHTML = "";
+      showAlert("Unable to load your schedule. Please try again.");
+    }
+  }
+
+  function renderDateList(dates) {
+    if (dates.length === 0) {
+      dateListBody.innerHTML =
+        '<div class="list-group-item text-center text-muted py-4">' +
+        "No upcoming appointments. Use the date field above to check a specific date." +
+        "</div>";
+      return;
+    }
+
+    dateListBody.innerHTML = dates
+      .map((d) => {
+        const countLabel = d.appointment_count === 1 ? "1 appointment" : `${d.appointment_count} appointments`;
+        return `
+      <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center date-list-item" data-date="${escapeHtml(d.schedule_date)}">
+        <span>${escapeHtml(formatDateLong(d.schedule_date))}</span>
+        <span class="badge text-bg-primary rounded-pill">${escapeHtml(countLabel)}</span>
+      </button>`;
+      })
+      .join("");
+
+    dateListBody.querySelectorAll(".date-list-item").forEach((btn) => {
+      btn.addEventListener("click", () => showDayDetailView(btn.dataset.date));
+    });
+  }
+
   async function loadSchedule(dateValue) {
     hideAlert();
+    dayDetailHeading.textContent = formatDateLong(dateValue);
     tableBody.innerHTML =
       '<tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr>';
 
@@ -62,7 +165,6 @@
 
       if (!response.ok) throw new Error("Request failed");
 
-      heading.textContent = `${body.doctor_name}'s Schedule`;
       renderTable(body.appointments);
     } catch (err) {
       tableBody.innerHTML = "";
@@ -141,7 +243,9 @@
 
       if (response.ok) {
         if (cancelModal) cancelModal.hide();
-        loadSchedule(dateInput.value);
+        if (currentDate) loadSchedule(currentDate);
+        loadStats();
+        if (scheduleView) scheduleView.refresh();
         return;
       }
 
@@ -166,8 +270,8 @@
     }
   }
 
-  // Local date, not UTC - toISOString() converts to UTC and can be a day off from
-  // the server's dt.date.today() (which uses local time), especially near midnight.
+  // Local date, not UTC - toISOString() converts to UTC and can be a day off
+  // from the server's dt.date.today() (which uses local time), especially near midnight.
   function todayLocalISODate() {
     const now = new Date();
     const year = now.getFullYear();
@@ -177,10 +281,39 @@
   }
 
   const today = todayLocalISODate();
-  dateInput.min = today;
-  dateInput.value = today;
+  jumpToDateInput.min = today;
 
-  dateInput.addEventListener("change", () => loadSchedule(dateInput.value));
+  jumpToDateInput.addEventListener("change", () => {
+    if (jumpToDateInput.value) showDayDetailView(jumpToDateInput.value);
+  });
+  backToDatesBtn.addEventListener("click", () => {
+    jumpToDateInput.value = "";
+    showDateListView();
+  });
   cancelForm.addEventListener("submit", handleCancelSubmit);
-  loadSchedule(today);
+
+  const scheduleView = window.initScheduleViewToggle
+    ? window.initScheduleViewToggle({
+        viewModeStorageKey: "doctorScheduleViewMode",
+        listViewId: "list-view",
+        calendarViewId: "calendar-view",
+        listButtonId: "view-list-btn",
+        calendarButtonId: "view-calendar-btn",
+        calendar: {
+          containerId: "schedule-calendar",
+          calendarViewStorageKey: "doctorScheduleCalendarView",
+          eventsUrl: function (startDate, endDate) {
+            return `/api/appointments/schedule?start_date=${startDate}&end_date=${endDate}`;
+          },
+          onEventClick: function (appointment) {
+            if (appointment.status === "scheduled") {
+              openCancelModal(appointment.reference_number, appointment.patient_name);
+            }
+          },
+        },
+      })
+    : null;
+
+  loadStats();
+  showDateListView();
 })();
