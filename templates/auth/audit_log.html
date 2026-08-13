@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log - Agile Clinic Portal{% endblock %}
+
+{% block content %}
+<header class="mb-4">
+  <p class="text-muted mb-1">Admin / Security</p>
+  <h1 class="h3 mb-1">Authentication Audit Log</h1>
+  <p class="text-muted mb-0">Read-only history of login, logout and password events.</p>
+</header>
+
+<div id="audit-log-alert" class="alert alert-danger d-none" role="alert"></div>
+
+<form id="audit-log-filter" class="row g-2 align-items-end mb-3">
+  <div class="col-auto">
+    <label for="audit-from" class="form-label">From</label>
+    <input type="date" id="audit-from" class="form-control" value="{{ default_from_date }}">
+  </div>
+  <div class="col-auto">
+    <label for="audit-to" class="form-label">To</label>
+    <input type="date" id="audit-to" class="form-control" value="{{ default_to_date }}">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-primary">Filter</button>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th scope="col">Timestamp</th>
+        <th scope="col">Event</th>
+        <th scope="col">User</th>
+        <th scope="col">IP Address</th>
+      </tr>
+    </thead>
+    <tbody id="audit-log-body">
+      <tr><td colspan="4">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/auth-audit-log.js"></script>
+{% endblock %}

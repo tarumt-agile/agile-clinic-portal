@@ -99,6 +99,9 @@ def start_consultation(
     creating a duplicate. Without an appointment_reference (an ad-hoc visit),
     every call starts a fresh note (second element True) since there is nothing
     to key the lookup on.
+
+    Raises ConsultationAlreadyEndedError if the appointment's consultation was
+    already completed - it can't be resumed as an editable draft.
     """
     patient = get_patient_by_patient_id(db, patient_id)
     if patient is None:
@@ -113,6 +116,8 @@ def start_consultation(
                 select(ConsultationNote).where(ConsultationNote.appointment_id == appointment_id)
             ).scalar_one_or_none()
             if existing is not None:
+                if existing.status == "completed":
+                    raise ConsultationAlreadyEndedError("This consultation has already ended")
                 return existing, False
 
     now = dt.datetime.utcnow()

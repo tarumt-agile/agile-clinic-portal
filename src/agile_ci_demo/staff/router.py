@@ -8,7 +8,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.auth.deps import require_role
+from agile_ci_demo.auth.deps import require_role, require_staff
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
@@ -18,6 +18,7 @@ from agile_ci_demo.staff.schemas import (
     DoctorOut,
     StaffCreate,
     StaffOut,
+    StaffSelfUpdate,
     StaffStatusUpdate,
     StaffUpdate,
 )
@@ -36,6 +37,7 @@ from agile_ci_demo.staff.service import (
     list_staff,
     set_staff_active_status,
     update_staff,
+    update_staff_self,
 )
 
 api_router = APIRouter(
@@ -136,6 +138,47 @@ def get_doctor_details(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+
+
+# =========================================================
+# SELF-SERVICE API (any authenticated staff member)
+# =========================================================
+
+
+# This route returns the logged-in staff member's own account.
+@api_router.get(
+    "/me",
+    response_model=StaffOut,
+)
+def get_my_staff_profile(
+    staff: Staff = Depends(require_staff),
+) -> StaffOut:
+    return StaffOut.model_validate(staff)
+
+
+# This route updates the logged-in staff member's own name/email.
+@api_router.patch(
+    "/me",
+    response_model=StaffOut,
+)
+def update_my_staff_profile(
+    payload: StaffSelfUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(require_staff),
+) -> StaffOut:
+    try:
+        updated = update_staff_self(
+            db,
+            staff,
+            payload,
+        )
+    except StaffUpdateEmailExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return StaffOut.model_validate(updated)
 
 
 # =========================================================
@@ -317,6 +360,22 @@ def create_staff_page(
     return templates.TemplateResponse(
         request,
         "staff/staff_create.html",
+        {},
+    )
+
+
+# This route displays the logged-in staff member's own profile.
+@pages_router.get(
+    "/profile",
+    response_class=HTMLResponse,
+)
+def staff_profile_page(
+    request: Request,
+    _staff: Staff = Depends(require_staff),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "staff/staff_profile.html",
         {},
     )
 

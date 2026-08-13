@@ -44,37 +44,6 @@
 }
 
 /* =========================
-   Header
-========================= */
-
-.admin-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.admin-label {
-  margin: 0 0 0.25rem;
-  color: #6c757d;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.admin-header h1 {
-  margin: 0 0 0.25rem;
-  color: #212529;
-  font-size: 1.75rem;
-  font-weight: 700;
-}
-
-.admin-subtitle {
-  margin: 0;
-  color: #6c757d;
-}
-
-/* =========================
    Form card
 ========================= */
 
@@ -94,9 +63,7 @@
 
 .admin-card-header h2 {
   margin: 0 0 0.25rem;
-  color: #212529;
-  font-size: 1.25rem;
-  font-weight: 700;
+  color: var(--clinic-text);
 }
 
 .admin-card-header p {

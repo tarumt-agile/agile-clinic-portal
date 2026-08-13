@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from agile_ci_demo.auth.models import PasswordResetToken
 from agile_ci_demo.core.email import send_email
+from agile_ci_demo.core.rate_limit import MAX_FAILED_ATTEMPTS
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import hash_password, verify_password
 from agile_ci_demo.patients.models import Patient
@@ -20,7 +21,7 @@ from agile_ci_demo.staff.models import Staff
 logger = logging.getLogger(__name__)
 
 _REDIRECT_BY_ROLE: dict[Role, str] = {
-    Role.ADMIN: "/staff",
+    Role.ADMIN: "/dashboard",
     Role.DOCTOR: "/appointments/schedule",
     Role.NURSE: "/patients",
     Role.RECEPTIONIST: "/patients",
@@ -78,6 +79,10 @@ _RESET_TOKEN_TTL = dt.timedelta(minutes=30)
 
 class InvalidResetTokenError(Exception):
     """Raised when a password reset token is unknown, expired, or already used."""
+
+
+class WrongCurrentPasswordError(Exception):
+    """Raised when the supplied current password doesn't match the account's."""
 
 
 def _hash_token(token: str) -> str:
@@ -149,4 +154,42 @@ def reset_password(db: Session, token: str, new_password: str) -> None:
     staff.password_hash = hash_password(new_password)
     staff.must_change_password = False
     reset_token.used_at = dt.datetime.utcnow()
+    db.commit()
+
+
+def send_account_lockout_alert(db: Session, email: str) -> None:
+    """Notify every active admin that an account was just locked out.
+
+    Best-effort like request_password_reset's email send - a delivery failure
+    must never break the login request that triggered it.
+    """
+    admins = (
+        db.execute(select(Staff).where(Staff.role == Role.ADMIN.value, Staff.is_active.is_(True)))
+        .scalars()
+        .all()
+    )
+
+    for admin in admins:
+        try:
+            send_email(
+                to=admin.email,
+                subject="Account locked: repeated failed login attempts",
+                body=(
+                    f"The account {email} was locked out for 15 minutes after "
+                    f"{MAX_FAILED_ATTEMPTS} failed login attempts."
+                ),
+            )
+        except Exception:
+            logger.exception("Lockout alert email failed to send to %s", admin.email)
+
+
+def change_password(db: Session, staff: Staff, current_password: str, new_password: str) -> None:
+    """Change a logged-in staff member's own password, verifying their current
+    one first - unlike reset_password (reached via an emailed token), which
+    doesn't check the old password at all."""
+    if not verify_password(current_password, staff.password_hash):
+        raise WrongCurrentPasswordError("Current password is incorrect")
+
+    staff.password_hash = hash_password(new_password)
+    staff.must_change_password = False
     db.commit()

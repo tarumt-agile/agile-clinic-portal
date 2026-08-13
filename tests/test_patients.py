@@ -999,10 +999,14 @@ def _register_doctor(client: TestClient, **overrides: object) -> str:
 TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
 
-def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
+def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int, str]:
     """Register a patient and a doctor, then create one appointment, one
     consultation note (with a diagnosis and an attachment), and one
-    prescription for that patient. Returns (patient_id, doctor_id, attachment_id)."""
+    prescription for that patient. Returns (patient_id, doctor_id, attachment_id,
+    doctor_temp_password) - the temp password lets a caller log back in as this
+    doctor later, after logging in as someone else in between (e.g. an admin to
+    delete the patient) makes the doctor's welcome email no longer the outbox's
+    last entry, which is what _login_as relies on."""
     patient_id = client.post("/api/patients", json=valid_patient_payload()).json()["patient_id"]
     doctor_id = _register_doctor(client)
 
@@ -1023,6 +1027,14 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
         },
     )
     assert appt.status_code == 201, appt.json()
+
+    doctor_email = str(valid_doctor_payload()["email"])
+    doctor_temp_password_body = next(e.body for e in reversed(get_outbox()) if e.to == doctor_email)
+    doctor_temp_password_match = re.search(
+        r"temporary password is: (\S+)", doctor_temp_password_body
+    )
+    assert doctor_temp_password_match is not None
+    doctor_temp_password = doctor_temp_password_match.group(1)
 
     _login_as(client, str(valid_doctor_payload()["email"]))
 
@@ -1068,7 +1080,7 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
     )
     assert attachment.status_code == 201, attachment.json()
 
-    return patient_id, doctor_id, attachment.json()["id"]
+    return patient_id, doctor_id, attachment.json()["id"], doctor_temp_password
 
 
 def test_delete_patient_with_no_history_succeeds(client: TestClient) -> None:
@@ -1086,13 +1098,23 @@ def test_delete_patient_cascades_to_all_history(client: TestClient) -> None:
     """Deleting a patient also deletes their appointments, consultation notes,
     diagnoses, prescriptions, and attachments - nothing referencing the deleted
     patient stays reachable afterward."""
-    patient_id, doctor_id, attachment_id = _build_full_history_for_patient(client)
+    patient_id, doctor_id, attachment_id, doctor_temp_password = _build_full_history_for_patient(
+        client
+    )
 
     _login_as_admin(client)
     r = client.delete(f"/api/patients/{patient_id}")
     assert r.status_code == 204
 
     assert client.get(f"/api/patients/{patient_id}").status_code == 404
+
+    # Medical records are treating-doctor-only now, so check as the doctor who
+    # treated this patient rather than as the admin who just deleted them.
+    login = client.post(
+        "/api/auth/login",
+        json={"email": str(valid_doctor_payload()["email"]), "password": doctor_temp_password},
+    )
+    assert login.status_code == 200, login.json()
 
     history = client.get("/api/consultations", params={"patient_id": patient_id})
     # get_patient_history requires the patient to exist - it's gone now, so a

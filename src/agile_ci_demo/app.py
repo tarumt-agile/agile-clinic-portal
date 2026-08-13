@@ -16,6 +16,8 @@ from agile_ci_demo.auth.router import api_router as auth_api_router
 from agile_ci_demo.auth.router import pages_router as auth_pages_router
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import init_db
+from agile_ci_demo.dashboard.router import api_router as dashboard_api_router
+from agile_ci_demo.dashboard.router import pages_router as dashboard_pages_router
 from agile_ci_demo.patients.router import api_router as patients_api_router
 from agile_ci_demo.patients.router import pages_router as patients_pages_router
 from agile_ci_demo.pharmacy.router import api_router as pharmacy_api_router
@@ -83,6 +85,8 @@ app.include_router(prescription_pages_router)
 app.include_router(reports_api_router)
 app.include_router(reports_pages_router)
 app.include_router(attachments_api_router)
+app.include_router(dashboard_api_router)
+app.include_router(dashboard_pages_router)
 
 
 class Item(BaseModel):
