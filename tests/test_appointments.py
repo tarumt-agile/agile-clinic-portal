@@ -1463,9 +1463,7 @@ def test_patient_can_book_second_appointment_different_day(client: TestClient) -
     day_after_tomorrow = (dt.date.today() + dt.timedelta(days=2)).isoformat()
     r2 = client.post(
         "/api/appointments",
-        json=valid_appointment_payload(
-            patient_id, doctor_id, appointment_date=day_after_tomorrow
-        ),
+        json=valid_appointment_payload(patient_id, doctor_id, appointment_date=day_after_tomorrow),
     )
     assert r2.status_code == 201
 
