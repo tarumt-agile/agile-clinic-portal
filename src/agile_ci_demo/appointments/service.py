@@ -35,6 +35,11 @@ class SlotUnavailableError(Exception):
     """Raised when the doctor already has a scheduled appointment overlapping this slot."""
 
 
+class DailyBookingLimitError(Exception):
+    """Raised when a patient booking for themselves already has a scheduled
+    appointment on the requested date."""
+
+
 class PastDateError(Exception):
     """Raised when a doctor's schedule is requested for a date before today."""
 
@@ -80,8 +85,12 @@ def _validate_slot(
         raise InvalidSlotError(f"Appointment start time must align to {SLOT_MINUTES}-minute slots")
 
 
-def create_appointment(db: Session, data: AppointmentCreate) -> Appointment:
-    """Book a new appointment, validating slot availability and preventing double-booking."""
+def create_appointment(
+    db: Session, data: AppointmentCreate, *, enforce_daily_limit: bool = False
+) -> Appointment:
+    """Book a new appointment, validating slot availability and preventing double-booking.
+    When enforce_daily_limit is True (a patient booking for themselves), also rejects a
+    second scheduled appointment on the same date - front-desk staff bookings are exempt."""
     patient = get_patient_by_patient_id(db, data.patient_id)
     if patient is None:
         raise PatientNotFoundError(f"No patient found with patient_id '{data.patient_id}'")
@@ -94,6 +103,21 @@ def create_appointment(db: Session, data: AppointmentCreate) -> Appointment:
     doctor_open, doctor_close = get_doctor_hours(doctor.doctor_profile, data.appointment_date)
     end_time = add_minutes(data.start_time, SLOT_MINUTES)
     _validate_slot(data.appointment_date, data.start_time, end_time, doctor_open, doctor_close)
+
+    if enforce_daily_limit:
+        existing = db.execute(
+            select(Appointment).where(
+                Appointment.patient_id == patient.id,
+                Appointment.appointment_date == data.appointment_date,
+                Appointment.status == "scheduled",
+            )
+        ).first()
+        if existing is not None:
+            raise DailyBookingLimitError(
+                f"You already have an appointment scheduled on {data.appointment_date}. "
+                "Patients can book one appointment online per day - please visit the "
+                "clinic in person to arrange a second appointment for the same day."
+            )
 
     conflict = db.execute(
         select(Appointment).where(

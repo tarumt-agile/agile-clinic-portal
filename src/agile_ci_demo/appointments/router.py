@@ -20,6 +20,7 @@ from agile_ci_demo.appointments.schemas import (
 from agile_ci_demo.appointments.service import (
     AlreadyCancelledError,
     AppointmentNotFoundError,
+    DailyBookingLimitError,
     DoctorNotFoundError,
     InvalidSlotError,
     PastDateError,
@@ -74,17 +75,21 @@ def book_appointment(
     _actor: Staff | Patient = Depends(require_booking_actor),
 ) -> AppointmentOut:
     """Book a new appointment. Validates slot availability and rejects double-booking.
-    Front-desk staff (receptionist, nurse, admin) can book for any patient; a
-    patient can book for themselves. Doctors are read-only for appointments."""
+    Front-desk staff (receptionist, nurse, admin) can book for any patient; a patient
+    can book for themselves, limited to one appointment per day - a second same-day
+    booking must go through the front desk instead. Doctors are read-only for
+    appointments."""
     try:
-        appointment = create_appointment(db, payload)
+        appointment = create_appointment(
+            db, payload, enforce_daily_limit=isinstance(_actor, Patient)
+        )
     except (PatientNotFoundError, DoctorNotFoundError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except InvalidSlotError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
-    except SlotUnavailableError as exc:
+    except (SlotUnavailableError, DailyBookingLimitError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _serialize(appointment)
 

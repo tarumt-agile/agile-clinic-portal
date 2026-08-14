@@ -1418,3 +1418,101 @@ def appointment_is_cancelled_step(context: Context) -> None:
     assert context.last_response is not None
     assert context.last_response.status_code == 200
     assert context.last_response.json()["status"] == "cancelled"
+
+
+# --- 11. Patient daily booking limit tests --------------------------------------
+
+
+def test_patient_cannot_book_second_appointment_same_day(client: TestClient) -> None:
+    """
+    Scenario: Patient tries to self-book a second appointment on a day they
+    already have one
+      Given a patient has already booked an appointment for a given date
+      When that same patient tries to book another appointment for the same date
+      Then I receive 409 Conflict advising them to visit the clinic in person
+    """
+    patient_id = _register_and_login_patient(client)
+    doctor_a = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
+    doctor_b = _register_doctor(
+        client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67980"
+    )
+
+    r1 = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_a, start_time="10:00"),
+    )
+    assert r1.status_code == 201
+
+    r2 = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_b, start_time="11:00"),
+    )
+    assert r2.status_code == 409
+    assert "one appointment online per day" in r2.json()["detail"]
+
+
+def test_patient_can_book_second_appointment_different_day(client: TestClient) -> None:
+    """A patient is not blocked from booking a different date - only the same
+    date is limited."""
+    patient_id = _register_and_login_patient(client)
+    doctor_id = _register_doctor(client)
+
+    r1 = client.post("/api/appointments", json=valid_appointment_payload(patient_id, doctor_id))
+    assert r1.status_code == 201
+
+    day_after_tomorrow = (dt.date.today() + dt.timedelta(days=2)).isoformat()
+    r2 = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(
+            patient_id, doctor_id, appointment_date=day_after_tomorrow
+        ),
+    )
+    assert r2.status_code == 201
+
+
+def test_staff_can_book_second_same_day_appointment_for_patient(client: TestClient) -> None:
+    """The daily limit only applies to a patient booking for themselves - front-desk
+    staff can still add a second same-day appointment (e.g. a walk-in)."""
+    patient_id = _register_patient(client)
+    doctor_a = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
+    doctor_b = _register_doctor(
+        client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67980"
+    )
+    _login_as_receptionist(client)
+
+    r1 = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_a, start_time="10:00"),
+    )
+    assert r1.status_code == 201
+
+    r2 = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_b, start_time="11:00"),
+    )
+    assert r2.status_code == 201
+
+
+def test_patient_can_rebook_same_day_after_cancelling(client: TestClient) -> None:
+    """Cancelling frees up that date immediately, so the patient can rebook the
+    same day if their plans change."""
+    patient_id = _register_and_login_patient(client)
+    doctor_a = _register_doctor(client, full_name="Dr. Alan Chua", email="alan@example.com")
+    doctor_b = _register_doctor(
+        client, full_name="Dr. Betty Lim", email="betty@example.com", license_number="MMC-67980"
+    )
+
+    created = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_a, start_time="10:00"),
+    ).json()
+    client.patch(
+        f"/api/appointments/{created['reference_number']}/cancel",
+        json={"cancellation_reason": "Can no longer attend"},
+    )
+
+    r = client.post(
+        "/api/appointments",
+        json=valid_appointment_payload(patient_id, doctor_b, start_time="11:00"),
+    )
+    assert r.status_code == 201
