@@ -16,6 +16,8 @@ from agile_ci_demo.core.email import get_outbox
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -103,11 +105,22 @@ def _login_as_doctor(client: TestClient) -> None:
     assert r.status_code == 200, r.json()
 
 
+def _register_doctor_direct(client: TestClient) -> str:
+    """Create the default doctor account directly through the service layer,
+    bypassing the API (POST /api/staff now requires an admin session) - this
+    is pure test setup, not the thing under test."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        return str(create_staff(db, StaffCreate(**valid_doctor_payload())).staff_id)
+    finally:
+        db.close()
+
+
 def prepare_consultation(client: TestClient) -> str:
     """Register a patient, a doctor, log in as that doctor, and create a
     consultation note. Returns the note's record_id."""
     patient_id = client.post("/api/patients", json=valid_patient_payload()).json()["patient_id"]
-    doctor_id = client.post("/api/staff", json=valid_doctor_payload()).json()["staff_id"]
+    doctor_id = _register_doctor_direct(client)
     _login_as_doctor(client)
 
     r = client.post("/api/consultations", json=valid_record_payload(patient_id, doctor_id))
@@ -165,7 +178,7 @@ def test_upload_wrong_type_rejected(client: TestClient) -> None:
 
 
 def test_upload_unknown_record_id_returns_404(client: TestClient) -> None:
-    client.post("/api/staff", json=valid_doctor_payload())
+    _register_doctor_direct(client)
     _login_as_doctor(client)
 
     r = client.post(
@@ -205,7 +218,7 @@ def test_list_attachments_returns_uploaded_file(client: TestClient) -> None:
 
 
 def test_list_unknown_record_returns_404(client: TestClient) -> None:
-    client.post("/api/staff", json=valid_doctor_payload())
+    _register_doctor_direct(client)
     _login_as_doctor(client)
 
     r = client.get("/api/attachments?record_id=R99999")
@@ -227,7 +240,7 @@ def test_download_attachment_returns_file_contents(client: TestClient) -> None:
 
 
 def test_download_unknown_attachment_returns_404(client: TestClient) -> None:
-    client.post("/api/staff", json=valid_doctor_payload())
+    _register_doctor_direct(client)
     _login_as_doctor(client)
 
     r = client.get("/api/attachments/999/download")

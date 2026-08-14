@@ -16,7 +16,7 @@
   align-items: flex-start;
   gap: 2rem;
   padding-bottom: 1.5rem;
-  border-bottom: 3px solid #0d6efd;
+  border-bottom: 3px solid #4f46e5;
 }
 
 .prescription-clinic-header h1 {
@@ -45,7 +45,7 @@
 }
 
 .prescription-rx-mark {
-  color: #0d6efd;
+  color: #4f46e5;
   font-family: Georgia, serif;
   font-size: 3.5rem;
   font-style: italic;
@@ -72,8 +72,8 @@
 
 .prescription-diagnosis {
   padding: 1rem 1.25rem;
-  background: #f2f6ff;
-  border-left: 4px solid #0d6efd;
+  background: #eef2ff;
+  border-left: 4px solid #4f46e5;
 }
 
 .prescription-medication {
@@ -188,12 +188,17 @@
     background: #fff !important;
   }
 
-  body > nav,
+  .app-sidebar,
+  .sidebar-toggle,
   .print-actions {
     display: none !important;
   }
 
-  main.container {
+  .app-shell {
+    display: block;
+  }
+
+  main.app-content {
     width: 100%;
     max-width: none;
     margin: 0;

@@ -69,10 +69,21 @@
 
     tableBody.querySelectorAll(".patient-row").forEach((row) => {
       row.addEventListener("click", () => {
-        window.location.href = `/patients/${row.dataset.patientId}`;
+        const returnPath = window.location.pathname + window.location.search;
+        window.location.href =
+          `/patients/${encodeURIComponent(row.dataset.patientId)}?` +
+          `from=${encodeURIComponent(returnPath)}` +
+          `&label=${encodeURIComponent("Back to Patient List")}`;
       });
     });
   }
+
+  // How many page numbers to show on each side of the current page. With a
+  // large patient count, rendering one button per page (the old behavior)
+  // makes the pagination bar grow wider than the page - this windows it down
+  // to a fixed handful of buttons plus jump-to-first/last controls, e.g.
+  // [<<] [<] [27] [28] [29] [30] [31] [...] [>] [>>].
+  const PAGE_WINDOW = 2;
 
   function renderPagination(page, totalPages, total) {
     if (totalPages <= 1) {
@@ -81,11 +92,28 @@
     }
 
     const items = [];
-    items.push(pageItem("Previous", page - 1, page === 1));
-    for (let p = 1; p <= totalPages; p += 1) {
+    items.push(pageItem("«", 1, page === 1, false, "First page"));
+    items.push(pageItem("‹", page - 1, page === 1, false, "Previous page"));
+
+    const windowStart = Math.max(1, page - PAGE_WINDOW);
+    const windowEnd = Math.min(totalPages, page + PAGE_WINDOW);
+
+    if (windowStart > 1) {
+      items.push(pageItem("1", 1, false, page === 1));
+      if (windowStart > 2) items.push(ellipsisItem());
+    }
+
+    for (let p = windowStart; p <= windowEnd; p += 1) {
       items.push(pageItem(String(p), p, false, p === page));
     }
-    items.push(pageItem("Next", page + 1, page === totalPages));
+
+    if (windowEnd < totalPages) {
+      if (windowEnd < totalPages - 1) items.push(ellipsisItem());
+      items.push(pageItem(String(totalPages), totalPages, false, page === totalPages));
+    }
+
+    items.push(pageItem("›", page + 1, page === totalPages, false, "Next page"));
+    items.push(pageItem("»", totalPages, page === totalPages, false, "Last page"));
     paginationEl.innerHTML = items.join("");
 
     paginationEl.querySelectorAll("[data-page]").forEach((el) => {
@@ -100,11 +128,16 @@
     });
   }
 
-  function pageItem(label, page, disabled, active) {
+  function pageItem(label, page, disabled, active, ariaLabel) {
     const classes = ["page-item"];
     if (disabled) classes.push("disabled");
     if (active) classes.push("active");
-    return `<li class="${classes.join(" ")}"><a class="page-link" href="#" data-page="${page}">${label}</a></li>`;
+    const aria = ariaLabel ? ` aria-label="${escapeHtml(ariaLabel)}"` : "";
+    return `<li class="${classes.join(" ")}"><a class="page-link" href="#" data-page="${page}"${aria}>${label}</a></li>`;
+  }
+
+  function ellipsisItem() {
+    return '<li class="page-item disabled"><span class="page-link">…</span></li>';
   }
 
   searchInput.addEventListener("input", () => {

@@ -5,9 +5,16 @@ import datetime as dt
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from agile_ci_demo.appointments.models import Appointment
 from agile_ci_demo.core.database import Base
 from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.staff.models import Staff
+
+MALAYSIA_OFFSET = dt.timedelta(hours=8)
+
+
+def malaysia_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone(MALAYSIA_OFFSET))
 
 
 class ConsultationNote(Base):
@@ -31,22 +38,23 @@ class ConsultationNote(Base):
     )
 
     visit_date: Mapped[dt.datetime] = mapped_column(
-        DateTime, default=dt.datetime.utcnow, index=True
+        DateTime(timezone=True), default=malaysia_now, index=True
     )
     notes: Mapped[str] = mapped_column(Text)
 
-    started_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
-    ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=malaysia_now)
+    ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # "in_progress" | "completed"
     status: Mapped[str] = mapped_column(String(20), default="in_progress")
 
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=malaysia_now)
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow
+        DateTime(timezone=True), default=malaysia_now, onupdate=malaysia_now
     )
 
     patient: Mapped[Patient] = relationship()
     doctor: Mapped[Staff] = relationship()
+    appointment: Mapped[Appointment | None] = relationship()
     diagnoses: Mapped[list["Diagnosis"]] = relationship(
         back_populates="consultation_note",
         cascade="all, delete-orphan",
@@ -65,6 +73,27 @@ class Diagnosis(Base):
     icd10_code: Mapped[str] = mapped_column(String(10), index=True)
     description: Mapped[str] = mapped_column(String(255))
 
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=malaysia_now)
 
     consultation_note: Mapped[ConsultationNote] = relationship(back_populates="diagnoses")
+
+
+class MedicalAccessLog(Base):
+    __tablename__ = "medical_access_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    consultation_note_id: Mapped[int] = mapped_column(
+        ForeignKey("consultation_notes.id"), index=True
+    )
+    record_id: Mapped[str | None] = mapped_column(String(10), index=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    doctor_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), index=True)
+    accessed_by_staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id"), index=True)
+
+    # "read" | "create" | "update" | "end"
+    action: Mapped[str] = mapped_column(String(20), index=True)
+
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=malaysia_now, index=True
+    )

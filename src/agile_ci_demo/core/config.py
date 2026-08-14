@@ -32,10 +32,24 @@ class Settings:
     smtp_from: str | None = os.getenv("SMTP_FROM")
     smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
 
+    # Dev-only mailbox that silently receives a copy of every email sent (via Bcc),
+    # so sends can be verified without needing a real inbox for every recipient.
+    # Leave unset in production.
+    email_dev_bcc: str | None = os.getenv("EMAIL_DEV_BCC")
+
     # Signs the login session cookie. Falls back to a fixed dev value so local
     # runs and tests work with no .env entry - set a real SECRET_KEY in
     # production.
     secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+
+    # Encrypts patient PII columns at rest (see core/encryption.py). Same
+    # fallback approach as SECRET_KEY - fine for local runs and tests, but
+    # must be set to a real, secret value in production. Changing it makes
+    # existing encrypted data unreadable, so treat it like a real secret:
+    # generate once, store securely, never rotate without a re-encryption pass.
+    patient_encryption_key: str = os.getenv(
+        "PATIENT_ENCRYPTION_KEY", "dev-patient-encryption-key-change-in-production"
+    )
 
 
 settings = Settings()

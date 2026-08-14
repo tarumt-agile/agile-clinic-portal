@@ -3,11 +3,12 @@ from __future__ import annotations
 import datetime as dt
 import re
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from pytest_bdd import given as bdd_given, parsers, scenarios, then as bdd_then, when as bdd_when
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -21,6 +22,8 @@ from agile_ci_demo.pharmacy.service import seed_default_medications
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.prescriptions import models as _prescription_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -125,6 +128,31 @@ def test_register_patient_then_fetch_by_id(client: TestClient) -> None:
     r = client.get(f"/api/patients/{created['patient_id']}")
     assert r.status_code == 200
     assert r.json()["full_name"] == "Jane Tan"
+
+
+def test_fetch_patient_with_legacy_invalid_email_does_not_crash(client: TestClient) -> None:
+    """Imported/previously populated data may predate current EmailStr validation.
+    It should remain readable while new and edited email values stay validated."""
+    created = client.post("/api/patients", json=valid_patient_payload()).json()
+
+    override = app.dependency_overrides[get_db]
+    db_generator = override()
+    db = next(db_generator)
+    try:
+        patient = db.execute(
+            select(_patients_models.Patient).where(
+                _patients_models.Patient.patient_id == created["patient_id"]
+            )
+        ).scalar_one()
+        patient.email = "julaug.patient10@example.test"
+        db.commit()
+    finally:
+        db_generator.close()
+
+    r = client.get(f"/api/patients/{created['patient_id']}")
+
+    assert r.status_code == 200
+    assert r.json()["email"] == "julaug.patient10@example.test"
 
 
 def test_get_unknown_patient_returns_404(client: TestClient) -> None:
@@ -934,38 +962,60 @@ def valid_doctor_payload(**overrides: object) -> dict[str, object]:
 
 
 def _login_as(client: TestClient, email: str) -> None:
-    body = get_outbox()[-1].body
+    """Log in using the temp password from the account's welcome email - looked
+    up by recipient rather than assumed to be the most recently sent email,
+    since another account (e.g. a receptionist logged in just to book an
+    appointment) may have been registered more recently."""
+    body = next(e.body for e in reversed(get_outbox()) if e.to == email)
     match = re.search(r"temporary password is: (\S+)", body)
     assert match is not None
     r = client.post("/api/auth/login", json={"email": email, "password": match.group(1)})
     assert r.status_code == 200, r.json()
 
 
+def _create_staff_direct(client: TestClient, payload: dict[str, object]) -> str:
+    """Create a staff account directly through the service layer, bypassing
+    the API (POST /api/staff now requires an admin session) - this is pure
+    test setup, not the thing under test, and is often needed before any
+    admin session can exist at all. Returns the new account's public staff_id."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff = create_staff(db, StaffCreate(**payload))
+        return str(staff.staff_id)
+    finally:
+        db.close()
+
+
 def _login_as_admin(client: TestClient) -> None:
-    r = client.post(
-        "/api/staff",
-        json={"full_name": "Admin User", "email": "admin@example.com", "role": "admin"},
+    _create_staff_direct(
+        client, {"full_name": "Admin User", "email": "admin@example.com", "role": "admin"}
     )
-    assert r.status_code == 201, r.json()
     _login_as(client, "admin@example.com")
 
 
 def _register_doctor(client: TestClient, **overrides: object) -> str:
-    payload = valid_doctor_payload(**overrides)
-    r = client.post("/api/staff", json=payload)
-    assert r.status_code == 201, r.json()
-    return str(r.json()["staff_id"])
+    return _create_staff_direct(client, valid_doctor_payload(**overrides))
 
 
 TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
 
-def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
+def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int, str]:
     """Register a patient and a doctor, then create one appointment, one
     consultation note (with a diagnosis and an attachment), and one
-    prescription for that patient. Returns (patient_id, doctor_id, attachment_id)."""
+    prescription for that patient. Returns (patient_id, doctor_id, attachment_id,
+    doctor_temp_password) - the temp password lets a caller log back in as this
+    doctor later, after logging in as someone else in between (e.g. an admin to
+    delete the patient) makes the doctor's welcome email no longer the outbox's
+    last entry, which is what _login_as relies on."""
     patient_id = client.post("/api/patients", json=valid_patient_payload()).json()["patient_id"]
     doctor_id = _register_doctor(client)
+
+    receptionist_email = "receptionist@example.com"
+    _create_staff_direct(
+        client, {"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"}
+    )
+    _login_as(client, receptionist_email)
 
     appt = client.post(
         "/api/appointments",
@@ -978,6 +1028,14 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
         },
     )
     assert appt.status_code == 201, appt.json()
+
+    doctor_email = str(valid_doctor_payload()["email"])
+    doctor_temp_password_body = next(e.body for e in reversed(get_outbox()) if e.to == doctor_email)
+    doctor_temp_password_match = re.search(
+        r"temporary password is: (\S+)", doctor_temp_password_body
+    )
+    assert doctor_temp_password_match is not None
+    doctor_temp_password = doctor_temp_password_match.group(1)
 
     _login_as(client, str(valid_doctor_payload()["email"]))
 
@@ -1023,7 +1081,7 @@ def _build_full_history_for_patient(client: TestClient) -> tuple[str, str, int]:
     )
     assert attachment.status_code == 201, attachment.json()
 
-    return patient_id, doctor_id, attachment.json()["id"]
+    return patient_id, doctor_id, attachment.json()["id"], doctor_temp_password
 
 
 def test_delete_patient_with_no_history_succeeds(client: TestClient) -> None:
@@ -1041,13 +1099,23 @@ def test_delete_patient_cascades_to_all_history(client: TestClient) -> None:
     """Deleting a patient also deletes their appointments, consultation notes,
     diagnoses, prescriptions, and attachments - nothing referencing the deleted
     patient stays reachable afterward."""
-    patient_id, doctor_id, attachment_id = _build_full_history_for_patient(client)
+    patient_id, doctor_id, attachment_id, doctor_temp_password = _build_full_history_for_patient(
+        client
+    )
 
     _login_as_admin(client)
     r = client.delete(f"/api/patients/{patient_id}")
     assert r.status_code == 204
 
     assert client.get(f"/api/patients/{patient_id}").status_code == 404
+
+    # Medical records are treating-doctor-only now, so check as the doctor who
+    # treated this patient rather than as the admin who just deleted them.
+    login = client.post(
+        "/api/auth/login",
+        json={"email": str(valid_doctor_payload()["email"]), "password": doctor_temp_password},
+    )
+    assert login.status_code == 200, login.json()
 
     history = client.get("/api/consultations", params={"patient_id": patient_id})
     # get_patient_history requires the patient to exist - it's gone now, so a
@@ -1081,3 +1149,15 @@ def test_delete_patient_as_non_admin_is_redirected(client: TestClient) -> None:
     assert r.status_code == 303
 
     assert client.get(f"/api/patients/{created['patient_id']}").status_code == 200
+
+
+def test_patient_detail_entry_points_preserve_their_return_page() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    detail_script = (project_root / "static" / "js" / "patient_detail.js").read_text(
+        encoding="utf-8"
+    )
+    list_script = (project_root / "static" / "js" / "patients_list.js").read_text(encoding="utf-8")
+
+    assert 'const backTo = returnParams.get("from");' in detail_script
+    assert 'const backLabel = returnParams.get("label");' in detail_script
+    assert 'encodeURIComponent("Back to Patient List")' in list_script

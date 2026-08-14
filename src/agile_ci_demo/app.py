@@ -2,7 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
@@ -16,6 +16,8 @@ from agile_ci_demo.auth.router import api_router as auth_api_router
 from agile_ci_demo.auth.router import pages_router as auth_pages_router
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import init_db
+from agile_ci_demo.dashboard.router import api_router as dashboard_api_router
+from agile_ci_demo.dashboard.router import pages_router as dashboard_pages_router
 from agile_ci_demo.patients.router import api_router as patients_api_router
 from agile_ci_demo.patients.router import pages_router as patients_pages_router
 from agile_ci_demo.pharmacy.router import api_router as pharmacy_api_router
@@ -40,6 +42,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Agile Clinic Portal", version="0.1.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+
+
+@app.middleware("http")
+async def no_store_pages(request: Request, call_next):
+    """Stop browsers restoring pages (e.g. via the back/forward button) from
+    their cache after logout. Without this, the back-forward cache can show a
+    frozen snapshot of an authenticated page - complete with sidebar and data
+    - without ever asking the server whether the session is still valid.
+    Applied to everything except static assets, which are safe to cache since
+    they carry no per-user session state.
+    """
+    response = await call_next(request)
+    if not request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.exception_handler(NotAuthenticatedError)
@@ -67,6 +85,8 @@ app.include_router(prescription_pages_router)
 app.include_router(reports_api_router)
 app.include_router(reports_pages_router)
 app.include_router(attachments_api_router)
+app.include_router(dashboard_api_router)
+app.include_router(dashboard_pages_router)
 
 
 class Item(BaseModel):

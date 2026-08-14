@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -9,15 +10,71 @@ from sqlalchemy.orm import Session, selectinload
 from agile_ci_demo.core.email import send_email
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import generate_temp_password, hash_password
-from agile_ci_demo.staff.models import DoctorProfile, Staff
+from agile_ci_demo.staff.models import DoctorAuditLog, DoctorProfile, Staff
 from agile_ci_demo.staff.schemas import (
     DoctorOut,
     DoctorRegister,
     DoctorStatus,
     DoctorUpdate,
     StaffCreate,
+    StaffSelfUpdate,
     StaffUpdate,
 )
+
+# Fields captured in a doctor's audit diff - the whole doctor profile as shown
+# on the staff detail page, not just the DoctorProfile-only columns, since a
+# name/email edit is as much a change to "the doctor's profile" as a
+# specialty edit is.
+_DOCTOR_AUDIT_FIELDS = (
+    "full_name",
+    "email",
+    "is_active",
+    "license_number",
+    "specialty",
+    "doctor_status",
+    "start_time",
+    "end_time",
+    "next_start_time",
+    "next_end_time",
+    "next_effective_date",
+)
+
+
+def _doctor_audit_snapshot(staff: Staff) -> dict[str, object | None]:
+    """Comparable field values for a doctor's audit diff - JSON-safe
+    primitives only, since these are compared and stored as JSON."""
+    snapshot: dict[str, object | None] = {}
+    for field in _DOCTOR_AUDIT_FIELDS:
+        value = getattr(staff, field)
+        snapshot[field] = value.isoformat() if hasattr(value, "isoformat") else value
+    return snapshot
+
+
+def _record_doctor_audit(
+    db: Session,
+    staff: Staff,
+    action: str,
+    before: dict[str, object | None],
+    after: dict[str, object | None],
+    changed_by_staff_id: str | None,
+) -> None:
+    """Insert one audit log row covering only the fields that changed. A
+    no-op if nothing in `after` actually differs from `before`."""
+    diff = {
+        field: {"old": before.get(field), "new": value}
+        for field, value in after.items()
+        if before.get(field) != value
+    }
+    if not diff:
+        return
+    db.add(
+        DoctorAuditLog(
+            doctor_staff_id=staff.staff_id or "",
+            action=action,
+            changes=json.dumps(diff),
+            changed_by_staff_id=changed_by_staff_id,
+        )
+    )
 
 
 class DuplicateStaffEmailError(Exception):
@@ -56,7 +113,11 @@ class DoctorUpdateLicenseExistsError(Exception):
     """Raised when another doctor already uses the licence."""
 
 
-def create_staff(db: Session, data: StaffCreate) -> Staff:
+def create_staff(
+    db: Session,
+    data: StaffCreate,
+    changed_by_staff_id: str | None = None,
+) -> Staff:
     """Create any staff account and add a doctor profile when role=doctor."""
     existing = db.execute(select(Staff).where(Staff.email == str(data.email))).scalar_one_or_none()
     if existing is not None:
@@ -109,6 +170,12 @@ def create_staff(db: Session, data: StaffCreate) -> Staff:
 
     db.refresh(staff)
 
+    if data.role == Role.DOCTOR:
+        before: dict[str, object | None] = {field: None for field in _DOCTOR_AUDIT_FIELDS}
+        after = _doctor_audit_snapshot(staff)
+        _record_doctor_audit(db, staff, "create", before, after, changed_by_staff_id)
+        db.commit()
+
     try:
         send_email(
             to=staff.email,
@@ -132,6 +199,7 @@ def update_staff(
     db: Session,
     staff_id: str,
     data: StaffUpdate,
+    changed_by_staff_id: str | None = None,
 ) -> Staff:
     staff = get_staff_by_staff_id(
         db,
@@ -147,6 +215,9 @@ def update_staff(
 
     if duplicate_email is not None:
         raise StaffUpdateEmailExistsError("This email address is already registered.")
+
+    is_doctor = staff.role == Role.DOCTOR.value
+    audit_before = _doctor_audit_snapshot(staff) if is_doctor else None
 
     staff.full_name = data.full_name
     staff.email = str(data.email)
@@ -219,13 +290,38 @@ def update_staff(
         db.rollback()
         raise
 
-    return (
+    result = (
         get_staff_by_staff_id(
             db,
             staff_id,
         )
         or staff
     )
+
+    if is_doctor and audit_before is not None:
+        audit_after = _doctor_audit_snapshot(result)
+        _record_doctor_audit(db, result, "update", audit_before, audit_after, changed_by_staff_id)
+        db.commit()
+
+    return result
+
+
+def update_staff_self(db: Session, staff: Staff, data: StaffSelfUpdate) -> Staff:
+    """A staff member updating their OWN full_name/email. Deliberately does not
+    touch is_active, license_number, specialty, or doctor scheduling fields -
+    those stay admin-only via update_staff."""
+    duplicate_email = db.execute(
+        select(Staff).where(Staff.email == str(data.email)).where(Staff.id != staff.id)
+    ).scalar_one_or_none()
+
+    if duplicate_email is not None:
+        raise StaffUpdateEmailExistsError("This email address is already registered.")
+
+    staff.full_name = data.full_name
+    staff.email = str(data.email)
+    db.commit()
+    db.refresh(staff)
+    return staff
 
 
 def list_staff(db: Session) -> list[Staff]:
@@ -251,7 +347,12 @@ def delete_staff(db: Session, staff_id: str) -> None:
     db.commit()
 
 
-def set_staff_active_status(db: Session, staff_id: str, is_active: bool) -> Staff:
+def set_staff_active_status(
+    db: Session,
+    staff_id: str,
+    is_active: bool,
+    changed_by_staff_id: str | None = None,
+) -> Staff:
     """Activate or deactivate a staff account.
 
     For a doctor, also syncs DoctorProfile.status so the change is reflected
@@ -262,6 +363,9 @@ def set_staff_active_status(db: Session, staff_id: str, is_active: bool) -> Staf
     if staff is None:
         raise StaffNotFoundError(f"No staff account found with staff_id '{staff_id}'")
 
+    is_doctor = staff.doctor_profile is not None
+    audit_before = _doctor_audit_snapshot(staff) if is_doctor else None
+
     staff.is_active = is_active
     if staff.doctor_profile is not None:
         staff.doctor_profile.status = (
@@ -269,7 +373,27 @@ def set_staff_active_status(db: Session, staff_id: str, is_active: bool) -> Staf
         )
     db.commit()
     db.refresh(staff)
+
+    if is_doctor and audit_before is not None:
+        audit_after = _doctor_audit_snapshot(staff)
+        action = "activate" if is_active else "deactivate"
+        _record_doctor_audit(db, staff, action, audit_before, audit_after, changed_by_staff_id)
+        db.commit()
+
     return staff
+
+
+def list_doctor_audit_log(db: Session, staff_id: str) -> list[DoctorAuditLog]:
+    """A doctor's audit trail, newest first."""
+    return list(
+        db.execute(
+            select(DoctorAuditLog)
+            .where(DoctorAuditLog.doctor_staff_id == staff_id)
+            .order_by(DoctorAuditLog.changed_at.desc())
+        )
+        .scalars()
+        .all()
+    )
 
 
 def list_doctors(db: Session) -> list[DoctorOut]:

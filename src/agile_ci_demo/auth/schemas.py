@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as dt
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from agile_ci_demo.core.rbac import Role
@@ -18,7 +20,12 @@ class LoginResponse(BaseModel):
     role: Role
     must_change_password: bool
     redirect_url: str
-    session_token: str
+    session_token: str = Field(
+        description=(
+            "Signed HS256 staff JWT for Bearer authentication. The token expires one hour "
+            "after login."
+        )
+    )
 
 
 class PatientLoginRequest(BaseModel):
@@ -51,3 +58,31 @@ class ResetPasswordRequest(BaseModel):
         if self.new_password != self.confirm_password:
             raise ValueError("Passwords do not match")
         return self
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+    confirm_password: str
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> "ChangePasswordRequest":
+        if self.new_password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class AuthAuditLogEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: str | None
+    email: str | None
+    event: str
+    ip_address: str | None
+    created_at: dt.datetime
+
+
+class AuthAuditLogPage(BaseModel):
+    items: list[AuthAuditLogEntry]
+    total: int

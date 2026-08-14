@@ -13,6 +13,11 @@ from agile_ci_demo.consultations.models import ConsultationNote, Diagnosis
 from agile_ci_demo.consultations.schemas import ConsultationNoteCreate, DiagnosisIn
 from agile_ci_demo.staff.models import Staff
 
+
+def malaysia_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
+
+
 # A small curated reference list of common ICD-10 codes, used to power the diagnosis
 # autocomplete search. Not exhaustive - a teaching-app stand-in for a real ICD-10 API.
 ICD10_CODES: list[dict[str, str]] = [
@@ -99,6 +104,9 @@ def start_consultation(
     creating a duplicate. Without an appointment_reference (an ad-hoc visit),
     every call starts a fresh note (second element True) since there is nothing
     to key the lookup on.
+
+    Raises ConsultationAlreadyEndedError if the appointment's consultation was
+    already completed - it can't be resumed as an editable draft.
     """
     patient = get_patient_by_patient_id(db, patient_id)
     if patient is None:
@@ -113,9 +121,11 @@ def start_consultation(
                 select(ConsultationNote).where(ConsultationNote.appointment_id == appointment_id)
             ).scalar_one_or_none()
             if existing is not None:
+                if existing.status == "completed":
+                    raise ConsultationAlreadyEndedError("This consultation has already ended")
                 return existing, False
 
-    now = dt.datetime.utcnow()
+    now = malaysia_now()
     note = ConsultationNote(
         patient_id=patient.id,
         doctor_id=doctor.id,
@@ -192,7 +202,7 @@ def create_consultation_note(
         if appointment is not None:
             appointment_id = appointment.id
 
-    now = dt.datetime.utcnow()
+    now = malaysia_now()
     note = ConsultationNote(
         patient_id=patient.id,
         doctor_id=doctor.id,
@@ -235,7 +245,7 @@ def end_consultation(db: Session, record_id: str, doctor: Staff) -> Consultation
     if note.status == "completed":
         raise ConsultationAlreadyEndedError("This consultation has already ended")
 
-    note.ended_at = dt.datetime.utcnow()
+    note.ended_at = malaysia_now()
     note.status = "completed"
 
     if note.appointment_id is not None:

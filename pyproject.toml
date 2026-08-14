@@ -13,6 +13,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "itsdangerous>=2.1",
   "reportlab>=4.2",
+  "cryptography>=42.0",
 ]
 
 [build-system]

@@ -11,6 +11,21 @@
   const rangeForm = document.getElementById(
     "report-date-range-form"
   );
+  const reportTypeInput = document.getElementById(
+    "report-type"
+  );
+  const appointmentFilters = document.getElementById(
+    "report-date-range-form"
+  );
+  const patientRegistrationFilters = document.getElementById(
+    "patient-registration-filters"
+  );
+  const appointmentReportSection = document.getElementById(
+    "appointment-activity-report"
+  );
+  const patientRegistrationReportSection = document.getElementById(
+    "patient-registration-report"
+  );
   const fromInput = document.getElementById(
     "report-from-date"
   );
@@ -41,11 +56,35 @@
   const chartCanvas = document.getElementById(
     "daily-appointments-chart"
   );
+  const chartTooltip = document.getElementById(
+    "appointment-chart-tooltip"
+  );
+  const registrationYearInput = document.getElementById(
+    "patient-registration-year"
+  );
+  const totalPatientRegistrations = document.getElementById(
+    "total-patient-registrations"
+  );
+  const patientRegistrationsTableBody = document.getElementById(
+    "monthly-patient-registrations-table-body"
+  );
+  const patientRegistrationChartCanvas = document.getElementById(
+    "monthly-patient-registrations-chart"
+  );
+  const patientRegistrationChartTooltip = document.getElementById(
+    "patient-registration-chart-tooltip"
+  );
   const chartContext = chartCanvas.getContext("2d");
+  const patientRegistrationChartContext =
+    patientRegistrationChartCanvas.getContext("2d");
 
-  let currentReport = null;
+  let currentAppointmentReport = null;
+  let currentPatientRegistrationReport = null;
+  let chartBars = [];
+  let patientRegistrationChartBars = [];
   let resizeTimer = null;
   let requestSequence = 0;
+  let patientRequestSequence = 0;
 
   function escapeHtml(value) {
     return String(value).replace(
@@ -276,18 +315,93 @@
     ).join("");
   }
 
-  function resizeCanvas() {
-    const bounds = chartCanvas.getBoundingClientRect();
+  function renderPatientRegistrations(report) {
+    currentPatientRegistrationReport = report;
+    totalPatientRegistrations.textContent =
+      String(report.total_registrations);
+    patientRegistrationsTableBody.innerHTML =
+      report.monthly_registrations.map(
+        function (item) {
+          return `
+            <tr>
+              <td>${escapeHtml(item.month)}</td>
+              <td class="text-end">${escapeHtml(item.count)}</td>
+            </tr>
+          `;
+        }
+      ).join("");
+    renderPatientRegistrationChart(
+      report.monthly_registrations
+    );
+    exportButton.disabled = false;
+  }
+
+  async function refreshPatientRegistrations() {
+    if (reportTypeInput.value !== "patient_registrations") {
+      return;
+    }
+    const sequence = ++patientRequestSequence;
+    exportButton.disabled = true;
+    totalPatientRegistrations.textContent = "Loading...";
+    try {
+      const params = new URLSearchParams({
+        year: registrationYearInput.value
+      });
+      const response = await fetch(
+        "/api/reports/patients/registrations/monthly?" +
+        params.toString()
+      );
+      const data = await readResponse(response);
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+          "Patient registrations could not be loaded."
+        );
+      }
+      if (
+        sequence !== patientRequestSequence ||
+        reportTypeInput.value !== "patient_registrations"
+      ) {
+        return;
+      }
+      renderPatientRegistrations(data);
+    } catch (error) {
+      if (sequence !== patientRequestSequence) {
+        return;
+      }
+      currentPatientRegistrationReport = null;
+      totalPatientRegistrations.textContent = "Unavailable";
+      patientRegistrationsTableBody.innerHTML = `
+        <tr>
+          <td colspan="2" class="text-center text-muted py-4">
+            Patient registrations could not be loaded.
+          </td>
+        </tr>
+      `;
+      showError(error.message);
+    } finally {
+      if (
+        sequence === patientRequestSequence &&
+        reportTypeInput.value === "patient_registrations"
+      ) {
+        exportButton.disabled =
+          !currentPatientRegistrationReport;
+      }
+    }
+  }
+
+  function resizeCanvas(canvas, context) {
+    const bounds = canvas.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
-    chartCanvas.width = Math.max(
+    canvas.width = Math.max(
       1,
       Math.floor(bounds.width * ratio)
     );
-    chartCanvas.height = Math.max(
+    canvas.height = Math.max(
       1,
       Math.floor(bounds.height * ratio)
     );
-    chartContext.setTransform(
+    context.setTransform(
       ratio,
       0,
       0,
@@ -302,9 +416,14 @@
   }
 
   function renderChart(items) {
-    const dimensions = resizeCanvas();
+    const dimensions = resizeCanvas(
+      chartCanvas,
+      chartContext
+    );
     const width = dimensions.width;
     const height = dimensions.height;
+    chartBars = [];
+    chartTooltip.classList.add("d-none");
 
     chartContext.clearRect(0, 0, width, height);
 
@@ -330,8 +449,8 @@
     );
     const ySteps = Math.min(5, maximum);
 
-    chartContext.strokeStyle = "#d9e2ec";
-    chartContext.fillStyle = "#62778b";
+    chartContext.strokeStyle = "#e2e8f0";
+    chartContext.fillStyle = "#475569";
     chartContext.lineWidth = 1;
     chartContext.font =
       '12px system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -377,13 +496,26 @@
         (slotWidth - barWidth) / 2;
       const y = margin.top + plotHeight - barHeight;
 
-      chartContext.fillStyle = "#2463a8";
+      chartContext.fillStyle = "#4f46e5";
+      const drawnHeight = Math.max(
+        item.total > 0 ? 2 : 0,
+        barHeight
+      );
       chartContext.fillRect(
         x,
         y,
         barWidth,
-        Math.max(item.total > 0 ? 2 : 0, barHeight)
+        drawnHeight
       );
+      chartBars.push({
+        x: x,
+        y: item.total > 0
+          ? y
+          : margin.top + plotHeight - 6,
+        width: barWidth,
+        height: Math.max(drawnHeight, 6),
+        item: item
+      });
 
       if (
         items.length <= 31 ||
@@ -395,7 +527,7 @@
           margin.top + plotHeight + 10
         );
         chartContext.rotate(-Math.PI / 4);
-        chartContext.fillStyle = "#62778b";
+        chartContext.fillStyle = "#475569";
         chartContext.textAlign = "right";
         chartContext.textBaseline = "middle";
         chartContext.fillText(
@@ -411,8 +543,208 @@
     });
   }
 
+  function renderPatientRegistrationChart(items) {
+    const dimensions = resizeCanvas(
+      patientRegistrationChartCanvas,
+      patientRegistrationChartContext
+    );
+    const width = dimensions.width;
+    const height = dimensions.height;
+    const context = patientRegistrationChartContext;
+    patientRegistrationChartBars = [];
+    patientRegistrationChartTooltip.classList.add("d-none");
+    context.clearRect(0, 0, width, height);
+
+    const margin = {
+      top: 20,
+      right: 16,
+      bottom: 48,
+      left: 44
+    };
+    const plotWidth = Math.max(
+      1,
+      width - margin.left - margin.right
+    );
+    const plotHeight = Math.max(
+      1,
+      height - margin.top - margin.bottom
+    );
+    const maximum = Math.max(
+      1,
+      ...items.map(function (item) {
+        return item.count;
+      })
+    );
+    const ySteps = Math.min(5, maximum);
+
+    context.strokeStyle = "#e2e8f0";
+    context.fillStyle = "#475569";
+    context.lineWidth = 1;
+    context.font =
+      '12px system-ui, -apple-system, "Segoe UI", sans-serif';
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+
+    for (let step = 0; step <= ySteps; step += 1) {
+      const value = Math.round(
+        maximum * step / ySteps
+      );
+      const y =
+        margin.top +
+        plotHeight -
+        plotHeight * step / ySteps;
+      context.beginPath();
+      context.moveTo(margin.left, y);
+      context.lineTo(width - margin.right, y);
+      context.stroke();
+      context.fillText(String(value), margin.left - 8, y);
+    }
+
+    if (items.length === 0) {
+      return;
+    }
+
+    const slotWidth = plotWidth / items.length;
+    const barWidth = Math.max(
+      4,
+      Math.min(38, slotWidth * 0.62)
+    );
+    items.forEach(function (item, index) {
+      const barHeight =
+        plotHeight * item.count / maximum;
+      const x =
+        margin.left +
+        slotWidth * index +
+        (slotWidth - barWidth) / 2;
+      const y = margin.top + plotHeight - barHeight;
+      const drawnHeight = Math.max(
+        item.count > 0 ? 2 : 0,
+        barHeight
+      );
+
+      context.fillStyle = "#4f46e5";
+      context.fillRect(x, y, barWidth, drawnHeight);
+      patientRegistrationChartBars.push({
+        x: x,
+        y: item.count > 0
+          ? y
+          : margin.top + plotHeight - 6,
+        width: barWidth,
+        height: Math.max(drawnHeight, 6),
+        item: item
+      });
+
+      context.fillStyle = "#475569";
+      context.textAlign = "center";
+      context.textBaseline = "top";
+      context.fillText(
+        item.month.slice(0, 3),
+        x + barWidth / 2,
+        margin.top + plotHeight + 10
+      );
+    });
+  }
+
+  function hideChartTooltip() {
+    chartTooltip.classList.add("d-none");
+    chartCanvas.style.cursor = "default";
+  }
+
+  function showChartTooltip(event) {
+    const bounds = chartCanvas.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const hoveredBar = chartBars.find(
+      function (bar) {
+        return x >= bar.x &&
+          x <= bar.x + bar.width &&
+          y >= bar.y &&
+          y <= bar.y + bar.height;
+      }
+    );
+
+    if (!hoveredBar) {
+      hideChartTooltip();
+      return;
+    }
+
+    const count = hoveredBar.item.total;
+    chartTooltip.textContent =
+      formatDate(hoveredBar.item.date, {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }) +
+      ": " + count +
+      (count === 1 ? " appointment" : " appointments");
+    chartTooltip.classList.remove("d-none");
+    chartCanvas.style.cursor = "pointer";
+
+    const tooltipLeft = Math.min(
+      Math.max(8, x + 12),
+      Math.max(8, bounds.width - chartTooltip.offsetWidth - 8)
+    );
+    const tooltipTop = Math.max(
+      8,
+      y - chartTooltip.offsetHeight - 12
+    );
+    chartTooltip.style.left = tooltipLeft + "px";
+    chartTooltip.style.top = tooltipTop + "px";
+  }
+
+  function hidePatientRegistrationChartTooltip() {
+    patientRegistrationChartTooltip.classList.add("d-none");
+    patientRegistrationChartCanvas.style.cursor = "default";
+  }
+
+  function showPatientRegistrationChartTooltip(event) {
+    const bounds =
+      patientRegistrationChartCanvas.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const hoveredBar = patientRegistrationChartBars.find(
+      function (bar) {
+        return x >= bar.x &&
+          x <= bar.x + bar.width &&
+          y >= bar.y &&
+          y <= bar.y + bar.height;
+      }
+    );
+
+    if (!hoveredBar) {
+      hidePatientRegistrationChartTooltip();
+      return;
+    }
+
+    const count = hoveredBar.item.count;
+    patientRegistrationChartTooltip.textContent =
+      hoveredBar.item.month +
+      ": " + count +
+      (count === 1 ? " registration" : " registrations");
+    patientRegistrationChartTooltip.classList.remove("d-none");
+    patientRegistrationChartCanvas.style.cursor = "pointer";
+
+    const tooltipLeft = Math.min(
+      Math.max(8, x + 12),
+      Math.max(
+        8,
+        bounds.width -
+        patientRegistrationChartTooltip.offsetWidth -
+        8
+      )
+    );
+    const tooltipTop = Math.max(
+      8,
+      y - patientRegistrationChartTooltip.offsetHeight - 12
+    );
+    patientRegistrationChartTooltip.style.left =
+      tooltipLeft + "px";
+    patientRegistrationChartTooltip.style.top =
+      tooltipTop + "px";
+  }
+
   function renderReport(report) {
-    currentReport = report;
+    currentAppointmentReport = report;
     selectedRangeLabel.textContent =
       report.selected_range_label;
     totalAppointmentsValue.textContent =
@@ -433,6 +765,9 @@
   }
 
   async function refreshReports() {
+    if (reportTypeInput.value !== "appointment_activity") {
+      return;
+    }
     if (!validateRange()) {
       return;
     }
@@ -454,7 +789,10 @@
         );
       }
 
-      if (sequence !== requestSequence) {
+      if (
+        sequence !== requestSequence ||
+        reportTypeInput.value !== "appointment_activity"
+      ) {
         return;
       }
 
@@ -463,17 +801,20 @@
       if (sequence !== requestSequence) {
         return;
       }
-      currentReport = null;
+      currentAppointmentReport = null;
       showError(error.message);
     } finally {
-      if (sequence === requestSequence) {
+      if (
+        sequence === requestSequence &&
+        reportTypeInput.value === "appointment_activity"
+      ) {
         setLoading(false);
-        exportButton.disabled = !currentReport;
+        exportButton.disabled = !currentAppointmentReport;
       }
     }
   }
 
-  function filenameFromResponse(response) {
+  function filenameFromResponse(response, fallbackFilename) {
     const disposition =
       response.headers.get("content-disposition") || "";
     const match = disposition.match(
@@ -481,11 +822,40 @@
     );
     return match
       ? match[1]
-      : "appointment-activity-report.pdf";
+      : fallbackFilename;
+  }
+
+  function selectedExportRequest() {
+    if (reportTypeInput.value === "patient_registrations") {
+      return {
+        url:
+          "/api/reports/patients/registrations/monthly/export.pdf?" +
+          new URLSearchParams({
+            year: registrationYearInput.value
+          }).toString(),
+        ready: Boolean(currentPatientRegistrationReport),
+        fallbackFilename: "patient-registration-report.pdf"
+      };
+    }
+    return {
+      url:
+        "/api/reports/appointments/daily/export.pdf?" +
+        selectedRangeParams().toString(),
+      ready: Boolean(currentAppointmentReport),
+      fallbackFilename: "appointment-activity-report.pdf"
+    };
   }
 
   async function exportReport() {
-    if (!validateRange()) {
+    if (
+      reportTypeInput.value === "appointment_activity" &&
+      !validateRange()
+    ) {
+      return;
+    }
+
+    const exportRequest = selectedExportRequest();
+    if (!exportRequest.ready) {
       return;
     }
 
@@ -494,8 +864,7 @@
 
     try {
       const response = await fetch(
-        "/api/reports/appointments/daily/export.pdf?" +
-        selectedRangeParams().toString()
+        exportRequest.url
       );
 
       if (!response.ok) {
@@ -511,7 +880,10 @@
       const downloadLink = document.createElement("a");
       downloadLink.href = downloadUrl;
       downloadLink.download =
-        filenameFromResponse(response);
+        filenameFromResponse(
+          response,
+          exportRequest.fallbackFilename
+        );
       document.body.appendChild(downloadLink);
       downloadLink.click();
       downloadLink.remove();
@@ -519,8 +891,59 @@
     } catch (error) {
       showError(error.message);
     } finally {
-      exportButton.disabled = !currentReport;
+      exportButton.disabled = !selectedExportRequest().ready;
       exportButton.textContent = "Export PDF";
+    }
+  }
+
+  function selectReportType() {
+    const showAppointments =
+      reportTypeInput.value === "appointment_activity";
+    appointmentFilters.classList.toggle(
+      "d-none",
+      !showAppointments
+    );
+    appointmentReportSection.classList.toggle(
+      "d-none",
+      !showAppointments
+    );
+    patientRegistrationFilters.classList.toggle(
+      "d-none",
+      showAppointments
+    );
+    patientRegistrationReportSection.classList.toggle(
+      "d-none",
+      showAppointments
+    );
+    hideError();
+
+    if (showAppointments) {
+      patientRequestSequence += 1;
+      hidePatientRegistrationChartTooltip();
+      exportButton.disabled = !currentAppointmentReport;
+      if (currentAppointmentReport) {
+        window.requestAnimationFrame(function () {
+          renderChart(currentAppointmentReport.daily_totals);
+        });
+      } else {
+        refreshReports();
+      }
+    } else {
+      requestSequence += 1;
+      setLoading(false);
+      hideChartTooltip();
+      exportButton.disabled =
+        !currentPatientRegistrationReport;
+      if (currentPatientRegistrationReport) {
+        window.requestAnimationFrame(function () {
+          renderPatientRegistrationChart(
+            currentPatientRegistrationReport
+              .monthly_registrations
+          );
+        });
+      } else {
+        refreshPatientRegistrations();
+      }
     }
   }
 
@@ -551,12 +974,50 @@
     exportReport
   );
 
+  reportTypeInput.addEventListener(
+    "change",
+    selectReportType
+  );
+
+  registrationYearInput.addEventListener(
+    "change",
+    refreshPatientRegistrations
+  );
+
+  chartCanvas.addEventListener(
+    "mousemove",
+    showChartTooltip
+  );
+  chartCanvas.addEventListener(
+    "mouseleave",
+    hideChartTooltip
+  );
+  patientRegistrationChartCanvas.addEventListener(
+    "mousemove",
+    showPatientRegistrationChartTooltip
+  );
+  patientRegistrationChartCanvas.addEventListener(
+    "mouseleave",
+    hidePatientRegistrationChartTooltip
+  );
+
   window.addEventListener("resize", function () {
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(
       function () {
-        if (currentReport) {
-          renderChart(currentReport.daily_totals);
+        if (
+          currentAppointmentReport &&
+          reportTypeInput.value === "appointment_activity"
+        ) {
+          renderChart(currentAppointmentReport.daily_totals);
+        } else if (
+          currentPatientRegistrationReport &&
+          reportTypeInput.value === "patient_registrations"
+        ) {
+          renderPatientRegistrationChart(
+            currentPatientRegistrationReport
+              .monthly_registrations
+          );
         }
       },
       120

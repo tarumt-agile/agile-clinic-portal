@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -9,7 +11,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from agile_ci_demo.auth.deps import require_role
+from agile_ci_demo.auth.deps import require_patient, require_role
 from agile_ci_demo.core.config import settings
 from agile_ci_demo.core.database import get_db
 from agile_ci_demo.core.rbac import Role
@@ -45,7 +47,18 @@ from agile_ci_demo.prescriptions.service import (
     get_prescription_options,
     update_prescription_instructions,
 )
+from agile_ci_demo.patients.models import Patient
 from agile_ci_demo.staff.models import Staff
+
+prescription_doctor = require_role(
+    Role.DOCTOR,
+    forbidden_for_wrong_role=True,
+)
+doctor_only_responses: dict[int | str, dict[str, Any]] = {
+    status.HTTP_403_FORBIDDEN: {
+        "description": ("Forbidden: the authenticated staff member does not have the doctor role.")
+    }
+}
 
 api_router = APIRouter(
     prefix="/api/prescriptions",
@@ -79,12 +92,19 @@ def serialize_prescription(
         for item in prescription.history
     ]
 
+    diagnosis = prescription.diagnosis
+    diagnosis_id = diagnosis.id if diagnosis is not None else prescription.diagnosis_id
+    diagnosis_code = diagnosis.icd10_code if diagnosis is not None else ""
+    diagnosis_description = (
+        diagnosis.description if diagnosis is not None else "Diagnosis no longer available"
+    )
+
     return PrescriptionOut(
         prescription_id=(prescription.prescription_id or ""),
         consultation_record_id=(prescription.consultation_note.record_id or ""),
-        diagnosis_id=prescription.diagnosis.id,
-        diagnosis_code=(prescription.diagnosis.icd10_code),
-        diagnosis_description=(prescription.diagnosis.description),
+        diagnosis_id=diagnosis_id,
+        diagnosis_code=diagnosis_code,
+        diagnosis_description=diagnosis_description,
         patient_id=(prescription.patient.patient_id or ""),
         patient_name=(prescription.patient.full_name),
         prescribing_doctor_id=(prescription.prescribing_doctor.staff_id or ""),
@@ -174,11 +194,17 @@ def search_medication_catalogue(
     "",
     response_model=PrescriptionOut,
     status_code=status.HTTP_201_CREATED,
+    responses=doctor_only_responses,
+    summary="Create a prescription",
+    description=(
+        "Issues medication for a consultation diagnosis. Requires an authenticated "
+        "staff JWT with the doctor role."
+    ),
 )
 def create_prescription_endpoint(
     payload: PrescriptionCreate,
     db: Session = Depends(get_db),
-    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    doctor: Staff = Depends(prescription_doctor),
 ) -> PrescriptionOut:
     try:
         prescription = create_prescription(
@@ -330,6 +356,43 @@ def get_prescriptions_for_consultation(
     )
 
 
+# This route returns the logged-in patient's own prescriptions. Registered
+# before the generic "/{prescription_id}" route below - FastAPI matches
+# routes in registration order, so "mine" would otherwise be captured as a
+# prescription_id path parameter instead of reaching this handler.
+@api_router.get(
+    "/mine",
+    response_model=PrescriptionList,
+)
+def get_my_prescriptions(
+    db: Session = Depends(get_db),
+    patient: Patient = Depends(require_patient),
+) -> PrescriptionList:
+    try:
+        prescriptions = get_patient_prescriptions(
+            db,
+            patient.patient_id or "",
+        )
+    except PrescriptionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    items = [
+        serialize_prescription(
+            item,
+            None,
+        )
+        for item in prescriptions
+    ]
+
+    return PrescriptionList(
+        items=items,
+        total=len(items),
+    )
+
+
 # This route returns one prescription.
 @api_router.get(
     "/{prescription_id}",
@@ -363,16 +426,28 @@ def get_prescription_details(
 @api_router.patch(
     "/{prescription_id}/instructions",
     response_model=PrescriptionOut,
+    responses=doctor_only_responses,
+    summary="Update prescription instructions",
+    description=(
+        "Updates dosage, frequency, and duration. Requires the doctor role and the "
+        "authenticated doctor must be the original prescriber."
+    ),
 )
 @api_router.patch(
     "/{prescription_id}/dosage",
     response_model=PrescriptionOut,
+    responses=doctor_only_responses,
+    summary="Update prescription dosage instructions",
+    description=(
+        "Backward-compatible alias for updating prescription instructions. Requires "
+        "the doctor role and the authenticated doctor must be the original prescriber."
+    ),
 )
 def update_prescription_instructions_endpoint(
     prescription_id: str,
     payload: PrescriptionInstructionUpdate,
     db: Session = Depends(get_db),
-    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    doctor: Staff = Depends(prescription_doctor),
 ) -> PrescriptionOut:
     try:
         prescription = update_prescription_instructions(

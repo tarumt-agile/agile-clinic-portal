@@ -15,6 +15,8 @@ from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
 from agile_ci_demo.pharmacy import models as _pharmacy_models  # noqa: F401
 from agile_ci_demo.pharmacy.service import seed_default_medications
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 
 @pytest.fixture
@@ -83,11 +85,15 @@ def create_staff_and_login(
     email = str(payload["email"])
 
     clear_outbox()
-    create_response = client.post(
-        "/api/staff",
-        json=payload,
-    )
-    assert create_response.status_code == 201, create_response.json()
+    # Staff creation directly through the service layer, bypassing the API
+    # (POST /api/staff now requires an admin session) - this is pure test
+    # setup, not the thing under test.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff = create_staff(db, StaffCreate(**payload))
+        staff_id = str(staff.staff_id)
+    finally:
+        db.close()
 
     welcome_email = next(message for message in reversed(get_outbox()) if message.to == email)
     match = re.search(
@@ -104,7 +110,7 @@ def create_staff_and_login(
         },
     )
     assert login_response.status_code == 200, login_response.json()
-    return str(create_response.json()["staff_id"])
+    return staff_id
 
 
 def new_medication_payload(
@@ -365,7 +371,9 @@ def test_receptionist_and_admin_can_open_pharmacy_page(
     assert 'id="add-medication-button"' in response.text
     assert 'id="stock-modal"' in response.text
     assert "/static/js/pharmacy-management.js" in response.text
-    assert '<a class="nav-link" href="/pharmacy">Pharmacy</a>' in response.text
+    assert (
+        'class="sidebar-link' in response.text and 'href="/pharmacy">Pharmacy</a>' in response.text
+    )
 
 
 def test_pharmacy_form_uses_controlled_dropdowns(

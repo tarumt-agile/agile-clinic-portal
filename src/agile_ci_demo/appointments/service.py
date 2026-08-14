@@ -35,6 +35,11 @@ class SlotUnavailableError(Exception):
     """Raised when the doctor already has a scheduled appointment overlapping this slot."""
 
 
+class DailyBookingLimitError(Exception):
+    """Raised when a patient booking for themselves already has a scheduled
+    appointment on the requested date."""
+
+
 class PastDateError(Exception):
     """Raised when a doctor's schedule is requested for a date before today."""
 
@@ -80,8 +85,12 @@ def _validate_slot(
         raise InvalidSlotError(f"Appointment start time must align to {SLOT_MINUTES}-minute slots")
 
 
-def create_appointment(db: Session, data: AppointmentCreate) -> Appointment:
-    """Book a new appointment, validating slot availability and preventing double-booking."""
+def create_appointment(
+    db: Session, data: AppointmentCreate, *, enforce_daily_limit: bool = False
+) -> Appointment:
+    """Book a new appointment, validating slot availability and preventing double-booking.
+    When enforce_daily_limit is True (a patient booking for themselves), also rejects a
+    second scheduled appointment on the same date - front-desk staff bookings are exempt."""
     patient = get_patient_by_patient_id(db, data.patient_id)
     if patient is None:
         raise PatientNotFoundError(f"No patient found with patient_id '{data.patient_id}'")
@@ -94,6 +103,21 @@ def create_appointment(db: Session, data: AppointmentCreate) -> Appointment:
     doctor_open, doctor_close = get_doctor_hours(doctor.doctor_profile, data.appointment_date)
     end_time = add_minutes(data.start_time, SLOT_MINUTES)
     _validate_slot(data.appointment_date, data.start_time, end_time, doctor_open, doctor_close)
+
+    if enforce_daily_limit:
+        existing = db.execute(
+            select(Appointment).where(
+                Appointment.patient_id == patient.id,
+                Appointment.appointment_date == data.appointment_date,
+                Appointment.status == "scheduled",
+            )
+        ).first()
+        if existing is not None:
+            raise DailyBookingLimitError(
+                f"You already have an appointment scheduled on {data.appointment_date}. "
+                "Patients can book one appointment online per day - please visit the "
+                "clinic in person to arrange a second appointment for the same day."
+            )
 
     conflict = db.execute(
         select(Appointment).where(
@@ -195,6 +219,80 @@ def get_doctor_schedule_dates(db: Session, doctor_id: int) -> list[tuple[dt.date
         .tuples()
         .all()
     )
+
+
+def get_doctor_schedule_range(
+    db: Session, doctor_id: int, start_date: dt.date, end_date: dt.date
+) -> list[Appointment]:
+    """Return a doctor's appointments across a date range (inclusive), ordered by
+    date then start time ascending. Unlike get_doctor_schedule, past dates are
+    allowed here - the calendar view needs to browse previous months too."""
+    return list(
+        db.execute(
+            select(Appointment)
+            .where(
+                Appointment.doctor_id == doctor_id,
+                Appointment.appointment_date >= start_date,
+                Appointment.appointment_date <= end_date,
+            )
+            .order_by(Appointment.appointment_date, Appointment.start_time)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_doctor_schedule_stats(db: Session, doctor_id: int) -> dict[str, int]:
+    """Summary counts for the doctor dashboard: total non-cancelled appointments
+    (status "scheduled" or "completed"), today's, future (after today), and
+    completed. Status flips from "scheduled" to "completed" when the linked
+    consultation is ended - see consultations.service.end_consultation."""
+    today = dt.date.today()
+
+    total = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status.in_(["scheduled", "completed"]),
+        )
+    ).scalar_one()
+
+    today_count = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status == "scheduled",
+            Appointment.appointment_date == today,
+        )
+    ).scalar_one()
+
+    future_count = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status == "scheduled",
+            Appointment.appointment_date > today,
+        )
+    ).scalar_one()
+
+    completed_count = db.execute(
+        select(func.count())
+        .select_from(Appointment)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status == "completed",
+        )
+    ).scalar_one()
+
+    return {
+        "total": total,
+        "today": today_count,
+        "future": future_count,
+        "completed": completed_count,
+    }
 
 
 def get_patient_appointments(db: Session, patient_id: int) -> list[Appointment]:

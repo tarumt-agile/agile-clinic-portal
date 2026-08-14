@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Time
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from agile_ci_demo.core.database import Base
@@ -123,6 +123,25 @@ class DoctorProfile(Base):
     )
 
     staff: Mapped[Staff] = relationship(back_populates="doctor_profile")
+
+
+class DoctorAuditLog(Base):
+    """Audit trail entry for a create, update, or activate/deactivate on a
+    doctor's staff/profile record. `changes` is a JSON diff of only the
+    fields that actually changed, e.g. '{"specialty": {"old": "...", "new":
+    "..."}}'. Rows are never deleted, which trivially satisfies "retain for
+    at least 12 months" without needing a retention/cleanup job."""
+
+    __tablename__ = "doctor_audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    doctor_staff_id: Mapped[str] = mapped_column(String(10), index=True)
+    action: Mapped[str] = mapped_column(String(20))
+    changes: Mapped[str] = mapped_column(Text)
+    changed_by_staff_id: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    changed_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.utcnow, index=True
+    )
 
 
 def get_doctor_hours(profile: DoctorProfile, date: dt.date) -> tuple[dt.time, dt.time]:

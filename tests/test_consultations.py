@@ -18,6 +18,8 @@ from agile_ci_demo.appointments import models as _appointments_models  # noqa: F
 from agile_ci_demo.patients import models as _patients_models  # noqa: F401
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 TOMORROW = (dt.date.today() + dt.timedelta(days=1)).isoformat()
 
@@ -84,17 +86,22 @@ def _register_patient(client: TestClient, **overrides: object) -> str:
     return str(body["patient_id"])
 
 
+def _create_staff_direct(client: TestClient, payload: dict[str, object]) -> str:
+    """Create a staff account directly through the service layer, bypassing
+    the API (POST /api/staff now requires an admin session) - this is pure
+    test setup, not the thing under test, and is often needed before any
+    admin session can exist at all. Returns the new account's public staff_id."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff = create_staff(db, StaffCreate(**payload))
+        return str(staff.staff_id)
+    finally:
+        db.close()
+
+
 def _register_doctor(client: TestClient, **overrides: object) -> str:
     """Create a doctor account (no session/login) and return its staff_id."""
-    response = client.post(
-        "/api/staff",
-        json=valid_staff_payload(**overrides),
-    )
-
-    assert response.status_code == 201, response.json()
-
-    body = response.json()
-    return str(body["staff_id"])
+    return _create_staff_direct(client, valid_staff_payload(**overrides))
 
 
 def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
@@ -104,12 +111,10 @@ def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
     from the session, so most tests need an actual logged-in doctor, not just
     a doctor row in the database.
     """
-    response = client.post("/api/staff", json=valid_staff_payload(**overrides))
-    assert response.status_code == 201, response.json()
-    body = response.json()
+    staff_id = _create_staff_direct(client, valid_staff_payload(**overrides))
 
     email = str(overrides.get("email", "alan.chua@example.com"))
-    outbox_body = get_outbox()[-1].body
+    outbox_body = next(e.body for e in reversed(get_outbox()) if e.to == email)
     match = re.search(r"temporary password is: (\S+)", outbox_body)
     assert match is not None
     temp_password = match.group(1)
@@ -117,13 +122,24 @@ def _register_and_login_doctor(client: TestClient, **overrides: object) -> str:
     login = client.post("/api/auth/login", json={"email": email, "password": temp_password})
     assert login.status_code == 200, login.json()
 
-    return str(body["staff_id"])
+    return staff_id
 
 
 def _book_appointment(
-    client: TestClient, patient_id: str, doctor_id: str, **overrides: object
+    client: TestClient,
+    patient_id: str,
+    doctor_id: str,
+    doctor_email: str = "alan.chua@example.com",
+    **overrides: object,
 ) -> str:
-    """Book an appointment and return its reference_number."""
+    """Book an appointment and return its reference_number.
+
+    Booking now requires a receptionist/nurse/admin (or patient) session, not
+    a doctor one, so this logs in as a receptionist to book, then logs back in
+    as the doctor - every caller books while a doctor is already logged in for
+    a later doctor-only call (starting/ending a consultation, viewing their
+    own schedule), and expects that doctor session to still be active after.
+    """
     payload: dict[str, object] = {
         "patient_id": patient_id,
         "doctor_id": doctor_id,
@@ -132,8 +148,28 @@ def _book_appointment(
         "reason": "Fever and cough",
     }
     payload.update(overrides)
+
+    receptionist_email = "receptionist@example.com"
+    _create_staff_direct(
+        client,
+        {"full_name": "Reception User", "email": receptionist_email, "role": "receptionist"},
+    )
+    receptionist_body = next(e.body for e in reversed(get_outbox()) if e.to == receptionist_email)
+    receptionist_match = re.search(r"temporary password is: (\S+)", receptionist_body)
+    assert receptionist_match is not None
+    client.post(
+        "/api/auth/login",
+        json={"email": receptionist_email, "password": receptionist_match.group(1)},
+    )
+
     r = client.post("/api/appointments", json=payload)
     assert r.status_code == 201, r.json()
+
+    doctor_body = next(e.body for e in reversed(get_outbox()) if e.to == doctor_email)
+    doctor_match = re.search(r"temporary password is: (\S+)", doctor_body)
+    assert doctor_match is not None
+    client.post("/api/auth/login", json={"email": doctor_email, "password": doctor_match.group(1)})
+
     return str(r.json()["reference_number"])
 
 
@@ -145,6 +181,17 @@ def valid_record_payload(patient_id: str, **overrides: object) -> dict[str, obje
     }
     payload.update(overrides)
     return payload
+
+
+def _login_as_admin_in_consultations(client: TestClient) -> None:
+    """Create an admin account and log in as them - used once per test by
+    access-log tests that need to switch identity from a doctor to an admin."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
 
 
 # --- 1. Acceptance tests (docstring Given/When/Then) -------------------------
@@ -188,8 +235,41 @@ def test_create_consultation_note_then_fetch_by_record_id(client: TestClient) ->
 
 
 def test_get_unknown_record_returns_404(client: TestClient) -> None:
+    _register_and_login_doctor(client)
     r = client.get("/api/consultations/R99999")
     assert r.status_code == 404
+
+
+def test_get_note_returns_403_for_a_different_doctor(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client, email="doctor.a@example.com")
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    _register_and_login_doctor(client, email="doctor.b@example.com", license_number="MMC-99999")
+    r = client.get(f"/api/consultations/{created['record_id']}")
+    assert r.status_code == 403
+
+
+def test_get_note_redirects_for_non_doctor_role(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+    assert doctor_id
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse@example.com", "password": temp_password})
+
+    r = client.get(f"/api/consultations/{created['record_id']}", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_get_note_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/api/consultations/R00001", follow_redirects=False)
+    assert r.status_code == 303
 
 
 def test_new_record_page_renders(client: TestClient) -> None:
@@ -199,6 +279,7 @@ def test_new_record_page_renders(client: TestClient) -> None:
     r = client.get("/consultations/new?patient_id=P00001")
     assert r.status_code == 200
     assert "New Consultation Note" in r.text
+    assert 'id="view-patient-link" target="_self"' in r.text
 
 
 def test_record_detail_page_renders(client: TestClient) -> None:
@@ -366,6 +447,7 @@ def test_patient_history_lists_newest_first(client: TestClient) -> None:
 
 
 def test_patient_history_unknown_patient_returns_404(client: TestClient) -> None:
+    _register_and_login_doctor(client)
     r = client.get("/api/consultations?patient_id=P99999")
     assert r.status_code == 404
 
@@ -435,6 +517,42 @@ def test_patient_history_scoped_to_correct_patient(client: TestClient) -> None:
     body = r.json()
     assert body["total"] == 1
     assert body["items"][0]["notes"] == "Visit A"
+
+
+def test_patient_history_only_includes_the_requesting_doctors_own_notes(
+    client: TestClient,
+) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client, email="doctor.a@example.com")
+    client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Visit with A"))
+
+    _register_and_login_doctor(client, email="doctor.b@example.com", license_number="MMC-99999")
+    client.post("/api/consultations", json=valid_record_payload(patient_id, notes="Visit with B"))
+
+    r = client.get(f"/api/consultations?patient_id={patient_id}")
+    body = r.json()
+    assert body["total"] == 1
+    assert body["items"][0]["notes"] == "Visit with B"
+
+
+def test_patient_history_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/api/consultations?patient_id=P00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_patient_history_redirects_for_non_doctor_role(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    patient_id = _register_patient(client)
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="receptionist@example.com", role="receptionist"
+    )
+    client.post(
+        "/api/auth/login",
+        json={"email": "receptionist@example.com", "password": temp_password},
+    )
+    r = client.get(f"/api/consultations?patient_id={patient_id}", follow_redirects=False)
+    assert r.status_code == 303
 
 
 # --- 5. End consultation ------------------------------------------------------
@@ -608,6 +726,8 @@ def test_starting_a_consultation_twice_for_the_same_appointment_resumes_the_draf
     ).json()
 
     assert second["record_id"] == first["record_id"]
+    assert first["appointment_reference"] == appointment_reference
+    assert second["appointment_reference"] == appointment_reference
 
 
 def test_starting_without_an_appointment_reference_always_creates_a_new_draft(
@@ -642,6 +762,31 @@ def test_starting_a_consultation_does_not_complete_its_appointment(client: TestC
         a for a in schedule["appointments"] if a["reference_number"] == appointment_reference
     )
     assert appt["status"] == "scheduled"
+
+
+def test_starting_an_appointment_whose_consultation_already_ended_returns_409(
+    client: TestClient,
+) -> None:
+    """Reopening the note URL for an appointment whose consultation was already
+    completed (e.g. via a stale "Continue Consultation" link or the browser's
+    back button) must not silently hand back the completed note as an editable
+    draft - that only leads to the doctor filling in the form and getting a
+    confusing error when they try to save."""
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    appointment_reference = _book_appointment(client, patient_id, doctor_id)
+
+    started = client.post(
+        "/api/consultations/start",
+        json={"patient_id": patient_id, "appointment_reference": appointment_reference},
+    ).json()
+    client.patch(f"/api/consultations/{started['record_id']}/end")
+
+    r = client.post(
+        "/api/consultations/start",
+        json={"patient_id": patient_id, "appointment_reference": appointment_reference},
+    )
+    assert r.status_code == 409
 
 
 def test_update_consultation_note_success(client: TestClient) -> None:
@@ -794,7 +939,96 @@ def test_start_consultation_requires_login(client: TestClient) -> None:
     assert r.status_code == 303
 
 
-# --- 6. BDD-style tests with pytest-bdd --------------------------------------
+# --- 6. Medical access log ----------------------------------------------------
+
+
+def test_reading_a_record_creates_an_access_log_entry(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    client.get(f"/api/consultations/{created['record_id']}")
+
+    _login_as_admin_in_consultations(client)
+    r = client.get(f"/api/consultations/access-log?patient_id={patient_id}")
+    assert r.status_code == 200
+    actions = [item["action"] for item in r.json()["items"]]
+    assert actions.count("read") >= 1
+    assert "create" in actions
+
+
+def test_updating_and_ending_a_note_are_logged(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    started = client.post("/api/consultations/start", json={"patient_id": patient_id}).json()
+    client.put(
+        f"/api/consultations/{started['record_id']}",
+        json={
+            "notes": "Updated notes here",
+            "diagnoses": [{"icd10_code": "J00", "description": "Common cold"}],
+        },
+    )
+    client.patch(f"/api/consultations/{started['record_id']}/end")
+
+    _login_as_admin_in_consultations(client)
+    r = client.get(f"/api/consultations/access-log?patient_id={patient_id}")
+    actions = [item["action"] for item in r.json()["items"]]
+    assert "update" in actions
+    assert "end" in actions
+
+
+def test_access_log_filtered_by_doctor(client: TestClient) -> None:
+    patient_id = _register_patient(client)
+    doctor_id = _register_and_login_doctor(client)
+    client.post("/api/consultations", json=valid_record_payload(patient_id))
+
+    _login_as_admin_in_consultations(client)
+    r = client.get(f"/api/consultations/access-log?doctor_id={doctor_id}")
+    assert r.status_code == 200
+    assert r.json()["total"] >= 1
+
+    r = client.get("/api/consultations/access-log?doctor_id=S99999")
+    assert r.json()["total"] == 0
+
+
+def test_access_log_requires_admin(client: TestClient) -> None:
+    r = client.get("/api/consultations/access-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_excessive_reads_of_one_record_triggers_a_single_alert_email(
+    client: TestClient,
+) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    patient_id = _register_patient(client)
+    _register_and_login_doctor(client)
+    created = client.post("/api/consultations", json=valid_record_payload(patient_id)).json()
+
+    # Create the admin account (without logging in as them, which would clear
+    # the doctor's session) so it exists to receive the alert during the burst.
+    _create_staff_and_get_temp_password(client, email="admin@example.com", role="admin")
+
+    for _ in range(55):
+        client.get(f"/api/consultations/{created['record_id']}")
+
+    alert_emails = [e for e in get_outbox() if "unusual" in e.subject.lower()]
+    assert len(alert_emails) == 1
+
+
+def test_access_log_page_renders_for_admin(client: TestClient) -> None:
+    _login_as_admin_in_consultations(client)
+    r = client.get("/consultations/access-log")
+    assert r.status_code == 200
+    assert "Access Log" in r.text
+
+
+def test_access_log_page_redirects_for_non_admin(client: TestClient) -> None:
+    r = client.get("/consultations/access-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+# --- 7. BDD-style tests with pytest-bdd --------------------------------------
 # Feature file: tests/features/consultations.feature
 
 scenarios("features/consultations.feature")

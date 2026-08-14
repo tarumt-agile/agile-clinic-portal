@@ -20,6 +20,8 @@ from agile_ci_demo.pharmacy.service import seed_default_medications
 from agile_ci_demo.prescriptions import models as _prescription_models  # noqa: F401
 from agile_ci_demo.consultations import models as _consultation_models  # noqa: F401
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 
 @pytest.fixture
@@ -165,14 +167,20 @@ def register_doctor(
     email = str(payload["email"])
 
     clear_outbox()
-    response = client.post("/api/staff", json=payload)
-    assert response.status_code == 201, response.json()
+    # Staff creation directly through the service layer, bypassing the API
+    # (POST /api/staff now requires an admin session) - this is pure test
+    # setup, not the thing under test.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff_id = str(create_staff(db, StaffCreate(**payload)).staff_id)
+    finally:
+        db.close()
 
     welcome_email = next(message for message in reversed(get_outbox()) if message.to == email)
     match = re.search(r"temporary password is: (\S+)", welcome_email.body)
     assert match is not None
 
-    return str(response.json()["staff_id"]), email, match.group(1)
+    return staff_id, email, match.group(1)
 
 
 def login_doctor(
@@ -188,6 +196,71 @@ def login_doctor(
         },
     )
     assert response.status_code == 200, response.json()
+
+
+def register_non_doctor_staff(
+    client: TestClient,
+    role: str,
+) -> tuple[str, str]:
+    email = f"prescriptions.{role}@example.com"
+    clear_outbox()
+    # Staff creation directly through the service layer, bypassing the API
+    # (POST /api/staff now requires an admin session) - this is pure test
+    # setup, not the thing under test.
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        create_staff(
+            db,
+            StaffCreate(full_name=f"Prescription {role.title()}", email=email, role=role),
+        )
+    finally:
+        db.close()
+    welcome_email = next(message for message in reversed(get_outbox()) if message.to == email)
+    match = re.search(r"temporary password is: (\S+)", welcome_email.body)
+    assert match is not None
+    return email, match.group(1)
+
+
+def test_completed_consultation_rejects_new_prescriptions(client: TestClient) -> None:
+    patient_id = register_patient(client)
+    doctor_id, doctor_email, doctor_password = register_doctor(client)
+    login_doctor(client, doctor_email, doctor_password)
+
+    record = client.post(
+        "/api/consultations",
+        json=valid_record_payload(patient_id, doctor_id),
+    )
+    assert record.status_code == 201, record.json()
+    record_id = record.json()["record_id"]
+
+    end = client.patch(f"/api/consultations/{record_id}/end")
+    assert end.status_code == 200, end.json()
+
+    diagnosis_id = record.json()["diagnoses"][0]["id"]
+    medication_id = "MED-001"
+    response = client.post(
+        "/api/prescriptions",
+        json=valid_prescription_payload(record_id, diagnosis_id, medication_id),
+    )
+
+    assert response.status_code == 409, response.json()
+    assert "ended" in response.json()["detail"].lower()
+
+
+def login_staff_and_get_jwt(
+    client: TestClient,
+    email: str,
+    password: str,
+) -> str:
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "email": email,
+            "password": password,
+        },
+    )
+    assert response.status_code == 200, response.json()
+    return str(response.json()["session_token"])
 
 
 def create_consultation(
@@ -371,6 +444,37 @@ def test_doctor_can_create_prescription(
     assert prescription["can_edit"] is True
 
 
+@pytest.mark.parametrize("role", ["nurse", "receptionist", "admin"])
+def test_non_doctor_jwt_cannot_create_prescription_or_mutate_database(
+    client: TestClient,
+    role: str,
+) -> None:
+    prepared = prepare_consultation(client)
+    email, password = register_non_doctor_staff(client, role)
+    token = login_staff_and_get_jwt(client, email, password)
+    client.cookies.clear()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post(
+        "/api/prescriptions",
+        json=valid_prescription_payload(
+            prepared.record_id,
+            prepared.diagnosis_id,
+            prepared.medication_id,
+        ),
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Doctor role required."}
+    history = client.get(
+        f"/api/prescriptions/patient/{prepared.patient_id}",
+        headers=headers,
+    )
+    assert history.status_code == 200
+    assert history.json()["total"] == 0
+
+
 @pytest.mark.parametrize(
     "missing_field",
     [
@@ -512,6 +616,32 @@ def test_unknown_patient_history_returns_404(
     assert response.status_code == 404
 
 
+def test_consultation_prescription_list_handles_missing_diagnosis(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
+
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        diagnosis = db.get(_consultation_models.Diagnosis, prepared.diagnosis_id)
+        assert diagnosis is not None
+        db.delete(diagnosis)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/prescriptions/consultation/{prepared.record_id}")
+
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["prescription_id"] == prescription["prescription_id"]
+    assert body["items"][0]["diagnosis_id"] == prepared.diagnosis_id
+    assert body["items"][0]["diagnosis_code"] == ""
+    assert body["items"][0]["diagnosis_description"] == "Diagnosis no longer available"
+
+
 # Instruction revision
 
 
@@ -540,6 +670,55 @@ def test_prescribing_doctor_can_update_instructions(
     assert revision["new_frequency"] == "Twice daily"
     assert revision["change_reason"] == "Instructions corrected after review."
     assert revision["changed_by_doctor_name"] == "Dr. Alan Chua"
+
+
+@pytest.mark.parametrize("role", ["nurse", "receptionist", "admin"])
+@pytest.mark.parametrize("endpoint_suffix", ["instructions", "dosage"])
+def test_non_doctor_jwt_cannot_patch_prescription_or_mutate_database(
+    client: TestClient,
+    role: str,
+    endpoint_suffix: str,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
+    email, password = register_non_doctor_staff(client, role)
+    token = login_staff_and_get_jwt(client, email, password)
+    client.cookies.clear()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.patch(
+        f"/api/prescriptions/{prescription['prescription_id']}/{endpoint_suffix}",
+        json=valid_instruction_update(),
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Doctor role required."}
+    details = client.get(
+        f"/api/prescriptions/{prescription['prescription_id']}",
+        headers=headers,
+    )
+    assert details.status_code == 200
+    assert details.json()["dosage"] == "1 capsule"
+    assert details.json()["frequency"] == "Three times daily"
+    assert details.json()["duration"] == "7 days"
+    assert details.json()["history"] == []
+
+
+def test_prescription_mutation_openapi_documents_doctor_security_and_403(
+    client: TestClient,
+) -> None:
+    document = client.get("/openapi.json").json()
+    operations = [
+        document["paths"]["/api/prescriptions"]["post"],
+        document["paths"]["/api/prescriptions/{prescription_id}/instructions"]["patch"],
+        document["paths"]["/api/prescriptions/{prescription_id}/dosage"]["patch"],
+    ]
+
+    for operation in operations:
+        assert {"HTTPBearer": []} in operation["security"]
+        assert "doctor role" in operation["description"].lower()
+        assert operation["responses"]["403"]["description"].startswith("Forbidden:")
 
 
 def test_update_requires_reason_and_all_instruction_fields(
@@ -722,6 +901,53 @@ def test_existing_prescription_cards_link_to_print_page() -> None:
     assert "View / Print" in history_script
     assert 'href="/prescriptions/${' in record_script
     assert 'href="/prescriptions/${' in history_script
+
+
+def test_nested_consultation_navigation_preserves_each_return_page() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    note_script = (project_root / "static" / "js" / "consultation-note-form.js").read_text(
+        encoding="utf-8"
+    )
+    detail_script = (project_root / "static" / "js" / "consultation-detail.js").read_text(
+        encoding="utf-8"
+    )
+    print_script = (project_root / "static" / "js" / "prescription-print.js").read_text(
+        encoding="utf-8"
+    )
+    history_script = (project_root / "static" / "js" / "patient-prescription-history.js").read_text(
+        encoding="utf-8"
+    )
+    medical_history_script = (project_root / "static" / "js" / "medical_history.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const fromPath = window.location.pathname + window.location.search;" in note_script
+    assert 'encodeURIComponent("Back to Consultation")' in note_script
+    assert "?from=${returnPath}&label=${returnLabel}" in detail_script
+    assert "backLink.href = previousPage.path;" in detail_script
+    assert "appointment_reference: data.appointment_reference" in detail_script
+    assert 'previousPage.path === "/appointments/consultations"' in detail_script
+    assert 'backLink.textContent = "Back to Consultation";' in detail_script
+    assert "Back to Start Consultation" not in detail_script
+    assert 'params.delete("focus");' in detail_script
+    assert "window.history.replaceState(" in detail_script
+    assert 'focusMode === "prescribe" &&\n        isInProgress &&' in detail_script
+    assert 'const returnPath = returnParams.get("from");' in print_script
+    assert "backLink.href = returnPath ||" in print_script
+    assert "const nestedReturnPath = patientPagePath;" in history_script
+    assert 'const nestedReturnLabel = "Back to Patient";' in history_script
+    assert "encodeURIComponent(nestedReturnPath)" in history_script
+    assert "const nestedReturnPath = patientPagePath;" in medical_history_script
+    assert 'const nestedReturnLabel = "Back to Patient";' in medical_history_script
+    assert "const label = encodeURIComponent(nestedReturnLabel);" in medical_history_script
+    assert "resolvePreviousPage" not in detail_script
+
+    # Choosing a Back destination must not stop the consultation details from
+    # loading diagnoses and prescriptions.
+    assert 'backLink.textContent = previousLabel || "Back";\n        return;' not in detail_script
+    assert (
+        'backLink.textContent = "Back to Start Consultation";\n        return;' not in detail_script
+    )
 
 
 def test_print_styles_define_print_media_and_a4_page() -> None:

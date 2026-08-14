@@ -68,19 +68,15 @@
     <div class="card mb-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>My Prescriptions</span>
-        <span class="badge text-bg-secondary">Sample data</span>
       </div>
-      <div class="list-group list-group-flush" id="prescriptions-list"></div>
-      <div class="card-footer text-muted small">
-        Prescription tracking isn't connected to the pharmacy system yet - these are
-        placeholder entries.
+      <div class="list-group list-group-flush" id="prescriptions-list">
+        <div class="list-group-item text-muted">Loading...</div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>My Information</span>
-        <a href="#" id="my-info-link" class="small">Edit</a>
       </div>
       <div class="card-body" id="my-info-body">
         <p class="text-muted mb-0">Loading...</p>
@@ -91,5 +87,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/patient-dashboard.js"></script>
+<script src="/static/js/patient-dashboard.js?v=2"></script>
 {% endblock %}

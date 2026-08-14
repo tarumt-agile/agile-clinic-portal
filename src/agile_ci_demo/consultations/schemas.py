@@ -156,6 +156,7 @@ class ConsultationNoteOut(BaseModel):
 
     patient_id: str
     patient_name: str
+    appointment_reference: str | None
 
     doctor_id: str
     doctor_name: str
@@ -223,3 +224,18 @@ class Icd10Entry(BaseModel):
 
     code: str
     description: str
+
+
+class MedicalAccessLogEntry(BaseModel):
+    """One row in the medical record access audit log, shown to admins."""
+
+    record_id: str
+    patient_id: str
+    accessed_by_name: str
+    action: str
+    created_at: dt.datetime
+
+
+class MedicalAccessLogPage(BaseModel):
+    items: list[MedicalAccessLogEntry]
+    total: int

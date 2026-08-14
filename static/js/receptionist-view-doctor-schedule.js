@@ -11,6 +11,7 @@
   const STATUS_BADGE = {
     scheduled: "text-bg-primary",
     cancelled: "text-bg-secondary",
+    completed: "text-bg-success",
   };
 
   function escapeHtml(value) {
@@ -60,6 +61,7 @@
         .join("");
 
       loadSchedule(doctorFilter.value);
+      if (scheduleView) scheduleView.refresh();
     } catch (err) {
       doctorFilter.innerHTML = '<option value="" selected disabled>Unable to load doctors</option>';
       tableBody.innerHTML = "";
@@ -114,6 +116,26 @@
       .join("");
   }
 
-  doctorFilter.addEventListener("change", () => loadSchedule(doctorFilter.value));
+  const scheduleView = window.initScheduleViewToggle
+    ? window.initScheduleViewToggle({
+        viewModeStorageKey: "receptionistDoctorScheduleViewMode",
+        listViewId: "list-view",
+        calendarViewId: "calendar-view",
+        listButtonId: "view-list-btn",
+        calendarButtonId: "view-calendar-btn",
+        calendar: {
+          containerId: "schedule-calendar",
+          calendarViewStorageKey: "receptionistDoctorScheduleCalendarView",
+          eventsUrl: function (startDate, endDate) {
+            return `/api/appointments/schedule/by-doctor?doctor_id=${encodeURIComponent(doctorFilter.value)}&start_date=${startDate}&end_date=${endDate}`;
+          },
+        },
+      })
+    : null;
+
+  doctorFilter.addEventListener("change", () => {
+    loadSchedule(doctorFilter.value);
+    if (scheduleView) scheduleView.refresh();
+  });
   loadDoctors();
 })();

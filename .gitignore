@@ -14,4 +14,4 @@ dist/
 .env
 uploads/
 .superpowers/
-.claude/worktrees/
+docs/

@@ -11,6 +11,7 @@ from agile_ci_demo.appointments.schemas import (
     AppointmentOut,
     DoctorSchedule,
     DoctorScheduleDates,
+    DoctorScheduleStats,
     DoctorSlots,
     PatientAppointments,
     ScheduleDateSummary,
@@ -19,6 +20,7 @@ from agile_ci_demo.appointments.schemas import (
 from agile_ci_demo.appointments.service import (
     AlreadyCancelledError,
     AppointmentNotFoundError,
+    DailyBookingLimitError,
     DoctorNotFoundError,
     InvalidSlotError,
     PastDateError,
@@ -30,9 +32,11 @@ from agile_ci_demo.appointments.service import (
     get_available_slots,
     get_doctor_schedule,
     get_doctor_schedule_dates,
+    get_doctor_schedule_range,
+    get_doctor_schedule_stats,
     get_patient_appointments,
 )
-from agile_ci_demo.auth.deps import require_patient, require_role
+from agile_ci_demo.auth.deps import require_booking_actor, require_patient, require_role
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.patients.models import Patient
@@ -65,30 +69,55 @@ def _serialize(appointment: Appointment) -> AppointmentOut:
 
 
 @api_router.post("", response_model=AppointmentOut, status_code=status.HTTP_201_CREATED)
-def book_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)) -> AppointmentOut:
-    """Book a new appointment. Validates slot availability and rejects double-booking."""
+def book_appointment(
+    payload: AppointmentCreate,
+    db: Session = Depends(get_db),
+    _actor: Staff | Patient = Depends(require_booking_actor),
+) -> AppointmentOut:
+    """Book a new appointment. Validates slot availability and rejects double-booking.
+    Front-desk staff (receptionist, nurse, admin) can book for any patient; a patient
+    can book for themselves, limited to one appointment per day - a second same-day
+    booking must go through the front desk instead. Doctors are read-only for
+    appointments."""
     try:
-        appointment = create_appointment(db, payload)
+        appointment = create_appointment(
+            db, payload, enforce_daily_limit=isinstance(_actor, Patient)
+        )
     except (PatientNotFoundError, DoctorNotFoundError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except InvalidSlotError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
-    except SlotUnavailableError as exc:
+    except (SlotUnavailableError, DailyBookingLimitError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _serialize(appointment)
 
 
 @api_router.get("/schedule", response_model=DoctorSchedule)
 def get_my_schedule(
-    schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    schedule_date: dt.date | None = Query(default=None, alias="date"),
+    start_date: dt.date | None = Query(default=None),
+    end_date: dt.date | None = Query(default=None),
     doctor: Staff = Depends(require_role(Role.DOCTOR)),
     db: Session = Depends(get_db),
 ) -> DoctorSchedule:
-    """The logged-in doctor's appointments for a given date (defaults to today)."""
+    """The logged-in doctor's appointments for a given date (defaults to today),
+    or for a date range when start_date/end_date are both provided instead -
+    used by the calendar view to fetch a whole visible month/week at once."""
+    if start_date is not None and end_date is not None:
+        appointments = get_doctor_schedule_range(db, doctor.id, start_date, end_date)
+        return DoctorSchedule(
+            doctor_id=doctor.staff_id or "",
+            doctor_name=doctor.full_name,
+            start_date=start_date,
+            end_date=end_date,
+            appointments=[_serialize(a) for a in appointments],
+        )
+
+    resolved_date = schedule_date or dt.date.today()
     try:
-        appointments = get_doctor_schedule(db, doctor.id, schedule_date)
+        appointments = get_doctor_schedule(db, doctor.id, resolved_date)
     except PastDateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -97,9 +126,20 @@ def get_my_schedule(
     return DoctorSchedule(
         doctor_id=doctor.staff_id or "",
         doctor_name=doctor.full_name,
-        schedule_date=schedule_date,
+        schedule_date=resolved_date,
         appointments=[_serialize(a) for a in appointments],
     )
+
+
+@api_router.get("/schedule/stats", response_model=DoctorScheduleStats)
+def get_my_schedule_stats(
+    doctor: Staff = Depends(require_role(Role.DOCTOR)),
+    db: Session = Depends(get_db),
+) -> DoctorScheduleStats:
+    """Summary counts for the doctor dashboard stat cards: total, today's,
+    future, and completed appointments."""
+    stats = get_doctor_schedule_stats(db, doctor.id)
+    return DoctorScheduleStats(**stats)
 
 
 @api_router.get("/schedule/dates", response_model=DoctorScheduleDates)
@@ -121,12 +161,15 @@ def get_my_schedule_dates(
 @api_router.get("/schedule/by-doctor", response_model=DoctorSchedule)
 def get_schedule_for_doctor(
     doctor_id: str = Query(..., description="Doctor's public staff_id, e.g. S00001"),
-    schedule_date: dt.date = Query(default_factory=dt.date.today, alias="date"),
+    schedule_date: dt.date | None = Query(default=None, alias="date"),
+    start_date: dt.date | None = Query(default=None),
+    end_date: dt.date | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> DoctorSchedule:
-    """A specific doctor's appointments for a given date (defaults to today), for
-    front-desk staff looking up any doctor's schedule - unlike /schedule, which is
-    always the current doctor's own."""
+    """A specific doctor's appointments for a given date (defaults to today), or
+    for a date range when start_date/end_date are both provided instead - for
+    front-desk staff looking up any doctor's schedule (unlike /schedule, which
+    is always the current doctor's own)."""
     doctor = get_staff_by_staff_id(db, doctor_id)
     if doctor is None or doctor.role != Role.DOCTOR.value:
         raise HTTPException(
@@ -134,8 +177,19 @@ def get_schedule_for_doctor(
             detail=f"No doctor found with staff_id '{doctor_id}'",
         )
 
+    if start_date is not None and end_date is not None:
+        appointments = get_doctor_schedule_range(db, doctor.id, start_date, end_date)
+        return DoctorSchedule(
+            doctor_id=doctor.staff_id or "",
+            doctor_name=doctor.full_name,
+            start_date=start_date,
+            end_date=end_date,
+            appointments=[_serialize(a) for a in appointments],
+        )
+
+    resolved_date = schedule_date or dt.date.today()
     try:
-        appointments = get_doctor_schedule(db, doctor.id, schedule_date)
+        appointments = get_doctor_schedule(db, doctor.id, resolved_date)
     except PastDateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -144,7 +198,7 @@ def get_schedule_for_doctor(
     return DoctorSchedule(
         doctor_id=doctor.staff_id or "",
         doctor_name=doctor.full_name,
-        schedule_date=schedule_date,
+        schedule_date=resolved_date,
         appointments=[_serialize(a) for a in appointments],
     )
 
@@ -202,9 +256,21 @@ def get_appointment(reference_number: str, db: Session = Depends(get_db)) -> App
 
 @api_router.patch("/{reference_number}/cancel", response_model=AppointmentOut)
 def cancel_appointment_endpoint(
-    reference_number: str, payload: AppointmentCancel, db: Session = Depends(get_db)
+    reference_number: str,
+    payload: AppointmentCancel,
+    db: Session = Depends(get_db),
+    actor: Staff | Patient = Depends(require_booking_actor),
 ) -> AppointmentOut:
-    """Cancel a scheduled appointment. Frees its slot for other patients."""
+    """Cancel a scheduled appointment. Frees its slot for other patients.
+    Front-desk staff (receptionist, nurse, admin) can cancel any appointment;
+    a patient can only cancel their own."""
+    if isinstance(actor, Patient):
+        existing = get_appointment_by_reference(db, reference_number)
+        if existing is not None and existing.patient_id != actor.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only cancel your own appointments.",
+            )
     try:
         appointment = cancel_appointment(db, reference_number, payload.cancellation_reason)
     except AppointmentNotFoundError as exc:
