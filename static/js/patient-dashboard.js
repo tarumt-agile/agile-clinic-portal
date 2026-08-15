@@ -13,7 +13,6 @@
   const visitsList = document.getElementById("recent-visits-list");
   const prescriptionsList = document.getElementById("prescriptions-list");
   const infoBody = document.getElementById("my-info-body");
-  const infoLink = document.getElementById("my-info-link");
 
   const PRESCRIPTION_STATUS_BADGES = {
     active: '<span class="badge text-bg-success">Active</span>',
@@ -121,7 +120,6 @@
   }
 
   function renderInfo(patient) {
-    infoLink.href = `/patients/${encodeURIComponent(patient.patient_id)}`;
     infoBody.innerHTML = `
       <dl class="row mb-0 small">
         <dt class="col-5">Patient ID</dt>
