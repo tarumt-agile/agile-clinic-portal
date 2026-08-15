@@ -92,12 +92,19 @@ def serialize_prescription(
         for item in prescription.history
     ]
 
+    diagnosis = prescription.diagnosis
+    diagnosis_id = diagnosis.id if diagnosis is not None else prescription.diagnosis_id
+    diagnosis_code = diagnosis.icd10_code if diagnosis is not None else ""
+    diagnosis_description = (
+        diagnosis.description if diagnosis is not None else "Diagnosis no longer available"
+    )
+
     return PrescriptionOut(
         prescription_id=(prescription.prescription_id or ""),
         consultation_record_id=(prescription.consultation_note.record_id or ""),
-        diagnosis_id=prescription.diagnosis.id,
-        diagnosis_code=(prescription.diagnosis.icd10_code),
-        diagnosis_description=(prescription.diagnosis.description),
+        diagnosis_id=diagnosis_id,
+        diagnosis_code=diagnosis_code,
+        diagnosis_description=diagnosis_description,
         patient_id=(prescription.patient.patient_id or ""),
         patient_name=(prescription.patient.full_name),
         prescribing_doctor_id=(prescription.prescribing_doctor.staff_id or ""),

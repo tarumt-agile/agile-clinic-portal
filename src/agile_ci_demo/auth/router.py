@@ -38,7 +38,9 @@ from agile_ci_demo.core.rate_limit import is_locked_out, record_failure, record_
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import generate_session_token
 from agile_ci_demo.core.templates import templates
+from agile_ci_demo.patients.service import get_patient_by_patient_id
 from agile_ci_demo.staff.models import Staff
+from agile_ci_demo.staff.service import get_staff_by_staff_id
 
 # JSON API used by the frontend's JavaScript.
 api_router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -128,23 +130,37 @@ def delete_session(request: Request, db: Session = Depends(get_db)) -> dict:
 
 
 @pages_router.get("/login", response_class=HTMLResponse, response_model=None)
-def login_page(request: Request) -> HTMLResponse | RedirectResponse:
-    """Renders the login form - unless a still-valid session already exists,
-    in which case it sends the visitor straight to their dashboard instead.
-
-    Session cookies are signed and outlive the server process (14-day expiry,
-    same secret key across restarts), so restarting the dev server does not
-    log anyone out. Without this check, a still-authenticated visitor landing
-    here would see the login form wrapped in the full authenticated app shell
-    (sidebar included) - base.html's `authed` gating is keyed off the same
-    session, so it has no way to know this particular page should always
-    render as logged-out.
+def login_page(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse | RedirectResponse:
+    """Render the login page unless the current session is still valid for the
+    signed-in user. A stale role cookie, a deleted account, or an old session
+    left behind after a server restart should be cleared instead of sending the
+    browser into a redirect loop.
     """
     role = request.session.get("role")
+    user_type = request.session.get("user_type")
+
     if role:
-        return RedirectResponse(redirect_url_for_role(Role(role)), status_code=303)
-    if request.session.get("user_type") == "patient":
-        return RedirectResponse("/patients/dashboard", status_code=303)
+        staff_id = request.session.get("staff_id")
+        staff = get_staff_by_staff_id(db, str(staff_id)) if staff_id else None
+        if staff is None or not staff.is_active or staff.role != role:
+            request.session.clear()
+        else:
+            return RedirectResponse(redirect_url_for_role(Role(role)), status_code=303)
+
+    if user_type == "patient":
+        patient_id = request.session.get("patient_id")
+        if patient_id is None:
+            request.session.clear()
+        else:
+            patient = get_patient_by_patient_id(db, str(patient_id))
+            if patient is None:
+                request.session.clear()
+            else:
+                return RedirectResponse("/patients/dashboard", status_code=303)
+
     return templates.TemplateResponse(request, "auth/login.html", {})
 
 

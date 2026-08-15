@@ -101,3 +101,17 @@ def test_login_response_includes_a_session_token(client: TestClient) -> None:
     body = _create_staff_and_login(client, email="admin2@example.com", role="admin")
     assert isinstance(body["session_token"], str)
     assert len(body["session_token"]) > 0
+
+
+def test_login_page_clears_stale_staff_session_and_renders_login(client: TestClient) -> None:
+    with client:
+        session = client.session_transaction()
+        session["user_type"] = "staff"
+        session["role"] = "doctor"
+        session["staff_id"] = "staff-does-not-exist"
+
+        response = client.get("/auth/login", follow_redirects=False)
+
+    assert response.status_code == 200
+    assert "Sign in" in response.text
+    assert client.session_transaction().get("role") is None

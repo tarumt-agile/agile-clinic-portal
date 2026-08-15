@@ -590,6 +590,32 @@ def test_unknown_patient_history_returns_404(
     assert response.status_code == 404
 
 
+def test_consultation_prescription_list_handles_missing_diagnosis(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
+
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        diagnosis = db.get(_consultation_models.Diagnosis, prepared.diagnosis_id)
+        assert diagnosis is not None
+        db.delete(diagnosis)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/prescriptions/consultation/{prepared.record_id}")
+
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["prescription_id"] == prescription["prescription_id"]
+    assert body["items"][0]["diagnosis_id"] == prepared.diagnosis_id
+    assert body["items"][0]["diagnosis_code"] == ""
+    assert body["items"][0]["diagnosis_description"] == "Diagnosis no longer available"
+
+
 # Instruction revision
 
 
