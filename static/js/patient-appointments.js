@@ -18,9 +18,19 @@
   const STATUS_BADGE = {
     scheduled: "text-bg-primary",
     cancelled: "text-bg-secondary",
+    skipped: "text-bg-danger",
   };
 
   let pendingReferenceNumber = null;
+
+  // A "scheduled" appointment whose slot has already ended was never
+  // cancelled and never turned into a consultation - display-only, since the
+  // stored status is still "scheduled" (nothing server-side marks these).
+  function isSkipped(appointment) {
+    if (appointment.status !== "scheduled") return false;
+    const endDateTime = new Date(`${appointment.appointment_date}T${appointment.end_time}`);
+    return endDateTime.getTime() < Date.now();
+  }
 
   function escapeHtml(value) {
     const div = document.createElement("div");
@@ -72,9 +82,11 @@
 
     tableBody.innerHTML = appointments
       .map((a) => {
-        const badgeClass = STATUS_BADGE[a.status] || "text-bg-light";
+        const skipped = isSkipped(a);
+        const displayStatus = skipped ? "skipped" : a.status;
+        const badgeClass = STATUS_BADGE[displayStatus] || "text-bg-light";
         const action =
-          a.status === "scheduled"
+          a.status === "scheduled" && !skipped
             ? `<button type="button" class="btn btn-sm btn-outline-danger cancel-btn" data-reference="${escapeHtml(a.reference_number)}" data-doctor-name="${escapeHtml(a.doctor_name)}">Cancel</button>`
             : "-";
         return `
@@ -83,7 +95,7 @@
         <td>${escapeHtml(a.start_time.slice(0, 5))} - ${escapeHtml(a.end_time.slice(0, 5))}</td>
         <td>${escapeHtml(a.doctor_name)}</td>
         <td>${escapeHtml(a.reason)}</td>
-        <td><span class="badge ${badgeClass} text-capitalize">${escapeHtml(a.status)}</span></td>
+        <td><span class="badge ${badgeClass} text-capitalize">${escapeHtml(displayStatus)}</span></td>
         <td>${action}</td>
       </tr>`;
       })
