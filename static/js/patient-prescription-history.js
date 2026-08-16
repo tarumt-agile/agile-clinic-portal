@@ -11,6 +11,10 @@
 
   const patientId = root.dataset.patientId;
 
+  const patientPagePath = window.location.pathname + window.location.search;
+  const nestedReturnPath = patientPagePath;
+  const nestedReturnLabel = "Back to Patient";
+
   const tabButton = document.getElementById(
     "prescriptions-tab-btn"
   );
@@ -284,7 +288,7 @@
                 encodeURIComponent(
                   item.prescription_id
                 )
-              }"
+              }?from=${encodeURIComponent(nestedReturnPath)}&label=${encodeURIComponent(nestedReturnLabel)}"
               class="btn btn-sm
                 btn-outline-secondary"
             >
@@ -373,7 +377,7 @@
                         encodeURIComponent(
                           item.consultation_record_id
                         )
-                      }"
+                      }?from=${encodeURIComponent(nestedReturnPath)}&label=${encodeURIComponent(nestedReturnLabel)}"
                     >
                       ${escapeHtml(
                         item.consultation_record_id

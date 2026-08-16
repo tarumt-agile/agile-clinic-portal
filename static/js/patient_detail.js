@@ -24,15 +24,18 @@
 
   // When opened via a "View Patient Details" link from elsewhere (e.g. the
   // Start Consultation queue or an in-progress consultation note), ?from=
-  // carries where to actually go back to, since that's not always the
-  // default Back to Schedule/List destination.
+  // carries the exact page that should be used as the return destination.
   const backLink = document.getElementById("back-link");
+
   const returnParams = new URLSearchParams(window.location.search);
   const backTo = returnParams.get("from");
   const backLabel = returnParams.get("label");
+
   if (backLink && backTo) {
     backLink.href = backTo;
     if (backLabel) backLink.textContent = backLabel;
+  } else if (backLink && backLink.id === "back-link" && backLink.href) {
+    backLink.textContent = backLink.textContent || "Back to Schedule";
   }
 
   let currentPatient = null;

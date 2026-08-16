@@ -32,6 +32,13 @@
     "back-to-consultation-link"
   );
 
+  const returnParams = new URLSearchParams(
+    window.location.search
+  );
+
+  const returnPath = returnParams.get("from");
+  const returnLabel = returnParams.get("label");
+
   function setText(id, value) {
     const element = document.getElementById(id);
 
@@ -136,11 +143,16 @@
       item.prescribing_doctor_name
     );
 
-    backLink.href =
-      "/consultations/" +
-      encodeURIComponent(
-        item.consultation_record_id
+    backLink.href = returnPath ||
+      (
+        "/consultations/" +
+        encodeURIComponent(
+          item.consultation_record_id
+        )
       );
+
+    backLink.textContent =
+      returnLabel || "Back to Consultation";
 
     document.title =
       `Prescription ${item.prescription_id}`;

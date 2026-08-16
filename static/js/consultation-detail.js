@@ -438,6 +438,12 @@
 
     return items
       .map(function (item) {
+        const returnPath = encodeURIComponent(
+          window.location.pathname + window.location.search
+        );
+        const returnLabel = encodeURIComponent(
+          "Back to Consultation"
+        );
         const printAction = item.can_edit
           ? `
             <a
@@ -445,7 +451,7 @@
                 encodeURIComponent(
                   item.prescription_id
                 )
-              }"
+              }?from=${returnPath}&label=${returnLabel}"
               class="btn btn-sm
                 btn-outline-primary mt-2"
             >
@@ -549,7 +555,7 @@
             );
 
           const addMedicationAction =
-            canPrescribe
+            canPrescribe && currentRecord.status === "in_progress"
               ? `
                 <button
                   type="button"
@@ -651,6 +657,14 @@
     diagnosisCode,
     diagnosisDescription
   ) {
+    if (!currentRecord || currentRecord.status !== "in_progress") {
+      showAlert(
+        prescriptionAlert,
+        "This consultation is already ended. New medication cannot be added."
+      );
+      return;
+    }
+
     hideAlert(formAlert);
 
     prescriptionForm.reset();
@@ -782,15 +796,71 @@
         !(canPrescribe && isInProgress)
       );
 
-      backLink.href =
-        "/patients/" +
-        encodeURIComponent(
-          data.patient_id
-        );
+      const params = new URLSearchParams(window.location.search);
+      const previousPath = params.get("from");
+      const previousLabel = params.get("label");
+      const previousPage = {
+        path: previousPath,
+        label: previousLabel
+      };
+
+      const returnsToStartQueue =
+        previousPage.path === "/appointments/consultations";
+
+      if (
+        isInProgress &&
+        data.appointment_reference &&
+        (!previousPage.path || returnsToStartQueue)
+      ) {
+        const noteParams = new URLSearchParams({
+          patient_id: data.patient_id,
+          appointment_reference: data.appointment_reference
+        });
+        backLink.href = `/consultations/new?${noteParams.toString()}`;
+        backLink.textContent = "Back to Consultation";
+      } else if (previousPage.path) {
+        backLink.href = previousPage.path;
+        backLink.textContent = previousPage.label || "Back";
+      } else {
+        const patientPath = `/patients/${encodeURIComponent(data.patient_id)}`;
+        backLink.href = `${patientPath}?from=${encodeURIComponent(`/consultations/${encodeURIComponent(recordId)}`)}&label=${encodeURIComponent("Back to Consultation")}`;
+        backLink.textContent = "Back to Patient";
+      }
 
       await loadPrescriptions();
 
       renderDiagnoses();
+
+      const focusMode = params.get("focus");
+
+      // `focus=prescribe` is a one-time instruction used immediately after
+      // saving the note. Remove it so returning from Print or refreshing a
+      // completed consultation does not try to prescribe again.
+      if (focusMode) {
+        params.delete("focus");
+        const remainingQuery = params.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          window.location.pathname +
+            (remainingQuery ? `?${remainingQuery}` : "") +
+            window.location.hash
+        );
+      }
+
+      if (
+        focusMode === "prescribe" &&
+        isInProgress &&
+        Array.isArray(currentRecord.diagnoses) &&
+        currentRecord.diagnoses.length > 0
+      ) {
+        const firstDiagnosis = currentRecord.diagnoses[0];
+        openPrescriptionModal(
+          Number(firstDiagnosis.id),
+          firstDiagnosis.icd10_code,
+          firstDiagnosis.description
+        );
+      }
 
       content.classList.remove(
         "d-none"

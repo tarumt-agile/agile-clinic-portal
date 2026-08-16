@@ -160,6 +160,11 @@ def create_prescription(
             "The selected diagnosis does not belong " "to this consultation."
         )
 
+    if consultation.status != "in_progress":
+        raise PrescriptionConflictError(
+            "This consultation has already ended. You can only add medication while it is in progress."
+        )
+
     if consultation.doctor_id != doctor.id:
         raise PrescriptionPermissionError(
             "Only the doctor who created this " "consultation can add medication."
