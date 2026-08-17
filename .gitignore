@@ -9,9 +9,9 @@ dist/
 .hypothesis/
 *.egg-info/
 *.db
+!clinic.db
 *.db-journal
 .env
 uploads/
 .superpowers/
-.claude/worktrees/
 docs/

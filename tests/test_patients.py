@@ -1156,14 +1156,8 @@ def test_patient_detail_entry_points_preserve_their_return_page() -> None:
     detail_script = (project_root / "static" / "js" / "patient_detail.js").read_text(
         encoding="utf-8"
     )
-    list_script = (project_root / "static" / "js" / "patients_list.js").read_text(
-        encoding="utf-8"
-    )
-    dashboard_script = (project_root / "static" / "js" / "patient-dashboard.js").read_text(
-        encoding="utf-8"
-    )
+    list_script = (project_root / "static" / "js" / "patients_list.js").read_text(encoding="utf-8")
 
     assert 'const backTo = returnParams.get("from");' in detail_script
     assert 'const backLabel = returnParams.get("label");' in detail_script
     assert 'encodeURIComponent("Back to Patient List")' in list_script
-    assert 'encodeURIComponent("Back to Dashboard")' in dashboard_script

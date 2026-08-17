@@ -6,14 +6,14 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
-from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff import models as _staff_models
 from agile_ci_demo.staff.schemas import StaffCreate
 from agile_ci_demo.staff.service import create_staff
 
@@ -104,14 +104,25 @@ def test_login_response_includes_a_session_token(client: TestClient) -> None:
 
 
 def test_login_page_clears_stale_staff_session_and_renders_login(client: TestClient) -> None:
-    with client:
-        session = client.session_transaction()
-        session["user_type"] = "staff"
-        session["role"] = "doctor"
-        session["staff_id"] = "staff-does-not-exist"
+    """A session left behind after the underlying account is deactivated must be
+    cleared and shown the login form, not sent into a redirect loop back to the
+    dashboard it no longer has access to."""
+    _create_staff_and_login(client, email="doctor@example.com", role="doctor")
 
-        response = client.get("/auth/login", follow_redirects=False)
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        staff = db.execute(
+            select(_staff_models.Staff).where(_staff_models.Staff.email == "doctor@example.com")
+        ).scalar_one()
+        staff.is_active = False
+        db.commit()
+    finally:
+        db.close()
 
+    response = client.get("/auth/login", follow_redirects=False)
     assert response.status_code == 200
-    assert "Sign in" in response.text
-    assert client.session_transaction().get("role") is None
+    assert "Log In" in response.text
+
+    r = client.get("/appointments/schedule", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"

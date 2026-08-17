@@ -17,6 +17,7 @@ from agile_ci_demo.staff.models import Staff
 def malaysia_now() -> dt.datetime:
     return dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
 
+
 # A small curated reference list of common ICD-10 codes, used to power the diagnosis
 # autocomplete search. Not exhaustive - a teaching-app stand-in for a real ICD-10 API.
 ICD10_CODES: list[dict[str, str]] = [

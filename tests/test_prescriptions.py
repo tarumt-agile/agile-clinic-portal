@@ -914,9 +914,9 @@ def test_nested_consultation_navigation_preserves_each_return_page() -> None:
     print_script = (project_root / "static" / "js" / "prescription-print.js").read_text(
         encoding="utf-8"
     )
-    history_script = (
-        project_root / "static" / "js" / "patient-prescription-history.js"
-    ).read_text(encoding="utf-8")
+    history_script = (project_root / "static" / "js" / "patient-prescription-history.js").read_text(
+        encoding="utf-8"
+    )
     medical_history_script = (project_root / "static" / "js" / "medical_history.js").read_text(
         encoding="utf-8"
     )
@@ -945,7 +945,9 @@ def test_nested_consultation_navigation_preserves_each_return_page() -> None:
     # Choosing a Back destination must not stop the consultation details from
     # loading diagnoses and prescriptions.
     assert 'backLink.textContent = previousLabel || "Back";\n        return;' not in detail_script
-    assert 'backLink.textContent = "Back to Start Consultation";\n        return;' not in detail_script
+    assert (
+        'backLink.textContent = "Back to Start Consultation";\n        return;' not in detail_script
+    )
 
 
 def test_print_styles_define_print_media_and_a4_page() -> None:
