@@ -69,7 +69,11 @@
 
     tableBody.querySelectorAll(".patient-row").forEach((row) => {
       row.addEventListener("click", () => {
-        window.location.href = `/patients/${row.dataset.patientId}`;
+        const returnPath = window.location.pathname + window.location.search;
+        window.location.href =
+          `/patients/${encodeURIComponent(row.dataset.patientId)}?` +
+          `from=${encodeURIComponent(returnPath)}` +
+          `&label=${encodeURIComponent("Back to Patient List")}`;
       });
     });
   }

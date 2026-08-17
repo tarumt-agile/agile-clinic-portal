@@ -726,6 +726,8 @@ def test_starting_a_consultation_twice_for_the_same_appointment_resumes_the_draf
     ).json()
 
     assert second["record_id"] == first["record_id"]
+    assert first["appointment_reference"] == appointment_reference
+    assert second["appointment_reference"] == appointment_reference
 
 
 def test_starting_without_an_appointment_reference_always_creates_a_new_draft(

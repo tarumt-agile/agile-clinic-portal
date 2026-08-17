@@ -52,6 +52,9 @@ def _serialize(note: ConsultationNote) -> ConsultationNoteOut:
         record_id=note.record_id or "",
         patient_id=note.patient.patient_id or "",
         patient_name=note.patient.full_name,
+        appointment_reference=(
+            note.appointment.reference_number if note.appointment is not None else None
+        ),
         doctor_id=note.doctor.staff_id or "",
         doctor_name=note.doctor.full_name,
         visit_date=note.visit_date,

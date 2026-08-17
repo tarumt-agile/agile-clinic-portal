@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1148,3 +1149,21 @@ def test_delete_patient_as_non_admin_is_redirected(client: TestClient) -> None:
     assert r.status_code == 303
 
     assert client.get(f"/api/patients/{created['patient_id']}").status_code == 200
+
+
+def test_patient_detail_entry_points_preserve_their_return_page() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    detail_script = (project_root / "static" / "js" / "patient_detail.js").read_text(
+        encoding="utf-8"
+    )
+    list_script = (project_root / "static" / "js" / "patients_list.js").read_text(
+        encoding="utf-8"
+    )
+    dashboard_script = (project_root / "static" / "js" / "patient-dashboard.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'const backTo = returnParams.get("from");' in detail_script
+    assert 'const backLabel = returnParams.get("label");' in detail_script
+    assert 'encodeURIComponent("Back to Patient List")' in list_script
+    assert 'encodeURIComponent("Back to Dashboard")' in dashboard_script

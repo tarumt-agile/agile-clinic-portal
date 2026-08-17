@@ -12,6 +12,10 @@
   const historyEmpty = document.getElementById("history-empty");
   const historyList = document.getElementById("history-list");
 
+  const patientPagePath = window.location.pathname + window.location.search;
+  const nestedReturnPath = patientPagePath;
+  const nestedReturnLabel = "Back to Patient";
+
   let searchDebounceTimer = null;
   let hasLoadedOnce = false;
 
@@ -57,8 +61,11 @@
         const notesPreview =
           item.notes.length > 160 ? `${item.notes.slice(0, 160)}…` : item.notes;
 
+        const from = encodeURIComponent(nestedReturnPath);
+        const label = encodeURIComponent(nestedReturnLabel);
+
         return (
-          `<a href="/consultations/${encodeURIComponent(item.record_id)}" ` +
+          `<a href="/consultations/${encodeURIComponent(item.record_id)}?from=${from}&label=${label}" ` +
           `class="card mb-2 text-decoration-none text-body">` +
           `<div class="card-body">` +
           `<div class="d-flex justify-content-between">` +

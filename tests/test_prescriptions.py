@@ -221,6 +221,32 @@ def register_non_doctor_staff(
     return email, match.group(1)
 
 
+def test_completed_consultation_rejects_new_prescriptions(client: TestClient) -> None:
+    patient_id = register_patient(client)
+    doctor_id, doctor_email, doctor_password = register_doctor(client)
+    login_doctor(client, doctor_email, doctor_password)
+
+    record = client.post(
+        "/api/consultations",
+        json=valid_record_payload(patient_id, doctor_id),
+    )
+    assert record.status_code == 201, record.json()
+    record_id = record.json()["record_id"]
+
+    end = client.patch(f"/api/consultations/{record_id}/end")
+    assert end.status_code == 200, end.json()
+
+    diagnosis_id = record.json()["diagnoses"][0]["id"]
+    medication_id = "MED-001"
+    response = client.post(
+        "/api/prescriptions",
+        json=valid_prescription_payload(record_id, diagnosis_id, medication_id),
+    )
+
+    assert response.status_code == 409, response.json()
+    assert "ended" in response.json()["detail"].lower()
+
+
 def login_staff_and_get_jwt(
     client: TestClient,
     email: str,
@@ -590,6 +616,32 @@ def test_unknown_patient_history_returns_404(
     assert response.status_code == 404
 
 
+def test_consultation_prescription_list_handles_missing_diagnosis(
+    client: TestClient,
+) -> None:
+    prepared = prepare_consultation(client)
+    prescription = create_prescription(client, prepared)
+
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        diagnosis = db.get(_consultation_models.Diagnosis, prepared.diagnosis_id)
+        assert diagnosis is not None
+        db.delete(diagnosis)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/prescriptions/consultation/{prepared.record_id}")
+
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["prescription_id"] == prescription["prescription_id"]
+    assert body["items"][0]["diagnosis_id"] == prepared.diagnosis_id
+    assert body["items"][0]["diagnosis_code"] == ""
+    assert body["items"][0]["diagnosis_description"] == "Diagnosis no longer available"
+
+
 # Instruction revision
 
 
@@ -849,6 +901,51 @@ def test_existing_prescription_cards_link_to_print_page() -> None:
     assert "View / Print" in history_script
     assert 'href="/prescriptions/${' in record_script
     assert 'href="/prescriptions/${' in history_script
+
+
+def test_nested_consultation_navigation_preserves_each_return_page() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    note_script = (project_root / "static" / "js" / "consultation-note-form.js").read_text(
+        encoding="utf-8"
+    )
+    detail_script = (project_root / "static" / "js" / "consultation-detail.js").read_text(
+        encoding="utf-8"
+    )
+    print_script = (project_root / "static" / "js" / "prescription-print.js").read_text(
+        encoding="utf-8"
+    )
+    history_script = (
+        project_root / "static" / "js" / "patient-prescription-history.js"
+    ).read_text(encoding="utf-8")
+    medical_history_script = (project_root / "static" / "js" / "medical_history.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const fromPath = window.location.pathname + window.location.search;" in note_script
+    assert 'encodeURIComponent("Back to Consultation")' in note_script
+    assert "?from=${returnPath}&label=${returnLabel}" in detail_script
+    assert "backLink.href = previousPage.path;" in detail_script
+    assert "appointment_reference: data.appointment_reference" in detail_script
+    assert 'previousPage.path === "/appointments/consultations"' in detail_script
+    assert 'backLink.textContent = "Back to Consultation";' in detail_script
+    assert "Back to Start Consultation" not in detail_script
+    assert 'params.delete("focus");' in detail_script
+    assert "window.history.replaceState(" in detail_script
+    assert 'focusMode === "prescribe" &&\n        isInProgress &&' in detail_script
+    assert 'const returnPath = returnParams.get("from");' in print_script
+    assert "backLink.href = returnPath ||" in print_script
+    assert "const nestedReturnPath = patientPagePath;" in history_script
+    assert 'const nestedReturnLabel = "Back to Patient";' in history_script
+    assert "encodeURIComponent(nestedReturnPath)" in history_script
+    assert "const nestedReturnPath = patientPagePath;" in medical_history_script
+    assert 'const nestedReturnLabel = "Back to Patient";' in medical_history_script
+    assert "const label = encodeURIComponent(nestedReturnLabel);" in medical_history_script
+    assert "resolvePreviousPage" not in detail_script
+
+    # Choosing a Back destination must not stop the consultation details from
+    # loading diagnoses and prescriptions.
+    assert 'backLink.textContent = previousLabel || "Back";\n        return;' not in detail_script
+    assert 'backLink.textContent = "Back to Start Consultation";\n        return;' not in detail_script
 
 
 def test_print_styles_define_print_media_and_a4_page() -> None:

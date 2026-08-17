@@ -20,13 +20,12 @@
   const diagnosisRows = document.getElementById("diagnosis-rows");
   const rowTemplate = document.getElementById("diagnosis-row-template");
   const addDiagnosisBtn = document.getElementById("add-diagnosis-btn");
-  const confirmationModalEl = document.getElementById("confirmation-modal");
-  const confirmationModal = window.bootstrap ? new bootstrap.Modal(confirmationModalEl) : null;
 
   let searchDebounceTimer = null;
   // The record this page is writing to - set once /start resolves. Saving is
   // disabled until then, since there's nothing to save to yet.
   let recordId = null;
+  let isNewConsultation = true;
 
   function showAlert(box, message) {
     box.textContent = message;
@@ -230,9 +229,19 @@
       if (Array.isArray(body.diagnoses) && body.diagnoses.length > 0) {
         body.diagnoses.forEach((d) => addDiagnosisRow(d.icd10_code, d.description));
         formHeading.textContent = "Continue Consultation Note";
+        isNewConsultation = false;
+        backLink.classList.add("d-none");
       } else {
-        addDiagnosisRow();
+        formHeading.textContent = "New Consultation Note";
+        isNewConsultation = true;
+        backLink.classList.remove("d-none");
       }
+
+      // Always return to the editable note URL. A resumed note is still being
+      // edited here, so sending the doctor to its read-only detail page would
+      // lose the appointment return context and make Back point at the queue.
+      const fromPath = window.location.pathname + window.location.search;
+      viewPatientLink.href = `/patients/${encodeURIComponent(patientId)}?from=${encodeURIComponent(fromPath)}&label=${encodeURIComponent("Back to Consultation")}`;
 
       submitBtn.disabled = false;
     } catch (err) {
@@ -276,11 +285,10 @@
       });
 
       if (response.status === 200) {
-        if (confirmationModal) {
-          confirmationModal.show();
-        } else {
-          window.location.href = `/patients/${encodeURIComponent(patientId)}`;
-        }
+        const savedRecordId = recordId;
+        const returnPath = window.location.pathname + window.location.search;
+        const returnLabel = "Back to Consultation";
+        window.location.href = `/consultations/${encodeURIComponent(savedRecordId)}?from=${encodeURIComponent(returnPath)}&label=${encodeURIComponent(returnLabel)}&focus=prescribe`;
         return;
       }
 
@@ -309,12 +317,6 @@
     }
   }
 
-  document.getElementById("view-record-btn").addEventListener("click", () => {
-    if (recordId) window.location.href = `/consultations/${encodeURIComponent(recordId)}`;
-  });
-  document.getElementById("back-to-patient-btn").addEventListener("click", () => {
-    window.location.href = `/patients/${encodeURIComponent(patientId)}`;
-  });
   cancelBtn.addEventListener("click", () => {
     // Same destination as the "Back" link above - wherever this note was
     // opened from, not the patient details page.
@@ -337,7 +339,7 @@
   viewPatientLink.href =
     `/patients/${encodeURIComponent(patientId)}?` +
     `from=${encodeURIComponent(window.location.pathname + window.location.search)}` +
-    `&label=${encodeURIComponent("Back to Consultation Note")}`;
+    `&label=${encodeURIComponent("Back to Consultation")}`;
 
   loadPatientName();
   startConsultation();

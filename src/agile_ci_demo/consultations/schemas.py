@@ -156,6 +156,7 @@ class ConsultationNoteOut(BaseModel):
 
     patient_id: str
     patient_name: str
+    appointment_reference: str | None
 
     doctor_id: str
     doctor_name: str

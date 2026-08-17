@@ -120,6 +120,11 @@
   }
 
   function renderInfo(patient) {
+    const returnPath = window.location.pathname + window.location.search;
+    infoLink.href =
+      `/patients/${encodeURIComponent(patient.patient_id)}?` +
+      `from=${encodeURIComponent(returnPath)}` +
+      `&label=${encodeURIComponent("Back to Dashboard")}`;
     infoBody.innerHTML = `
       <dl class="row mb-0 small">
         <dt class="col-5">Patient ID</dt>
