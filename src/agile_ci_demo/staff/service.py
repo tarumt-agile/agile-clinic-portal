@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import datetime as dt
+import json
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -7,30 +10,100 @@ from sqlalchemy.orm import Session, selectinload
 from agile_ci_demo.core.email import send_email
 from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.security import generate_temp_password, hash_password
-from agile_ci_demo.staff.models import DoctorProfile, Staff
-from agile_ci_demo.staff.schemas import DoctorOut, DoctorRegister, DoctorStatus, DoctorUpdate, StaffCreate, StaffUpdate
+from agile_ci_demo.staff.models import DoctorAuditLog, DoctorProfile, Staff
+from agile_ci_demo.staff.schemas import (
+    DoctorOut,
+    DoctorRegister,
+    DoctorStatus,
+    DoctorUpdate,
+    StaffCreate,
+    StaffSelfUpdate,
+    StaffUpdate,
+)
+
+# Fields captured in a doctor's audit diff - the whole doctor profile as shown
+# on the staff detail page, not just the DoctorProfile-only columns, since a
+# name/email edit is as much a change to "the doctor's profile" as a
+# specialty edit is.
+_DOCTOR_AUDIT_FIELDS = (
+    "full_name",
+    "email",
+    "is_active",
+    "license_number",
+    "specialty",
+    "doctor_status",
+    "start_time",
+    "end_time",
+    "next_start_time",
+    "next_end_time",
+    "next_effective_date",
+)
 
 
-class DuplicateStaffEmailError(Exception):  
+def _doctor_audit_snapshot(staff: Staff) -> dict[str, object | None]:
+    """Comparable field values for a doctor's audit diff - JSON-safe
+    primitives only, since these are compared and stored as JSON."""
+    snapshot: dict[str, object | None] = {}
+    for field in _DOCTOR_AUDIT_FIELDS:
+        value = getattr(staff, field)
+        snapshot[field] = value.isoformat() if hasattr(value, "isoformat") else value
+    return snapshot
+
+
+def _record_doctor_audit(
+    db: Session,
+    staff: Staff,
+    action: str,
+    before: dict[str, object | None],
+    after: dict[str, object | None],
+    changed_by_staff_id: str | None,
+) -> None:
+    """Insert one audit log row covering only the fields that changed. A
+    no-op if nothing in `after` actually differs from `before`."""
+    diff = {
+        field: {"old": before.get(field), "new": value}
+        for field, value in after.items()
+        if before.get(field) != value
+    }
+    if not diff:
+        return
+    db.add(
+        DoctorAuditLog(
+            doctor_staff_id=staff.staff_id or "",
+            action=action,
+            changes=json.dumps(diff),
+            changed_by_staff_id=changed_by_staff_id,
+        )
+    )
+
+
+class DuplicateStaffEmailError(Exception):
     """Raised when a staff account with the same email already exists."""
+
 
 class StaffNotFoundError(Exception):
     """Raised when a staff_id does not match any stored staff account."""
 
+
 class StaffUpdateEmailExistsError(Exception):
     """Raised when another staff account uses the email."""
+
 
 class StaffUpdateLicenseExistsError(Exception):
     """Raised when another doctor uses the MMC number."""
 
+
 class DoctorEmailAlreadyExistsError(Exception):
     """Raised when a staff account with the same email already exists."""
-    
+
+
 class DuplicateDoctorLicenseError(Exception):
     """Raised when a doctor profile with the same license number already exists."""
 
+
 class DoctorNotFoundError(Exception):
     """Raised when a doctor_id does not match any doctor profile."""
+
 
 class DoctorUpdateEmailExistsError(Exception):
     """Raised when another account already uses the email."""
@@ -39,21 +112,20 @@ class DoctorUpdateEmailExistsError(Exception):
 class DoctorUpdateLicenseExistsError(Exception):
     """Raised when another doctor already uses the licence."""
 
-def create_staff(db: Session, data: StaffCreate) -> Staff:
+
+def create_staff(
+    db: Session,
+    data: StaffCreate,
+    changed_by_staff_id: str | None = None,
+) -> Staff:
     """Create any staff account and add a doctor profile when role=doctor."""
-    existing = db.execute(
-        select(Staff).where(Staff.email == str(data.email))
-    ).scalar_one_or_none()
+    existing = db.execute(select(Staff).where(Staff.email == str(data.email))).scalar_one_or_none()
     if existing is not None:
-        raise DuplicateStaffEmailError(
-            f"A staff account with email '{data.email}' already exists"
-        )
+        raise DuplicateStaffEmailError(f"A staff account with email '{data.email}' already exists")
 
     if data.role == Role.DOCTOR:
         existing_license = db.execute(
-            select(DoctorProfile).where(
-                DoctorProfile.license_number == data.license_number
-            )
+            select(DoctorProfile).where(DoctorProfile.license_number == data.license_number)
         ).scalar_one_or_none()
         if existing_license is not None:
             raise DuplicateStaffEmailError(
@@ -98,23 +170,36 @@ def create_staff(db: Session, data: StaffCreate) -> Staff:
 
     db.refresh(staff)
 
-    send_email(
-        to=staff.email,
-        subject="Welcome to Agile Clinic Portal",
-        body=(
-            f"Hi {staff.full_name},\n\n"
-            f"An account has been created for you as {staff.role}.\n"
-            f"Your temporary password is: {temp_password}\n\n"
-            "Please log in and change your password as soon as possible."
-        ),
-    )
+    if data.role == Role.DOCTOR:
+        before: dict[str, object | None] = {field: None for field in _DOCTOR_AUDIT_FIELDS}
+        after = _doctor_audit_snapshot(staff)
+        _record_doctor_audit(db, staff, "create", before, after, changed_by_staff_id)
+        db.commit()
+
+    try:
+        send_email(
+            to=staff.email,
+            subject="Welcome to Agile Clinic Portal",
+            body=(
+                f"Hi {staff.full_name},\n\n"
+                f"An account has been created for you as {staff.role}.\n"
+                f"Your temporary password is: {temp_password}\n\n"
+                "Please log in and change your password as soon as possible."
+            ),
+        )
+    except Exception:
+        # A delivery failure (e.g. SMTP quota, network issue) must never block
+        # account creation - the account is already committed at this point.
+        pass
 
     return staff
+
 
 def update_staff(
     db: Session,
     staff_id: str,
     data: StaffUpdate,
+    changed_by_staff_id: str | None = None,
 ) -> Staff:
     staff = get_staff_by_staff_id(
         db,
@@ -122,25 +207,17 @@ def update_staff(
     )
 
     if staff is None:
-        raise StaffNotFoundError(
-            f"No staff account found with "
-            f"staff_id '{staff_id}'"
-        )
+        raise StaffNotFoundError(f"No staff account found with " f"staff_id '{staff_id}'")
 
     duplicate_email = db.execute(
-        select(Staff)
-        .where(
-            Staff.email == str(data.email)
-        )
-        .where(
-            Staff.id != staff.id
-        )
+        select(Staff).where(Staff.email == str(data.email)).where(Staff.id != staff.id)
     ).scalar_one_or_none()
 
     if duplicate_email is not None:
-        raise StaffUpdateEmailExistsError(
-            "This email address is already registered."
-        )
+        raise StaffUpdateEmailExistsError("This email address is already registered.")
+
+    is_doctor = staff.role == Role.DOCTOR.value
+    audit_before = _doctor_audit_snapshot(staff) if is_doctor else None
 
     staff.full_name = data.full_name
     staff.email = str(data.email)
@@ -151,55 +228,59 @@ def update_staff(
 
         if doctor is None:
             raise StaffNotFoundError(
-                "The doctor profile linked to this "
-                "staff account was not found."
+                "The doctor profile linked to this " "staff account was not found."
             )
 
         if data.license_number is None:
-            raise ValueError(
-                "MMC registration number is required "
-                "for a doctor."
-            )
+            raise ValueError("MMC registration number is required " "for a doctor.")
 
         if data.specialty is None:
-            raise ValueError(
-                "Specialty is required for a doctor."
-            )
+            raise ValueError("Specialty is required for a doctor.")
 
         duplicate_license = db.execute(
             select(DoctorProfile)
-            .where(
-                DoctorProfile.license_number
-                == data.license_number
-            )
-            .where(
-                DoctorProfile.id != doctor.id
-            )
+            .where(DoctorProfile.license_number == data.license_number)
+            .where(DoctorProfile.id != doctor.id)
         ).scalar_one_or_none()
 
         if duplicate_license is not None:
             raise StaffUpdateLicenseExistsError(
-                "This registration number is "
-                "already registered."
+                "This registration number is " "already registered."
             )
 
-        doctor.license_number = (
-            data.license_number
-        )
+        doctor.license_number = data.license_number
 
-        doctor.specialty = (
-            data.specialty.value
-        )
+        doctor.specialty = data.specialty.value
 
-        doctor.status = (
-            data.doctor_status
-            or DoctorStatus.ACTIVE
-        ).value
+        doctor.status = (data.doctor_status or DoctorStatus.ACTIVE).value
 
-        staff.is_active = (
-            doctor.status
-            == DoctorStatus.ACTIVE.value
-        )
+        staff.is_active = doctor.status == DoctorStatus.ACTIVE.value
+
+        if data.start_time is None:
+            raise ValueError("Working hours start time is required for a doctor.")
+
+        if data.end_time is None:
+            raise ValueError("Working hours end time is required for a doctor.")
+
+        if data.start_time >= data.end_time:
+            raise ValueError("Working hours start time must be before the end time.")
+
+        # 30 minutes matches SLOT_MINUTES in appointments/service.py - duplicated
+        # here as a plain number rather than imported, to avoid a circular import
+        # between the staff and appointments modules.
+        for label, value in (("start", data.start_time), ("end", data.end_time)):
+            minutes_since_midnight = value.hour * 60 + value.minute
+            if minutes_since_midnight % 30 != 0:
+                raise ValueError(f"Working hours {label} time must align to 30-minute slots.")
+
+        today = dt.date.today()
+        if doctor.next_effective_date is not None and doctor.next_effective_date <= today:
+            doctor.start_time = doctor.next_start_time  # type: ignore[assignment]
+            doctor.end_time = doctor.next_end_time  # type: ignore[assignment]
+
+        doctor.next_start_time = data.start_time
+        doctor.next_end_time = data.end_time
+        doctor.next_effective_date = today + dt.timedelta(days=1)
 
     try:
         db.commit()
@@ -209,7 +290,7 @@ def update_staff(
         db.rollback()
         raise
 
-    return (
+    result = (
         get_staff_by_staff_id(
             db,
             staff_id,
@@ -217,14 +298,35 @@ def update_staff(
         or staff
     )
 
+    if is_doctor and audit_before is not None:
+        audit_after = _doctor_audit_snapshot(result)
+        _record_doctor_audit(db, result, "update", audit_before, audit_after, changed_by_staff_id)
+        db.commit()
+
+    return result
+
+
+def update_staff_self(db: Session, staff: Staff, data: StaffSelfUpdate) -> Staff:
+    """A staff member updating their OWN full_name/email. Deliberately does not
+    touch is_active, license_number, specialty, or doctor scheduling fields -
+    those stay admin-only via update_staff."""
+    duplicate_email = db.execute(
+        select(Staff).where(Staff.email == str(data.email)).where(Staff.id != staff.id)
+    ).scalar_one_or_none()
+
+    if duplicate_email is not None:
+        raise StaffUpdateEmailExistsError("This email address is already registered.")
+
+    staff.full_name = data.full_name
+    staff.email = str(data.email)
+    db.commit()
+    db.refresh(staff)
+    return staff
+
 
 def list_staff(db: Session) -> list[Staff]:
     return list(
-        db.execute(
-            select(Staff)
-            .options(selectinload(Staff.doctor_profile))
-            .order_by(Staff.id)
-        )
+        db.execute(select(Staff).options(selectinload(Staff.doctor_profile)).order_by(Staff.id))
         .scalars()
         .all()
     )
@@ -232,22 +334,67 @@ def list_staff(db: Session) -> list[Staff]:
 
 def get_staff_by_staff_id(db: Session, staff_id: str) -> Staff | None:
     return db.execute(
-        select(Staff)
-        .options(selectinload(Staff.doctor_profile))
-        .where(Staff.staff_id == staff_id)
+        select(Staff).options(selectinload(Staff.doctor_profile)).where(Staff.staff_id == staff_id)
     ).scalar_one_or_none()
 
 
-def set_staff_active_status(db: Session, staff_id: str, is_active: bool) -> Staff:
-    """Activate or deactivate a staff account."""
+def delete_staff(db: Session, staff_id: str) -> None:
+    """Permanently remove a staff account (and its doctor profile, if any)."""
+    staff = get_staff_by_staff_id(db, staff_id)
+    if staff is None:
+        raise StaffNotFoundError(f"No staff account found with staff_id '{staff_id}'")
+    db.delete(staff)
+    db.commit()
+
+
+def set_staff_active_status(
+    db: Session,
+    staff_id: str,
+    is_active: bool,
+    changed_by_staff_id: str | None = None,
+) -> Staff:
+    """Activate or deactivate a staff account.
+
+    For a doctor, also syncs DoctorProfile.status so the change is reflected
+    everywhere doctor availability is read from (e.g. booking dropdowns),
+    not just the staff account's own is_active flag.
+    """
     staff = get_staff_by_staff_id(db, staff_id)
     if staff is None:
         raise StaffNotFoundError(f"No staff account found with staff_id '{staff_id}'")
 
+    is_doctor = staff.doctor_profile is not None
+    audit_before = _doctor_audit_snapshot(staff) if is_doctor else None
+
     staff.is_active = is_active
+    if staff.doctor_profile is not None:
+        staff.doctor_profile.status = (
+            DoctorStatus.ACTIVE.value if is_active else DoctorStatus.INACTIVE.value
+        )
     db.commit()
     db.refresh(staff)
+
+    if is_doctor and audit_before is not None:
+        audit_after = _doctor_audit_snapshot(staff)
+        action = "activate" if is_active else "deactivate"
+        _record_doctor_audit(db, staff, action, audit_before, audit_after, changed_by_staff_id)
+        db.commit()
+
     return staff
+
+
+def list_doctor_audit_log(db: Session, staff_id: str) -> list[DoctorAuditLog]:
+    """A doctor's audit trail, newest first."""
+    return list(
+        db.execute(
+            select(DoctorAuditLog)
+            .where(DoctorAuditLog.doctor_staff_id == staff_id)
+            .order_by(DoctorAuditLog.changed_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+
 
 def list_doctors(db: Session) -> list[DoctorOut]:
     rows = db.execute(
@@ -271,6 +418,7 @@ def list_doctors(db: Session) -> list[DoctorOut]:
         for doctor, staff in rows
     ]
 
+
 def get_doctor_by_doctor_id(
     db: Session,
     doctor_id: str,
@@ -287,9 +435,7 @@ def get_doctor_by_doctor_id(
     ).one_or_none()
 
     if row is None:
-        raise DoctorNotFoundError(
-            f"No doctor profile found with doctor_id '{doctor_id}'"
-        )
+        raise DoctorNotFoundError(f"No doctor profile found with doctor_id '{doctor_id}'")
 
     doctor, staff = row
 
@@ -305,12 +451,11 @@ def get_doctor_by_doctor_id(
         created_at=doctor.created_at,
     )
 
+
 def create_doctor_with_account(db: Session, data: DoctorRegister) -> DoctorOut:
     """Create a doctor staff account and doctor profile together from the admin page."""
 
-    existing_email = db.execute(
-        select(Staff).where(Staff.email == data.email)
-    ).scalar_one_or_none()
+    existing_email = db.execute(select(Staff).where(Staff.email == data.email)).scalar_one_or_none()
 
     if existing_email is not None:
         raise DoctorEmailAlreadyExistsError(
@@ -366,16 +511,21 @@ def create_doctor_with_account(db: Session, data: DoctorRegister) -> DoctorOut:
     db.refresh(staff)
     db.refresh(doctor)
 
-    send_email(
-        to=staff.email,
-        subject="Welcome to Agile Clinic Portal",
-        body=(
-            f"Hi {staff.full_name},\n\n"
-            "Your doctor account has been created.\n"
-            f"Your temporary password is: {temp_password}\n\n"
-            "Please log in and change your password as soon as possible."
-        ),
-    )
+    try:
+        send_email(
+            to=staff.email,
+            subject="Welcome to Agile Clinic Portal",
+            body=(
+                f"Hi {staff.full_name},\n\n"
+                "Your doctor account has been created.\n"
+                f"Your temporary password is: {temp_password}\n\n"
+                "Please log in and change your password as soon as possible."
+            ),
+        )
+    except Exception:
+        # A delivery failure (e.g. SMTP quota, network issue) must never block
+        # account creation - the account is already committed at this point.
+        pass
 
     return DoctorOut(
         doctor_id=doctor.doctor_id or "",
@@ -388,6 +538,7 @@ def create_doctor_with_account(db: Session, data: DoctorRegister) -> DoctorOut:
         status=doctor.status,
         created_at=doctor.created_at,
     )
+
 
 def update_doctor(
     db: Session,
@@ -404,42 +555,29 @@ def update_doctor(
     ).one_or_none()
 
     if row is None:
-        raise DoctorNotFoundError(
-            f"No doctor profile found with doctor_id '{doctor_id}'"
-        )
+        raise DoctorNotFoundError(f"No doctor profile found with doctor_id '{doctor_id}'")
 
     doctor, staff = row
 
     duplicate_email = db.execute(
-        select(Staff)
-        .where(Staff.email == str(data.email))
-        .where(Staff.id != staff.id)
+        select(Staff).where(Staff.email == str(data.email)).where(Staff.id != staff.id)
     ).scalar_one_or_none()
 
     if duplicate_email is not None:
-        raise DoctorUpdateEmailExistsError(
-            "This email address is already registered."
-        )
+        raise DoctorUpdateEmailExistsError("This email address is already registered.")
 
     duplicate_license = db.execute(
         select(DoctorProfile)
-        .where(
-            DoctorProfile.license_number
-            == data.license_number
-        )
+        .where(DoctorProfile.license_number == data.license_number)
         .where(DoctorProfile.id != doctor.id)
     ).scalar_one_or_none()
 
     if duplicate_license is not None:
-        raise DoctorUpdateLicenseExistsError(
-            "This registration number is already registered."
-        )
+        raise DoctorUpdateLicenseExistsError("This registration number is already registered.")
 
     staff.full_name = data.full_name
     staff.email = str(data.email)
-    staff.is_active = (
-        data.status == DoctorStatus.ACTIVE
-    )
+    staff.is_active = data.status == DoctorStatus.ACTIVE
 
     doctor.license_number = data.license_number
     doctor.specialty = data.specialty.value

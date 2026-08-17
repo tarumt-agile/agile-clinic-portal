@@ -33,12 +33,50 @@
     "edit-doctor-status"
   );
 
+  const startTimeInput = byId(
+    "edit-start-time"
+  );
+
+  const endTimeInput = byId(
+    "edit-end-time"
+  );
+
+  const deleteButton = byId(
+    "delete-staff-button"
+  );
+
+  const deleteModalAlert = byId(
+    "delete-staff-modal-alert"
+  );
+
   let currentStaff = null;
 
   const roleLabels = {
     doctor: "Doctor",
-    nurse: "Nurse (Receptionist)",
+    nurse: "Nurse",
+    receptionist: "Receptionist",
     admin: "Administration"
+  };
+
+  const auditActionLabels = {
+    create: "Created",
+    update: "Updated",
+    activate: "Activated",
+    deactivate: "Deactivated"
+  };
+
+  const auditFieldLabels = {
+    full_name: "Full Name",
+    email: "Email Address",
+    is_active: "Account Status",
+    license_number: "MMC Registration Number",
+    specialty: "Specialty",
+    doctor_status: "Doctor Status",
+    start_time: "Working Hours Start",
+    end_time: "Working Hours End",
+    next_start_time: "Queued Working Hours Start",
+    next_end_time: "Queued Working Hours End",
+    next_effective_date: "Queued Working Hours Effective Date"
   };
 
   const emailPattern =
@@ -81,6 +119,114 @@
         year: "numeric"
       }
     ).format(new Date(value));
+  }
+
+  function formatDateTime(value) {
+    if (!value) {
+      return "—";
+    }
+
+    return new Intl.DateTimeFormat(
+      "en-MY",
+      {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }
+    ).format(new Date(value));
+  }
+
+  function formatAuditValue(field, value) {
+    if (value === null || value === undefined) {
+      return "—";
+    }
+
+    if (field === "is_active") {
+      return value ? "Active" : "Inactive";
+    }
+
+    if (
+      field === "start_time" ||
+      field === "end_time" ||
+      field === "next_start_time" ||
+      field === "next_end_time"
+    ) {
+      return String(value).slice(0, 5);
+    }
+
+    if (field === "next_effective_date") {
+      return formatDate(value);
+    }
+
+    return String(value);
+  }
+
+  function renderAuditLog(entries) {
+    const list = byId("doctor-audit-log-list");
+    const empty = byId("doctor-audit-log-empty");
+
+    list.innerHTML = "";
+
+    if (!entries.length) {
+      empty.classList.remove("d-none");
+      return;
+    }
+
+    empty.classList.add("d-none");
+
+    entries.forEach(function (entry) {
+      const item = document.createElement("li");
+      item.className = "staff-audit-log-item";
+
+      const header = document.createElement("div");
+      header.className = "staff-audit-log-header";
+      header.textContent =
+        (auditActionLabels[entry.action] || entry.action) +
+        " by " +
+        (entry.changed_by_staff_id || "unknown") +
+        " on " +
+        formatDateTime(entry.changed_at);
+      item.appendChild(header);
+
+      const changesList = document.createElement("ul");
+      changesList.className = "staff-audit-log-changes";
+
+      Object.keys(entry.changes).forEach(function (field) {
+        const change = entry.changes[field];
+        const line = document.createElement("li");
+        line.textContent =
+          (auditFieldLabels[field] || field) +
+          ": " +
+          formatAuditValue(field, change.old) +
+          " → " +
+          formatAuditValue(field, change.new);
+        changesList.appendChild(line);
+      });
+
+      item.appendChild(changesList);
+      list.appendChild(item);
+    });
+  }
+
+  async function loadAuditLog() {
+    try {
+      const response = await fetch(
+        "/api/staff/" +
+        encodeURIComponent(staffId) +
+        "/audit-log"
+      );
+
+      if (!response.ok) {
+        return;
+      }
+
+      renderAuditLog(await response.json());
+    } catch (error) {
+      // Audit log is supplementary - a failure here shouldn't block the
+      // rest of the staff detail page from working.
+    }
   }
 
   function showAlert(id, message) {
@@ -238,6 +384,16 @@
       !isDoctor
     );
 
+    // Non-doctor staff only have the Staff Information card - without this,
+    // the grid still reserves a second column for the hidden Doctor
+    // Information card, leaving half the row visually empty.
+    document
+      .querySelector(".staff-detail-grid")
+      .classList.toggle(
+        "staff-detail-grid--single",
+        !isDoctor
+      );
+
     byId(
       "doctor-edit-fields"
     ).classList.toggle(
@@ -245,7 +401,16 @@
       !isDoctor
     );
 
+    byId(
+      "doctor-audit-log-card"
+    ).classList.toggle(
+      "d-none",
+      !isDoctor
+    );
+
     if (isDoctor) {
+      loadAuditLog();
+
       setText(
         "view-license-number",
         staff.license_number
@@ -265,6 +430,32 @@
         "view-doctor-status",
         staff.doctor_status
       );
+
+      setText(
+        "view-working-hours",
+        staff.start_time && staff.end_time
+          ? staff.start_time.slice(0, 5) + " - " + staff.end_time.slice(0, 5)
+          : null
+      );
+
+      const nextHoursBadge = byId("view-next-hours-badge");
+      const today = new Date().toISOString().slice(0, 10);
+      const hasQueuedChange =
+        staff.next_effective_date &&
+        staff.next_effective_date > today &&
+        staff.next_start_time &&
+        staff.next_end_time;
+
+      if (hasQueuedChange) {
+        nextHoursBadge.textContent =
+          "New Working Hour Tomorrow Onwards: " +
+          staff.next_start_time.slice(0, 5) +
+          "-" +
+          staff.next_end_time.slice(0, 5);
+        nextHoursBadge.classList.remove("d-none");
+      } else {
+        nextHoursBadge.classList.add("d-none");
+      }
     }
 
     byId(
@@ -278,6 +469,8 @@
     byId(
       "edit-staff-button"
     ).classList.remove("d-none");
+
+    deleteButton.classList.remove("d-none");
   }
 
   function populateForm() {
@@ -303,11 +496,19 @@
       currentStaff.doctor_status ||
       "active";
 
+    startTimeInput.value =
+      (currentStaff.start_time || "").slice(0, 5);
+
+    endTimeInput.value =
+      (currentStaff.end_time || "").slice(0, 5);
+
     [
       nameInput,
       emailInput,
       licenseInput,
-      specialtyInput
+      specialtyInput,
+      startTimeInput,
+      endTimeInput
     ].forEach(function (input) {
       input.classList.remove(
         "is-valid",
@@ -379,6 +580,32 @@
         showFieldValid(
           specialtyInput
         );
+      }
+
+      if (!startTimeInput.value) {
+        isValid = showFieldError(
+          startTimeInput,
+          "Please choose a start time."
+        );
+      } else {
+        showFieldValid(startTimeInput);
+      }
+
+      if (!endTimeInput.value) {
+        isValid = showFieldError(
+          endTimeInput,
+          "Please choose an end time."
+        );
+      } else if (
+        startTimeInput.value &&
+        endTimeInput.value <= startTimeInput.value
+      ) {
+        isValid = showFieldError(
+          endTimeInput,
+          "End time must be after the start time."
+        );
+      } else {
+        showFieldValid(endTimeInput);
       }
     }
 
@@ -507,7 +734,9 @@
           activeInput.value === "true",
         license_number: null,
         specialty: null,
-        doctor_status: null
+        doctor_status: null,
+        start_time: null,
+        end_time: null
       };
 
       if (
@@ -521,6 +750,12 @@
 
         payload.doctor_status =
           doctorStatusInput.value;
+
+        payload.start_time =
+          startTimeInput.value;
+
+        payload.end_time =
+          endTimeInput.value;
       }
 
       try {
@@ -573,6 +808,50 @@
         saveButton.disabled = false;
         saveButton.textContent =
           "Save Changes";
+      }
+    }
+  );
+
+  deleteButton.addEventListener("click", function () {
+    deleteModalAlert.classList.add("d-none");
+    deleteModalAlert.textContent = "";
+
+    const modalElement = byId("delete-staff-modal");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    modal.show();
+  });
+
+  byId("confirm-delete-staff-button").addEventListener(
+    "click",
+    async function () {
+      const confirmButton = byId("confirm-delete-staff-button");
+      confirmButton.disabled = true;
+
+      try {
+        const response = await fetch(
+          "/api/staff/" + encodeURIComponent(staffId),
+          { method: "DELETE" }
+        );
+
+        if (response.status === 204) {
+          window.location.href = "/staff";
+          return;
+        }
+
+        const result = await response.json();
+        deleteModalAlert.textContent =
+          typeof result.detail === "string"
+            ? result.detail
+            : "This staff account could not be deleted.";
+        deleteModalAlert.classList.remove("d-none");
+
+      } catch (error) {
+        deleteModalAlert.textContent =
+          "Unable to reach the server. Please try again.";
+        deleteModalAlert.classList.remove("d-none");
+
+      } finally {
+        confirmButton.disabled = false;
       }
     }
   );

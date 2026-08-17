@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}
+Reports Dashboard - Agile Clinic Portal
+{% endblock %}
+
+{% block extra_css %}
+<link href="/static/css/reports-dashboard.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div
+  id="reports-dashboard-root"
+  data-default-from="{{ default_from_date }}"
+  data-default-to="{{ default_to_date }}"
+  data-today="{{ today_date }}"
+>
+  <header
+    class="d-flex flex-column flex-lg-row
+      justify-content-between align-items-lg-start
+      gap-3 mb-4"
+  >
+    <div>
+      <p class="text-muted mb-1">
+        Administration / Reports
+      </p>
+      <h1 class="h3 mb-1">
+        Clinic Activity Reports
+      </h1>
+      <p class="text-muted mb-0">
+        Monitor patient growth, review daily appointment activity,
+        and export either report as PDF.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      id="export-report-button"
+      class="btn btn-outline-primary"
+      disabled
+    >
+      Export PDF
+    </button>
+  </header>
+
+  <section class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-12 col-lg-3">
+          <label for="report-type" class="form-label">
+            Report type
+          </label>
+          <select id="report-type" class="form-select">
+            <option value="appointment_activity" selected>
+              Appointment Activity
+            </option>
+            <option value="patient_registrations">
+              Patient Registrations
+            </option>
+          </select>
+        </div>
+
+        <form
+          id="report-date-range-form"
+          class="col-12 col-lg-9 row g-3 align-items-end m-0"
+          novalidate
+        >
+          <div class="col-lg-4">
+            <label for="report-quick-range" class="form-label">
+              Quick range
+            </label>
+            <select
+              id="report-quick-range"
+              class="form-select"
+            >
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="tomorrow">Tomorrow</option>
+              <option value="this_week" selected>This Week</option>
+              <option value="last_week">Last Week</option>
+              <option value="next_week">Next Week</option>
+              <option value="this_month">This Month</option>
+              <option value="last_month">Last Month</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
+          <div class="col-sm-6 col-lg-4">
+            <label for="report-from-date" class="form-label">
+              From
+            </label>
+            <input
+              type="date"
+              id="report-from-date"
+              name="from"
+              class="form-control"
+              value="{{ default_from_date }}"
+              required
+            >
+          </div>
+
+          <div class="col-sm-6 col-lg-4">
+            <label for="report-to-date" class="form-label">
+              To
+            </label>
+            <input
+              type="date"
+              id="report-to-date"
+              name="to"
+              class="form-control"
+              value="{{ default_to_date }}"
+              required
+            >
+          </div>
+        </form>
+
+        <div
+          id="patient-registration-filters"
+          class="col-12 col-lg-9 d-none"
+        >
+          <label for="patient-registration-year" class="form-label">
+            Year
+          </label>
+          <select
+            id="patient-registration-year"
+            class="form-select reports-year-selector"
+            aria-label="Patient registration year"
+          >
+            {% for year in registration_years %}
+            <option
+              value="{{ year }}"
+              {% if year == default_registration_year %}selected{% endif %}
+            >
+              {{ year }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div
+    id="reports-alert"
+    class="alert alert-danger d-none"
+    role="alert"
+  ></div>
+
+  <section
+    id="patient-registration-report"
+    class="card shadow-sm mb-4 d-none"
+    aria-labelledby="patient-registrations-heading"
+  >
+    <header class="card-header bg-white">
+      <h2 id="patient-registrations-heading" class="h5 mb-1">
+        New Patient Registrations
+      </h2>
+      <p class="small text-muted mb-0">
+        Total for selected year:
+        <strong id="total-patient-registrations">Loading...</strong>
+      </p>
+    </header>
+
+    <div class="card-body border-bottom">
+      <h3 class="h6 mb-1">Registrations per Month</h3>
+      <p class="small text-muted mb-3">
+        Hover over a bar to view the exact registration count.
+      </p>
+      <div class="reports-chart-container">
+        <canvas
+          id="monthly-patient-registrations-chart"
+          role="img"
+          aria-label="Bar chart of new patient registrations per month"
+        ></canvas>
+        <div
+          id="patient-registration-chart-tooltip"
+          class="reports-chart-tooltip d-none"
+          role="tooltip"
+        ></div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Month</th>
+            <th scope="col" class="text-end">Count</th>
+          </tr>
+        </thead>
+        <tbody id="monthly-patient-registrations-table-body">
+          <tr>
+            <td colspan="2" class="text-center text-muted py-4">
+              Loading registrations...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
+    id="appointment-activity-report"
+    aria-labelledby="selected-range-heading"
+  >
+    <div class="reports-range-banner mb-4">
+      <span id="selected-range-heading">
+        Selected report range
+      </span>
+      <strong id="selected-range-label">
+        Loading...
+      </strong>
+    </div>
+
+    <div class="row g-4 mb-4">
+      <div class="col-md-4">
+        <article class="card reports-kpi-card h-100">
+          <div class="card-body">
+            <p class="text-muted mb-2">
+              Total appointments
+            </p>
+            <p
+              id="total-appointments-value"
+              class="display-5 fw-semibold mb-1"
+            >
+              -
+            </p>
+            <p class="small text-muted mb-0">
+              All appointment records in the selected range
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <div class="col-md-8">
+        <article class="card h-100">
+          <div class="card-body">
+            <div
+              class="d-flex justify-content-between
+                align-items-center gap-3 mb-3"
+            >
+              <div>
+                <h2 class="h5 mb-1">
+                  Appointments per Day
+                </h2>
+                <p class="small text-muted mb-0">
+                  Daily totals, including cancelled appointments
+                </p>
+              </div>
+              <div
+                id="reports-loading"
+                class="spinner-border spinner-border-sm
+                  text-primary d-none"
+                role="status"
+                aria-label="Loading report"
+              ></div>
+            </div>
+
+            <div class="reports-chart-container">
+              <canvas
+                id="daily-appointments-chart"
+                role="img"
+                aria-label="Bar chart of total appointments per day"
+              ></canvas>
+              <div
+                id="appointment-chart-tooltip"
+                class="reports-chart-tooltip d-none"
+                role="tooltip"
+              ></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <article class="card">
+      <div class="card-body">
+        <h2 class="h5 mb-3">
+          Daily Breakdown
+        </h2>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Day</th>
+                <th scope="col" class="text-end">
+                  Total Appointments
+                </th>
+              </tr>
+            </thead>
+            <tbody id="daily-appointments-table-body">
+              <tr>
+                <td colspan="3" class="text-center text-muted py-4">
+                  Loading report...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/reports-dashboard.js"></script>
+{% endblock %}

@@ -8,12 +8,17 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from agile_ci_demo.auth.deps import require_role, require_staff
 from agile_ci_demo.core.database import get_db
+from agile_ci_demo.core.rbac import Role
 from agile_ci_demo.core.templates import templates
+from agile_ci_demo.staff.models import Staff
 from agile_ci_demo.staff.schemas import (
+    DoctorAuditLogEntry,
     DoctorOut,
     StaffCreate,
     StaffOut,
+    StaffSelfUpdate,
     StaffStatusUpdate,
     StaffUpdate,
 )
@@ -24,14 +29,16 @@ from agile_ci_demo.staff.service import (
     StaffUpdateEmailExistsError,
     StaffUpdateLicenseExistsError,
     create_staff,
+    delete_staff,
     get_doctor_by_doctor_id,
     get_staff_by_staff_id,
+    list_doctor_audit_log,
     list_doctors,
     list_staff,
     set_staff_active_status,
     update_staff,
+    update_staff_self,
 )
-
 
 api_router = APIRouter(
     prefix="/api/staff",
@@ -58,11 +65,13 @@ pages_router = APIRouter(
 def register_staff(
     payload: StaffCreate,
     db: Session = Depends(get_db),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = create_staff(
             db,
             payload,
+            changed_by_staff_id=admin.staff_id,
         )
 
     except DuplicateStaffEmailError as exc:
@@ -73,9 +82,7 @@ def register_staff(
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-            ),
+            status_code=(status.HTTP_422_UNPROCESSABLE_ENTITY),
             detail=str(exc),
         ) from exc
 
@@ -92,10 +99,7 @@ def get_staff_list(
 ) -> list[StaffOut]:
     staff_accounts = list_staff(db)
 
-    return [
-        StaffOut.model_validate(staff)
-        for staff in staff_accounts
-    ]
+    return [StaffOut.model_validate(staff) for staff in staff_accounts]
 
 
 # =========================================================
@@ -137,8 +141,50 @@ def get_doctor_details(
 
 
 # =========================================================
+# SELF-SERVICE API (any authenticated staff member)
+# =========================================================
+
+
+# This route returns the logged-in staff member's own account.
+@api_router.get(
+    "/me",
+    response_model=StaffOut,
+)
+def get_my_staff_profile(
+    staff: Staff = Depends(require_staff),
+) -> StaffOut:
+    return StaffOut.model_validate(staff)
+
+
+# This route updates the logged-in staff member's own name/email.
+@api_router.patch(
+    "/me",
+    response_model=StaffOut,
+)
+def update_my_staff_profile(
+    payload: StaffSelfUpdate,
+    db: Session = Depends(get_db),
+    staff: Staff = Depends(require_staff),
+) -> StaffOut:
+    try:
+        updated = update_staff_self(
+            db,
+            staff,
+            payload,
+        )
+    except StaffUpdateEmailExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return StaffOut.model_validate(updated)
+
+
+# =========================================================
 # STAFF DETAILS AND UPDATE API
 # =========================================================
+
 
 # This route activates or deactivates one staff account.
 @api_router.patch(
@@ -149,12 +195,14 @@ def update_staff_status(
     staff_id: str,
     payload: StaffStatusUpdate,
     db: Session = Depends(get_db),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = set_staff_active_status(
             db,
             staff_id,
             payload.is_active,
+            changed_by_staff_id=admin.staff_id,
         )
 
     except StaffNotFoundError as exc:
@@ -164,6 +212,32 @@ def update_staff_status(
         ) from exc
 
     return StaffOut.model_validate(staff)
+
+
+# This route permanently deletes a staff account.
+@api_router.delete(
+    "/{staff_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_staff_endpoint(
+    staff_id: str,
+    db: Session = Depends(get_db),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> None:
+    if staff_id == admin.staff_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own account.",
+        )
+
+    try:
+        delete_staff(db, staff_id)
+    except StaffNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
 
 # This route returns the details of one staff account.
 @api_router.get(
@@ -182,13 +256,32 @@ def get_staff_details(
     if staff is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No staff account found with "
-                f"staff_id '{staff_id}'."
-            ),
+            detail=("No staff account found with " f"staff_id '{staff_id}'."),
         )
 
     return StaffOut.model_validate(staff)
+
+
+# This route returns a doctor's audit trail (create/update/activate/
+# deactivate), newest first - admin only.
+@api_router.get(
+    "/{staff_id}/audit-log",
+    response_model=list[DoctorAuditLogEntry],
+)
+def get_doctor_audit_log(
+    staff_id: str,
+    db: Session = Depends(get_db),
+    _admin: Staff = Depends(require_role(Role.ADMIN)),
+) -> list[DoctorAuditLogEntry]:
+    staff = get_staff_by_staff_id(db, staff_id)
+    if staff is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No staff account found with staff_id '{staff_id}'.",
+        )
+
+    entries = list_doctor_audit_log(db, staff_id)
+    return [DoctorAuditLogEntry.model_validate(entry) for entry in entries]
 
 
 # This route updates the details of one staff account.
@@ -200,12 +293,14 @@ def update_staff_details(
     staff_id: str,
     payload: StaffUpdate,
     db: Session = Depends(get_db),
+    admin: Staff = Depends(require_role(Role.ADMIN)),
 ) -> StaffOut:
     try:
         staff = update_staff(
             db,
             staff_id,
             payload,
+            changed_by_staff_id=admin.staff_id,
         )
 
     except StaffNotFoundError as exc:
@@ -225,9 +320,7 @@ def update_staff_details(
 
     except ValueError as exc:
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-            ),
+            status_code=(status.HTTP_422_UNPROCESSABLE_ENTITY),
             detail=str(exc),
         ) from exc
 
@@ -246,6 +339,7 @@ def update_staff_details(
 )
 def staff_list_page(
     request: Request,
+    _staff: Staff = Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -261,10 +355,27 @@ def staff_list_page(
 )
 def create_staff_page(
     request: Request,
+    _staff=Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "staff/staff_create.html",
+        {},
+    )
+
+
+# This route displays the logged-in staff member's own profile.
+@pages_router.get(
+    "/profile",
+    response_class=HTMLResponse,
+)
+def staff_profile_page(
+    request: Request,
+    _staff: Staff = Depends(require_staff),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "staff/staff_profile.html",
         {},
     )
 
@@ -277,6 +388,7 @@ def create_staff_page(
 def staff_detail_page(
     request: Request,
     staff_id: str,
+    _staff=Depends(require_role(Role.ADMIN)),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,

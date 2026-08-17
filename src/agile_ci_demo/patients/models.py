@@ -6,6 +6,7 @@ from sqlalchemy import Date, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agile_ci_demo.core.database import Base
+from agile_ci_demo.core.encryption import DeterministicEncryptedString, EncryptedString
 
 
 class Patient(Base):
@@ -23,10 +24,21 @@ class Patient(Base):
     full_name: Mapped[str] = mapped_column(String(120))
     date_of_birth: Mapped[dt.date] = mapped_column(Date)
     gender: Mapped[str] = mapped_column(String(20))
-    phone_number: Mapped[str] = mapped_column(String(20))
-    email: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    ic_or_passport: Mapped[str] = mapped_column(String(30), unique=True, index=True)
-    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Encrypted at rest (AES-256-GCM, see core/encryption.py). Never filtered,
+    # sorted, or searched on directly in SQL - only ever read back and shown
+    # after the patient row has already been located by patient_id/IC, so
+    # encrypting them costs nothing in query capability.
+    phone_number: Mapped[str] = mapped_column(EncryptedString)
+    email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # Encrypted deterministically (same plaintext -> same stored value), not
+    # randomly like the fields above - it IS looked up directly (login, exact
+    # lookup), and determinism keeps `WHERE ic_or_passport == ...` working
+    # unchanged. Prefix search can't use SQL anymore either way; see
+    # patients/service.py's search_patients_by_ic_prefix.
+    ic_or_passport: Mapped[str] = mapped_column(
+        DeterministicEncryptedString, unique=True, index=True
+    )
+    address: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(

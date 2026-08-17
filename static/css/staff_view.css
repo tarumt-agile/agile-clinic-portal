@@ -51,8 +51,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #e7f1ff;
-  color: #0d6efd;
+  background: #e0e7ff;
+  color: var(--clinic-accent);
   font-weight: 800;
   font-size: 1.25rem;
 }
@@ -96,6 +96,13 @@
   gap: 1.2rem;
 }
 
+/* Non-doctor staff only ever show the Staff Information card - without this,
+   the second column stays reserved for the hidden Doctor Information card,
+   leaving half the row empty. */
+.staff-detail-grid.staff-detail-grid--single {
+  grid-template-columns: 1fr;
+}
+
 .staff-detail-card {
   padding: 1.3rem;
 }
@@ -132,6 +139,62 @@
   margin: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+/* The queued-hours notice is a full sentence, not a short label - left to
+   Bootstrap's default badge sizing (nowrap, stretched to fill its grid
+   cell as the row's 3rd auto-placed item) it can render wider than the
+   card or spill past its own pill background on narrow screens. Span the
+   full row, hug its own content instead of stretching, and wrap instead
+   of forcing a single line. */
+#view-next-hours-badge {
+  grid-column: 1 / -1;
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+
+#doctor-audit-log-card {
+  margin-top: 1.2rem;
+}
+
+.staff-audit-empty {
+  margin: 0;
+  color: #6c757d;
+}
+
+.staff-audit-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.staff-audit-log-item {
+  padding: 0.9rem 1rem;
+  border: 1px solid #edf0f2;
+  border-radius: 0.6rem;
+}
+
+.staff-audit-log-header {
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.staff-audit-log-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: #495057;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 .staff-edit-card {

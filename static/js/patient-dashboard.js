@@ -13,15 +13,12 @@
   const visitsList = document.getElementById("recent-visits-list");
   const prescriptionsList = document.getElementById("prescriptions-list");
   const infoBody = document.getElementById("my-info-body");
-  const infoLink = document.getElementById("my-info-link");
 
-  // No real prescription/pharmacy module exists yet - this is placeholder data
-  // only, per the dashboard's explicit "Sample data" labelling.
-  const SAMPLE_PRESCRIPTIONS = [
-    { name: "Amoxicillin 500mg", instructions: "1 capsule, 3x daily", refillsLeft: 2 },
-    { name: "Paracetamol 500mg", instructions: "2 tablets as needed for pain", refillsLeft: 1 },
-    { name: "Loratadine 10mg", instructions: "1 tablet daily", refillsLeft: 0 },
-  ];
+  const PRESCRIPTION_STATUS_BADGES = {
+    active: '<span class="badge text-bg-success">Active</span>',
+    completed: '<span class="badge text-bg-secondary">Completed</span>',
+    cancelled: '<span class="badge text-bg-light text-danger">Cancelled</span>',
+  };
 
   function escapeHtml(value) {
     const div = document.createElement("div");
@@ -40,24 +37,35 @@
     return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   }
 
-  function renderPrescriptions() {
-    prescriptionsList.innerHTML = SAMPLE_PRESCRIPTIONS.map((rx) => {
-      const refillBadge =
-        rx.refillsLeft > 0
-          ? `<span class="badge text-bg-light">${rx.refillsLeft} refill${rx.refillsLeft === 1 ? "" : "s"} left</span>`
-          : `<span class="badge text-bg-light text-danger">No refills left</span>`;
-      return `
+  function renderPrescriptions(prescriptions) {
+    const activeCount = prescriptions.filter((rx) => rx.status === "active").length;
+    statPrescriptions.textContent = String(activeCount);
+
+    if (prescriptions.length === 0) {
+      prescriptionsList.innerHTML =
+        '<div class="list-group-item text-muted">No prescriptions on record yet.</div>';
+      return;
+    }
+
+    prescriptionsList.innerHTML = prescriptions
+      .map((rx) => {
+        const badge = PRESCRIPTION_STATUS_BADGES[rx.status] || "";
+        const instructions = [rx.dosage, rx.frequency, rx.duration]
+          .filter(Boolean)
+          .join(" - ");
+        return `
         <div class="list-group-item">
           <div class="d-flex justify-content-between align-items-start">
             <div>
-              <div class="fw-semibold">${escapeHtml(rx.name)}</div>
-              <div class="small text-muted">${escapeHtml(rx.instructions)}</div>
+              <div class="fw-semibold">${escapeHtml(rx.medication)}</div>
+              <div class="small text-muted">${escapeHtml(instructions)}</div>
+              <div class="small text-muted">Prescribed by ${escapeHtml(rx.prescribing_doctor_name)} on ${escapeHtml(formatDate(rx.issued_at))}</div>
             </div>
-            ${refillBadge}
+            ${badge}
           </div>
         </div>`;
-    }).join("");
-    statPrescriptions.textContent = String(SAMPLE_PRESCRIPTIONS.length);
+      })
+      .join("");
   }
 
   function renderUpcomingAppointments(appointments) {
@@ -112,7 +120,6 @@
   }
 
   function renderInfo(patient) {
-    infoLink.href = `/patients/${encodeURIComponent(patient.patient_id)}`;
     infoBody.innerHTML = `
       <dl class="row mb-0 small">
         <dt class="col-5">Patient ID</dt>
@@ -127,8 +134,6 @@
   }
 
   async function load() {
-    renderPrescriptions();
-
     let patient;
     try {
       const response = await fetch("/api/patients/me");
@@ -163,7 +168,23 @@
     }
 
     try {
-      const response = await fetch(`/api/records?patient_id=${encodeURIComponent(patient.patient_id)}`);
+      const response = await fetch("/api/prescriptions/mine");
+      if (response.ok) {
+        const body = await response.json();
+        renderPrescriptions(body.items);
+      } else {
+        prescriptionsList.innerHTML =
+          '<div class="list-group-item text-muted">Unable to load prescriptions.</div>';
+        statPrescriptions.textContent = "0";
+      }
+    } catch (err) {
+      prescriptionsList.innerHTML =
+        '<div class="list-group-item text-muted">Unable to load prescriptions.</div>';
+      statPrescriptions.textContent = "0";
+    }
+
+    try {
+      const response = await fetch(`/api/consultations?patient_id=${encodeURIComponent(patient.patient_id)}`);
       if (response.ok) {
         const body = await response.json();
         renderRecentVisits(body.items);

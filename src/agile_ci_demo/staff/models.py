@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from agile_ci_demo.core.database import Base
@@ -39,13 +39,11 @@ class Staff(Base):
             return None
         return self.doctor_profile.license_number
 
-
     @property
     def specialty(self) -> str | None:
         if self.doctor_profile is None:
             return None
         return self.doctor_profile.specialty
-
 
     @property
     def department(self) -> str | None:
@@ -53,12 +51,41 @@ class Staff(Base):
             return None
         return self.doctor_profile.department
 
-
     @property
     def doctor_status(self) -> str | None:
         if self.doctor_profile is None:
             return None
         return self.doctor_profile.status
+
+    @property
+    def start_time(self) -> dt.time | None:
+        if self.doctor_profile is None:
+            return None
+        return get_doctor_hours(self.doctor_profile, dt.date.today())[0]
+
+    @property
+    def end_time(self) -> dt.time | None:
+        if self.doctor_profile is None:
+            return None
+        return get_doctor_hours(self.doctor_profile, dt.date.today())[1]
+
+    @property
+    def next_start_time(self) -> dt.time | None:
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.next_start_time
+
+    @property
+    def next_end_time(self) -> dt.time | None:
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.next_end_time
+
+    @property
+    def next_effective_date(self) -> dt.date | None:
+        if self.doctor_profile is None:
+            return None
+        return self.doctor_profile.next_effective_date
 
 
 class DoctorProfile(Base):
@@ -79,9 +106,48 @@ class DoctorProfile(Base):
     department: Mapped[str] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(20), default="active")
 
+    # Working hours in effect right now (used for today and any date without a
+    # newer change queued). New doctors default to the clinic's old 9-5 hours.
+    start_time: Mapped[dt.time] = mapped_column(Time, default=dt.time(9, 0))
+    end_time: Mapped[dt.time] = mapped_column(Time, default=dt.time(17, 0))
+
+    # A queued future change, set when an admin edits a doctor's hours. Only one
+    # change can be queued at a time - see get_doctor_hours() below.
+    next_start_time: Mapped[dt.time | None] = mapped_column(Time, nullable=True)
+    next_end_time: Mapped[dt.time | None] = mapped_column(Time, nullable=True)
+    next_effective_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow
     )
 
     staff: Mapped[Staff] = relationship(back_populates="doctor_profile")
+
+
+class DoctorAuditLog(Base):
+    """Audit trail entry for a create, update, or activate/deactivate on a
+    doctor's staff/profile record. `changes` is a JSON diff of only the
+    fields that actually changed, e.g. '{"specialty": {"old": "...", "new":
+    "..."}}'. Rows are never deleted, which trivially satisfies "retain for
+    at least 12 months" without needing a retention/cleanup job."""
+
+    __tablename__ = "doctor_audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    doctor_staff_id: Mapped[str] = mapped_column(String(10), index=True)
+    action: Mapped[str] = mapped_column(String(20))
+    changes: Mapped[str] = mapped_column(Text)
+    changed_by_staff_id: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    changed_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.utcnow, index=True
+    )
+
+
+def get_doctor_hours(profile: DoctorProfile, date: dt.date) -> tuple[dt.time, dt.time]:
+    """The doctor's working hours in effect on the given date. A queued change
+    (next_start_time/next_end_time) only applies from next_effective_date onward -
+    before that, the current start_time/end_time pair still applies."""
+    if profile.next_effective_date is not None and date >= profile.next_effective_date:
+        return profile.next_start_time, profile.next_end_time  # type: ignore[return-value]
+    return profile.start_time, profile.end_time

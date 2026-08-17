@@ -6,6 +6,19 @@ on:
 
 jobs:
   analyze:
-    uses: github/codeql-action/.github/workflows/codeql.yml@v3
-    with:
-      languages: python
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4

@@ -12,6 +12,8 @@ from agile_ci_demo.app import app
 from agile_ci_demo.core.database import Base, get_db
 from agile_ci_demo.core.email import clear_outbox, get_outbox
 from agile_ci_demo.staff import models as _staff_models  # noqa: F401
+from agile_ci_demo.staff.schemas import StaffCreate
+from agile_ci_demo.staff.service import create_staff
 
 # --- Isolated in-memory DB per test -----------------------------------------
 
@@ -54,7 +56,49 @@ def valid_staff_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _login_as_admin(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+
+def _create_staff_direct(client: TestClient, payload: dict[str, object]) -> str:
+    """Create a staff account directly through the service layer, bypassing
+    the API (POST /api/staff now requires an admin session) - used by tests
+    where the staff account is setup, not the thing under test (e.g. tests
+    of PATCH/DELETE endpoints, or of POST /api/staff's own auth requirement).
+    Returns the new account's public staff_id."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        return str(create_staff(db, StaffCreate(**payload)).staff_id)
+    finally:
+        db.close()
+
+
 # --- 1. Create staff account ---------------------------------------------------
+
+
+def test_create_staff_requires_admin_login(client: TestClient) -> None:
+    """POST /api/staff has no auth requirement of its own by default - matches
+    the same "requires admin" pattern already enforced on update/deactivate/
+    delete."""
+    r = client.post("/api/staff", json=valid_staff_payload(), follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_create_staff_rejects_a_non_admin_login(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse2@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse2@example.com", "password": temp_password})
+
+    r = client.post("/api/staff", json=valid_staff_payload(), follow_redirects=False)
+    assert r.status_code == 303
 
 
 def test_create_staff_success(client: TestClient) -> None:
@@ -64,10 +108,12 @@ def test_create_staff_success(client: TestClient) -> None:
       When I POST /api/staff
       Then I receive 201, a generated staff_id, and the account is active
     """
+    _login_as_admin(client)
+
     r = client.post("/api/staff", json=valid_staff_payload())
     assert r.status_code == 201
     body = r.json()
-    assert body["staff_id"] == "S00001"
+    assert body["staff_id"] == "S00002"  # S00001 is the admin created above
     assert body["full_name"] == "Alice Wong"
     assert body["role"] == "nurse"
     assert body["is_active"] is True
@@ -75,6 +121,8 @@ def test_create_staff_success(client: TestClient) -> None:
 
 
 def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
+    _login_as_admin(client)
+
     people = [
         {
             "full_name": "Alice Wong",
@@ -102,12 +150,16 @@ def test_create_staff_generates_sequential_ids(client: TestClient) -> None:
         assert response.status_code == 201, response.json()
         ids.append(response.json()["staff_id"])
 
-    assert ids == ["S00001", "S00002", "S00003"]
+    assert ids == ["S00002", "S00003", "S00004"]  # S00001 is the admin created above
 
 
-@pytest.mark.parametrize("role", ["admin", "doctor", "nurse"])
+@pytest.mark.parametrize("role", ["admin", "doctor", "nurse", "receptionist"])
 def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> None:
-    payload = valid_staff_payload(email=f"{role}@example.com", role=role)
+    _login_as_admin(client)
+
+    # "new-" prefix avoids colliding with the bootstrap admin's own
+    # admin@example.com when role == "admin".
+    payload = valid_staff_payload(email=f"new-{role}@example.com", role=role)
 
     if role == "doctor":
         payload.update(
@@ -119,6 +171,7 @@ def test_create_staff_allows_multiple_roles(client: TestClient, role: str) -> No
 
 
 def test_create_staff_invalid_role_returns_422(client: TestClient) -> None:
+    _login_as_admin(client)
     r = client.post("/api/staff", json=valid_staff_payload(role="superuser"))
     assert r.status_code == 422
 
@@ -129,6 +182,7 @@ def test_create_staff_invalid_role_returns_422(client: TestClient) -> None:
 def test_create_doctor_with_specialty_succeeds(
     client: TestClient,
 ) -> None:
+    _login_as_admin(client)
     response = client.post(
         "/api/staff",
         json=valid_staff_payload(
@@ -146,6 +200,7 @@ def test_create_doctor_with_specialty_succeeds(
 def test_create_doctor_without_specialty_returns_422(
     client: TestClient,
 ) -> None:
+    _login_as_admin(client)
     payload = {
         "full_name": "Dr. Alice Wong",
         "email": "alice.doctor@example.com",
@@ -160,6 +215,7 @@ def test_create_doctor_without_specialty_returns_422(
 def test_create_doctor_without_license_returns_422(
     client: TestClient,
 ) -> None:
+    _login_as_admin(client)
     payload = {
         "full_name": "Dr. Alice Wong",
         "email": "alice.doctor@example.com",
@@ -176,6 +232,7 @@ def test_create_doctor_without_license_returns_422(
 def test_create_non_doctor_with_specialty_returns_422(client: TestClient) -> None:
     """A specialty only makes sense for doctors - rejecting it elsewhere prevents
     nonsensical data like a nurse with a "cardiology" specialty."""
+    _login_as_admin(client)
     r = client.post(
         "/api/staff",
         json=valid_staff_payload(role="nurse", specialty="cardiology"),
@@ -184,6 +241,7 @@ def test_create_non_doctor_with_specialty_returns_422(client: TestClient) -> Non
 
 
 def test_create_staff_invalid_specialty_returns_422(client: TestClient) -> None:
+    _login_as_admin(client)
     r = client.post(
         "/api/staff",
         json=valid_staff_payload(role="doctor", specialty="not-a-real-specialty"),
@@ -192,6 +250,7 @@ def test_create_staff_invalid_specialty_returns_422(client: TestClient) -> None:
 
 
 def test_create_non_doctor_without_specialty_omits_it(client: TestClient) -> None:
+    _login_as_admin(client)
     r = client.post("/api/staff", json=valid_staff_payload(role="nurse"))
     assert r.status_code == 201
     assert r.json()["specialty"] is None
@@ -201,6 +260,7 @@ def test_create_non_doctor_without_specialty_omits_it(client: TestClient) -> Non
 def test_create_staff_missing_required_field_returns_422(
     client: TestClient, missing_field: str
 ) -> None:
+    _login_as_admin(client)
     payload = valid_staff_payload()
     del payload[missing_field]
 
@@ -211,11 +271,13 @@ def test_create_staff_missing_required_field_returns_422(
 
 
 def test_create_staff_blank_full_name_returns_422(client: TestClient) -> None:
+    _login_as_admin(client)
     r = client.post("/api/staff", json=valid_staff_payload(full_name="  "))
     assert r.status_code == 422
 
 
 def test_create_staff_invalid_email_returns_422(client: TestClient) -> None:
+    _login_as_admin(client)
     r = client.post("/api/staff", json=valid_staff_payload(email="not-an-email"))
     assert r.status_code == 422
 
@@ -227,6 +289,7 @@ def test_create_staff_duplicate_email_returns_409(client: TestClient) -> None:
       When I POST another staff account with the same email
       Then I receive 409 Conflict
     """
+    _login_as_admin(client)
     payload = valid_staff_payload()
     r1 = client.post("/api/staff", json=payload)
     assert r1.status_code == 201
@@ -241,6 +304,9 @@ def test_create_staff_sends_welcome_email_with_temp_password(client: TestClient)
       When a staff account is created
       Then a welcome email is sent to the new staff member containing a temporary password
     """
+    _login_as_admin(client)
+    clear_outbox()  # drop the admin's own welcome email - only Alice's is under test
+
     r = client.post("/api/staff", json=valid_staff_payload())
     assert r.status_code == 201
 
@@ -250,19 +316,112 @@ def test_create_staff_sends_welcome_email_with_temp_password(client: TestClient)
     assert "temporary password" in outbox[0].body.lower()
 
 
+def test_create_staff_succeeds_even_if_the_welcome_email_fails_to_send(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A delivery failure (e.g. SMTP quota, network issue) must never block account
+    creation - the account is already committed by the time the email is sent."""
+    _login_as_admin(client)
+    from agile_ci_demo.staff import service as staff_service
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated SMTP failure")
+
+    monkeypatch.setattr(staff_service, "send_email", _raise)
+
+    r = client.post("/api/staff", json=valid_staff_payload())
+    assert r.status_code == 201
+    assert r.json()["staff_id"] == "S00002"  # S00001 is the admin created above
+
+
 def test_create_staff_page_renders(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
     r = client.get("/staff/create")
     assert r.status_code == 200
     assert "Create Staff Account" in r.text
 
 
+def test_create_staff_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/create", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_staff_detail_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/S00001", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_staff_list_page_renders(client: TestClient) -> None:
+    """The HTML staff list page loads successfully."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(client, role="admin")
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
     r = client.get("/staff")
     assert r.status_code == 200
     assert "Staff" in r.text
 
 
+def test_staff_list_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_staff_list_page_loads_when_logged_in_as_admin(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+    r = client.get("/staff")
+    assert r.status_code == 200
+
+
+def test_staff_list_page_redirects_for_wrong_role(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse@example.com", "password": temp_password})
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_staff_list_page_redirects_after_session_holder_is_deactivated(
+    client: TestClient,
+) -> None:
+    """If an admin who is currently logged in gets deactivated, their existing
+    session should stop working immediately, not just at their next login."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    client.post("/api/auth/login", json={"email": "admin@example.com", "password": temp_password})
+
+    client.patch("/api/staff/S00001/status", json={"is_active": False})
+
+    r = client.get("/staff", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
 def test_list_staff_returns_created_accounts(client: TestClient) -> None:
+    _login_as_admin(client)
     client.post("/api/staff", json=valid_staff_payload())
     client.post(
         "/api/staff", json=valid_staff_payload(full_name="Bob Lee", email="bob@example.com")
@@ -270,7 +429,7 @@ def test_list_staff_returns_created_accounts(client: TestClient) -> None:
 
     r = client.get("/api/staff")
     assert r.status_code == 200
-    assert len(r.json()) == 2
+    assert len(r.json()) == 3  # the admin logged in above, plus the two created
 
 
 # --- 2. Deactivate staff account -------------------------------------------------
@@ -283,6 +442,7 @@ def test_deactivate_staff_success(client: TestClient) -> None:
       When I PATCH /api/staff/{staff_id}/status with is_active=false
       Then the account is marked inactive
     """
+    _login_as_admin(client)
     created = client.post("/api/staff", json=valid_staff_payload()).json()
 
     r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
@@ -292,6 +452,7 @@ def test_deactivate_staff_success(client: TestClient) -> None:
 
 def test_reactivate_staff_success(client: TestClient) -> None:
     """The status toggle also supports reactivating a previously deactivated account."""
+    _login_as_admin(client)
     created = client.post("/api/staff", json=valid_staff_payload()).json()
     client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
 
@@ -300,6 +461,698 @@ def test_reactivate_staff_success(client: TestClient) -> None:
     assert r.json()["is_active"] is True
 
 
+def test_deactivate_doctor_excludes_from_doctor_list(client: TestClient) -> None:
+    """
+    Scenario: Deactivating a doctor removes them from doctor-facing lists
+      Given a doctor account exists and is active
+      When I PATCH /api/staff/{staff_id}/status with is_active=false
+      Then GET /api/staff/doctor reports that doctor's status as inactive
+    """
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+    assert r.status_code == 200
+
+    doctors = client.get("/api/staff/doctor").json()
+    doctor = next(d for d in doctors if d["staff_id"] == created["staff_id"])
+    assert doctor["status"] == "inactive"
+
+
+def test_reactivate_doctor_restores_doctor_list_status(client: TestClient) -> None:
+    """Reactivating a doctor also restores DoctorProfile.status, not just is_active."""
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+    client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": True})
+    assert r.status_code == 200
+
+    doctors = client.get("/api/staff/doctor").json()
+    doctor = next(d for d in doctors if d["staff_id"] == created["staff_id"])
+    assert doctor["status"] == "active"
+
+
 def test_deactivate_unknown_staff_returns_404(client: TestClient) -> None:
+    _login_as_admin(client)
     r = client.patch("/api/staff/S99999/status", json={"is_active": False})
     assert r.status_code == 404
+
+
+def test_deactivate_staff_requires_admin_login(client: TestClient) -> None:
+    """The bug this fix closes: PATCH .../status had no role check at all."""
+    staff_id = _create_staff_direct(client, valid_staff_payload())
+
+    r = client.patch(
+        f"/api/staff/{staff_id}/status",
+        json={"is_active": False},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+def test_deactivate_staff_rejects_a_non_admin_login(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    staff_id = _create_staff_direct(client, valid_staff_payload())
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse2@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse2@example.com", "password": temp_password})
+
+    r = client.patch(
+        f"/api/staff/{staff_id}/status",
+        json={"is_active": False},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+def test_update_staff_details_requires_admin_login(client: TestClient) -> None:
+    """The bug this fix closes: PATCH /api/staff/{staff_id} had no role check at all."""
+    staff_id = _create_staff_direct(client, valid_staff_payload())
+
+    r = client.patch(
+        f"/api/staff/{staff_id}",
+        json={
+            "full_name": "Alice Wong",
+            "email": "alice.wong@example.com",
+            "is_active": True,
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+
+# --- 3. Doctor working hours ---------------------------------------------------
+
+
+def test_get_doctor_hours_uses_current_pair_when_no_change_queued() -> None:
+    import datetime as dt
+
+    from agile_ci_demo.staff.models import DoctorProfile, get_doctor_hours
+
+    profile = DoctorProfile(
+        license_number="MMC-11111",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+    )
+
+    assert get_doctor_hours(profile, dt.date(2026, 1, 1)) == (dt.time(9, 0), dt.time(17, 0))
+
+
+def test_get_doctor_hours_uses_queued_pair_once_effective_date_reached() -> None:
+    import datetime as dt
+
+    from agile_ci_demo.staff.models import DoctorProfile, get_doctor_hours
+
+    profile = DoctorProfile(
+        license_number="MMC-11111",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+        next_start_time=dt.time(10, 0),
+        next_end_time=dt.time(16, 0),
+        next_effective_date=dt.date(2026, 1, 2),
+    )
+
+    # The day before the queued change - still the current pair.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 1)) == (dt.time(9, 0), dt.time(17, 0))
+    # Exactly the effective date - the queued pair now applies.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 2)) == (dt.time(10, 0), dt.time(16, 0))
+    # Any later date - the queued pair still applies.
+    assert get_doctor_hours(profile, dt.date(2026, 1, 5)) == (dt.time(10, 0), dt.time(16, 0))
+
+
+def _register_doctor_for_hours_test(client: TestClient) -> str:
+    return _create_staff_direct(
+        client,
+        valid_staff_payload(
+            email="doctor@example.com",
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="Cardiology",
+            status="active",
+        ),
+    )
+
+
+def _doctor_update_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "full_name": "Dr. Alan Chua",
+        "email": "doctor@example.com",
+        "is_active": True,
+        "license_number": "MMC-12345",
+        "specialty": "Cardiology",
+        "doctor_status": "active",
+        "start_time": "10:00",
+        "end_time": "16:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_update_staff_new_hours_do_not_apply_today(client: TestClient) -> None:
+    """
+    Scenario: Admin changes a doctor's working hours
+      Given a doctor with the default 09:00-17:00 hours
+      When admin PATCHes new hours for that doctor
+      Then today's effective hours in the response are unchanged
+    """
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["start_time"] == "09:00:00"
+    assert body["end_time"] == "17:00:00"
+
+
+def test_update_staff_requires_start_before_end(client: TestClient) -> None:
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(
+        f"/api/staff/{staff_id}",
+        json=_doctor_update_payload(start_time="16:00", end_time="10:00"),
+    )
+    assert r.status_code == 422
+
+
+def test_update_staff_requires_30_minute_alignment(client: TestClient) -> None:
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(
+        f"/api/staff/{staff_id}",
+        json=_doctor_update_payload(start_time="09:15", end_time="16:00"),
+    )
+    assert r.status_code == 422
+
+
+def test_staff_out_exposes_the_queued_hours_change(client: TestClient) -> None:
+    """After an admin edit, the queued next_* values are visible via the API even
+    though today's start_time/end_time stay unchanged - the UI badge in Task 3
+    reads these fields directly, separately from today's effective hours."""
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    r = client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    assert r.status_code == 200
+    body = r.json()
+
+    assert body["start_time"] == "09:00:00"  # today's hours, unchanged
+    assert body["end_time"] == "17:00:00"
+    assert body["next_start_time"] == "10:00:00"  # from _doctor_update_payload()
+    assert body["next_end_time"] == "16:00:00"
+
+    import datetime as dt
+
+    assert body["next_effective_date"] == (dt.date.today() + dt.timedelta(days=1)).isoformat()
+
+
+def test_update_staff_second_edit_collapses_the_first_queued_change() -> None:
+    """
+    Scenario: Admin edits a doctor's hours twice
+      Given a doctor's hours were already queued to change, and that change's
+        effective date has already arrived (simulated directly, without waiting
+        a real day)
+      When admin edits the hours again, calling update_staff() directly
+      Then the queued change has become the doctor's current hours, and the new
+        edit queues a further change for the day after today
+
+    This test builds its own isolated in-memory database and calls update_staff()
+    directly (bypassing the HTTP layer and the client fixture) because it needs
+    precise control over next_effective_date relative to "today" at test-run
+    time - something the real day-by-day flow can't be driven through in a fast
+    automated test.
+    """
+    import datetime as dt
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from agile_ci_demo.core.database import Base
+    from agile_ci_demo.staff.models import DoctorProfile, Staff
+    from agile_ci_demo.staff.schemas import StaffUpdate
+    from agile_ci_demo.staff.service import update_staff
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
+    staff = Staff(
+        staff_id="S00001",
+        full_name="Dr. Alan Chua",
+        email="alan.chua@example.com",
+        role="doctor",
+        password_hash="x",
+        is_active=True,
+    )
+    db.add(staff)
+    db.flush()
+
+    profile = DoctorProfile(
+        doctor_id="D00001",
+        staff_account_id=staff.id,
+        license_number="MMC-12345",
+        specialty="Cardiology",
+        department="Cardiology",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(17, 0),
+        next_start_time=dt.time(10, 0),
+        next_end_time=dt.time(18, 0),
+        next_effective_date=dt.date.today(),  # already in effect as of today
+    )
+    db.add(profile)
+    db.commit()
+
+    update_staff(
+        db,
+        "S00001",
+        StaffUpdate(
+            full_name="Dr. Alan Chua",
+            email="alan.chua@example.com",
+            is_active=True,
+            license_number="MMC-12345",
+            specialty="Cardiology",
+            doctor_status="active",
+            start_time=dt.time(9, 0),
+            end_time=dt.time(16, 0),
+        ),
+    )
+
+    db.refresh(profile)
+    # The already-effective queued change (10:00-18:00) is now "current"...
+    assert profile.start_time == dt.time(10, 0)
+    assert profile.end_time == dt.time(18, 0)
+    # ...and the new edit is queued for tomorrow.
+    assert profile.next_start_time == dt.time(9, 0)
+    assert profile.next_end_time == dt.time(16, 0)
+    assert profile.next_effective_date == dt.date.today() + dt.timedelta(days=1)
+
+    db.close()
+
+
+# --- Delete staff -------------------------------------------------------------
+
+
+def test_delete_staff_success(client: TestClient) -> None:
+    """
+    Scenario: Admin permanently deletes a staff account
+      Given a staff account exists
+      When I DELETE /api/staff/{staff_id}
+      Then it's gone - a subsequent GET returns 404
+    """
+    _login_as_admin(client)
+    created = client.post("/api/staff", json=valid_staff_payload()).json()
+
+    r = client.delete(f"/api/staff/{created['staff_id']}")
+    assert r.status_code == 204
+
+    r = client.get(f"/api/staff/{created['staff_id']}")
+    assert r.status_code == 404
+
+
+def test_delete_doctor_also_removes_their_doctor_profile(client: TestClient) -> None:
+    """Deleting a doctor's staff account cascades to their DoctorProfile too."""
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    r = client.delete(f"/api/staff/{created['staff_id']}")
+    assert r.status_code == 204
+
+    doctors = client.get("/api/staff/doctor").json()
+    assert all(d["staff_id"] != created["staff_id"] for d in doctors)
+
+
+def test_delete_unknown_staff_returns_404(client: TestClient) -> None:
+    _login_as_admin(client)
+    r = client.delete("/api/staff/S99999")
+    assert r.status_code == 404
+
+
+def test_delete_staff_blocks_deleting_your_own_account(client: TestClient) -> None:
+    """An admin cannot delete the account they're currently logged in as."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="admin@example.com", role="admin"
+    )
+    login_body = client.post(
+        "/api/auth/login", json={"email": "admin@example.com", "password": temp_password}
+    ).json()
+    admin_staff_id = login_body["staff_id"]
+
+    r = client.delete(f"/api/staff/{admin_staff_id}")
+    assert r.status_code == 400
+
+    r = client.get(f"/api/staff/{admin_staff_id}")
+    assert r.status_code == 200
+
+
+def test_delete_staff_requires_admin_login(client: TestClient) -> None:
+    """Matches the existing pattern for PATCH .../status: no session -> redirect to login."""
+    staff_id = _create_staff_direct(client, valid_staff_payload())
+
+    r = client.delete(f"/api/staff/{staff_id}", follow_redirects=False)
+    assert r.status_code == 303
+
+
+# --- Doctor audit log -----------------------------------------------------------
+
+
+def test_creating_a_doctor_writes_an_audit_entry(client: TestClient) -> None:
+    """
+    Scenario: Creating a doctor is audited
+      Given an admin registers a new doctor
+      When I GET that doctor's audit log
+      Then a "create" entry is recorded with the doctor's starting values
+    """
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="Cardiology",
+            status="active",
+        ),
+    ).json()
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log")
+    assert r.status_code == 200
+    entries = r.json()
+    assert len(entries) == 1
+    assert entries[0]["action"] == "create"
+    assert entries[0]["changes"]["full_name"] == {"old": None, "new": "Alice Wong"}
+    assert entries[0]["changes"]["specialty"] == {"old": None, "new": "Cardiology"}
+    assert entries[0]["changed_by_staff_id"] == "S00001"  # the logged-in admin
+
+
+def test_creating_a_non_doctor_writes_no_audit_entry(client: TestClient) -> None:
+    """The audit story is scoped to doctor profiles - a nurse/receptionist/admin
+    hire shouldn't show up here at all."""
+    _login_as_admin(client)
+    created = client.post("/api/staff", json=valid_staff_payload(role="nurse")).json()
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_updating_a_doctor_writes_an_audit_entry_with_only_changed_fields(
+    client: TestClient,
+) -> None:
+    """
+    Scenario: Editing a doctor's profile is audited
+      Given an existing doctor whose queued hours are already 10:00-16:00
+      When admin PATCHes only their specialty (same hours resubmitted)
+      Then the audit entry's diff contains only the specialty change
+    """
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+    # Establishes the 10:00-16:00 queue so the next PATCH below doesn't also
+    # show next_start_time/next_end_time/next_effective_date as "changed"
+    # purely from being set for the first time.
+    client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+
+    r = client.patch(
+        f"/api/staff/{staff_id}",
+        json=_doctor_update_payload(specialty="Dermatology"),
+    )
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{staff_id}/audit-log").json()
+    assert entries[0]["action"] == "update"
+    assert entries[0]["changes"] == {
+        "specialty": {"old": "Cardiology", "new": "Dermatology"},
+    }
+
+
+def test_updating_a_doctor_with_no_real_changes_writes_no_audit_entry(
+    client: TestClient,
+) -> None:
+    """Re-submitting the exact same PATCH twice queues nothing new the second
+    time (the hours are already queued from the first), so it must not add a
+    second audit entry - only "create" and the first "update" are recorded."""
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    r = client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload())
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{staff_id}/audit-log").json()
+    assert [e["action"] for e in entries] == ["update", "create"]
+
+
+def test_deactivating_a_doctor_writes_an_audit_entry(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{created['staff_id']}/audit-log").json()
+    assert len(entries) == 2  # create, then deactivate
+    assert entries[0]["action"] == "deactivate"  # newest first
+    assert entries[0]["changes"]["is_active"] == {"old": True, "new": False}
+    assert entries[0]["changes"]["doctor_status"] == {"old": "active", "new": "inactive"}
+
+
+def test_reactivating_a_deactivated_doctor_writes_its_own_audit_entry(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+    client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": True})
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{created['staff_id']}/audit-log").json()
+    assert len(entries) == 3  # create, deactivate, activate
+    assert entries[0]["action"] == "activate"
+    assert entries[0]["changes"]["is_active"] == {"old": False, "new": True}
+
+
+def test_deactivating_a_non_doctor_writes_no_audit_entry(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post("/api/staff", json=valid_staff_payload(role="receptionist")).json()
+
+    r = client.patch(f"/api/staff/{created['staff_id']}/status", json={"is_active": False})
+    assert r.status_code == 200
+
+    entries = client.get(f"/api/staff/{created['staff_id']}/audit-log").json()
+    assert entries == []
+
+
+def test_audit_log_survives_further_unrelated_changes(client: TestClient) -> None:
+    """A basic stand-in for "retained for at least 12 months": earlier entries
+    are never deleted or overwritten by later ones."""
+    staff_id = _register_doctor_for_hours_test(client)
+    _login_as_admin(client)
+
+    client.patch(f"/api/staff/{staff_id}", json=_doctor_update_payload(specialty="Dermatology"))
+    client.patch(f"/api/staff/{staff_id}/status", json={"is_active": False})
+    client.patch(f"/api/staff/{staff_id}/status", json={"is_active": True})
+
+    entries = client.get(f"/api/staff/{staff_id}/audit-log").json()
+    assert [e["action"] for e in entries] == ["activate", "deactivate", "update", "create"]
+
+
+def test_audit_log_requires_admin_login(client: TestClient) -> None:
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+    client.post("/api/auth/logout")
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_audit_log_rejects_a_non_admin_login(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    _login_as_admin(client)
+    created = client.post(
+        "/api/staff",
+        json=valid_staff_payload(
+            role="doctor",
+            license_number="MMC-12345",
+            specialty="General Medicine",
+            status="active",
+        ),
+    ).json()
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nurse3@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nurse3@example.com", "password": temp_password})
+
+    r = client.get(f"/api/staff/{created['staff_id']}/audit-log", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_audit_log_unknown_staff_returns_404(client: TestClient) -> None:
+    _login_as_admin(client)
+    r = client.get("/api/staff/S99999/audit-log")
+    assert r.status_code == 404
+
+
+# --- Self-service profile API -------------------------------------------------
+
+
+def test_get_my_staff_profile_returns_own_account(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.get("/api/staff/me")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["email"] == "nora@example.com"
+    assert body["role"] == "nurse"
+
+
+def test_get_my_staff_profile_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/api/staff/me", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"
+
+
+def test_update_my_staff_profile_changes_name_and_email(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.patch(
+        "/api/staff/me",
+        json={"full_name": "Nora Updated Ibrahim", "email": "nora.updated@example.com"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["full_name"] == "Nora Updated Ibrahim"
+    assert body["email"] == "nora.updated@example.com"
+
+
+def test_update_my_staff_profile_cannot_change_is_active(client: TestClient) -> None:
+    """StaffSelfUpdate has no is_active field, so a staff member cannot
+    deactivate/reactivate their own account through this endpoint - an extra
+    is_active field in the request body is silently ignored by pydantic, not
+    accepted, proven by checking the account is still active afterward."""
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.patch(
+        "/api/staff/me",
+        json={"full_name": "Nora Ibrahim", "email": "nora@example.com", "is_active": False},
+    )
+    assert r.status_code == 200
+    assert r.json()["is_active"] is True
+
+
+def test_update_my_staff_profile_duplicate_email_returns_409(client: TestClient) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    _create_staff_and_get_temp_password(client, email="taken@example.com", role="receptionist")
+    temp_password = _create_staff_and_get_temp_password(
+        client, email="nora@example.com", role="nurse"
+    )
+    client.post("/api/auth/login", json={"email": "nora@example.com", "password": temp_password})
+
+    r = client.patch(
+        "/api/staff/me",
+        json={"full_name": "Nora Ibrahim", "email": "taken@example.com"},
+    )
+    assert r.status_code == 409
+
+
+# --- Self-service profile page -------------------------------------------------
+
+
+@pytest.mark.parametrize("role", ["receptionist", "nurse", "doctor", "admin"])
+def test_staff_profile_page_loads_for_any_staff_role(client: TestClient, role: str) -> None:
+    from test_auth import _create_staff_and_get_temp_password
+
+    temp_password = _create_staff_and_get_temp_password(client, role=role)
+    client.post(
+        "/api/auth/login", json={"email": "alice.wong@example.com", "password": temp_password}
+    )
+
+    r = client.get("/staff/profile")
+    assert r.status_code == 200
+    assert "My Profile" in r.text
+
+
+def test_staff_profile_page_redirects_when_not_logged_in(client: TestClient) -> None:
+    r = client.get("/staff/profile", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/auth/login"

@@ -29,7 +29,7 @@
 }
 
 .admin-back-link:hover {
-  color: #0d6efd;
+  color: var(--clinic-accent);
   text-decoration: underline;
 }
 
@@ -40,38 +40,7 @@
 }
 
 .admin-back-link:hover span:first-child {
-  color: #0d6efd;
-}
-
-/* =========================
-   Header
-========================= */
-
-.admin-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.admin-label {
-  margin: 0 0 0.25rem;
-  color: #6c757d;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.admin-header h1 {
-  margin: 0 0 0.25rem;
-  color: #212529;
-  font-size: 1.75rem;
-  font-weight: 700;
-}
-
-.admin-subtitle {
-  margin: 0;
-  color: #6c757d;
+  color: var(--clinic-accent);
 }
 
 /* =========================
@@ -94,9 +63,7 @@
 
 .admin-card-header h2 {
   margin: 0 0 0.25rem;
-  color: #212529;
-  font-size: 1.25rem;
-  font-weight: 700;
+  color: var(--clinic-text);
 }
 
 .admin-card-header p {
@@ -159,8 +126,8 @@
 .form-field input:focus,
 .form-field select:focus {
   outline: none;
-  border-color: #86b7fe;
-  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+  border-color: var(--clinic-accent-soft);
+  box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.15);
 }
 
 .form-field input.is-valid,
