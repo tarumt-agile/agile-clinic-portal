@@ -30,7 +30,7 @@ jobs:
           mypy src
       - name: Test
         run: |
-          pytest --maxfail=1 --disable-warnings -v --cov=src --cov-report=xml --junitxml=junit.xml
+          pytest -o addopts="" --maxfail=1 --disable-warnings -v --cov=src --cov-report=xml --junitxml=junit.xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -183,16 +183,23 @@ jobs:
               base = os.environ.get("GH_BEFORE_SHA", "")
               head = os.environ.get("GH_AFTER_SHA", "")
 
-          if not base or base == "0" * 40:
+          # A force-push (e.g. amending an already-pushed commit) leaves the
+          # "before" SHA unreachable in a fresh checkout - it's no longer an
+          # ancestor of anything. Fall back to just listing the head commit's
+          # own files rather than failing the whole job over a diff that no
+          # longer makes sense.
+          try:
+              if not base or base == "0" * 40:
+                  raise ValueError("no base commit for this event")
               diff_result = subprocess.run(
-                  ["git", "show", "--name-only", "--pretty=format:", head],
+                  ["git", "diff", "--name-only", base, head],
                   capture_output=True,
                   text=True,
                   check=True,
               )
-          else:
+          except (ValueError, subprocess.CalledProcessError):
               diff_result = subprocess.run(
-                  ["git", "diff", "--name-only", base, head],
+                  ["git", "show", "--name-only", "--pretty=format:", head],
                   capture_output=True,
                   text=True,
                   check=True,
